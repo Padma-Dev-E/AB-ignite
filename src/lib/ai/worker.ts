@@ -44,7 +44,13 @@ export async function processNextAiRun(workerId: string, dependencies: WorkerDep
 
   const snapshot = await getAuthorizedIdeaSnapshot({ kind: "admin", id: "system" }, claimed.ideaId);
   const version = snapshot?.versions.find((candidate) => candidate.id === claimed.ideaVersionId);
-  const job = getAiJob(claimed.jobKey, claimed.jobVersion);
+  let job;
+  try {
+    job = getAiJob(claimed.jobKey, claimed.jobVersion);
+  } catch {
+    await failAiRun(claimed.id, { errorCode: "unknown_job", errorMessage: "The persisted AI job is not registered" });
+    return { status: "failed", runId: claimed.id };
+  }
   if (!version) {
     await failAiRun(claimed.id, { errorCode: "idea_version_missing", errorMessage: "Idea version required by AI run was not found" });
     return { status: "failed", runId: claimed.id };

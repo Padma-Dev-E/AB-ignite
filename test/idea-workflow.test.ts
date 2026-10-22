@@ -158,7 +158,14 @@ test("workflow policy allows only authorized human/system transitions", async ()
 });
 
 test("screening workflow queues a preflight run and worker processes it once", async () => {
-  await runIdeaScreeningWorkflow(ideaId, versionId, { kind: "admin", id: String(userId) });
+  const previousModel = process.env.GEMINI_MODEL;
+  process.env.GEMINI_MODEL = "configured-test-model";
+  const configuredKey = `configured-model-${Date.now()}`;
+  await runIdeaScreeningWorkflow(ideaId, versionId, { kind: "admin", id: String(userId) }, configuredKey);
+  const [configuredRun] = await db.select().from(aiRuns).where(eq(aiRuns.idempotencyKey, configuredKey)).all();
+  assert.equal(configuredRun.model, "configured-test-model");
+  if (previousModel === undefined) delete process.env.GEMINI_MODEL;
+  else process.env.GEMINI_MODEL = previousModel;
   const outcome = await processNextAiRun("workflow-worker", {
     provider: {
       generateStructured: async () => ({
@@ -188,6 +195,25 @@ test("worker retries a transient run and dead-letters after the configured bound
   await new Promise((resolve) => setTimeout(resolve, 300));
   const second = await processNextAiRun("failure-worker", { provider: failingProvider, maxAttempts: 2 });
   assert.equal(second.status, "failed");
+});
+
+test("worker converts an unknown persisted job into a failed run", async () => {
+  const [run] = await db.insert(aiRuns).values({
+    ideaId,
+    ideaVersionId: versionId,
+    jobKey: "unknown.persisted.job",
+    jobVersion: "1",
+    promptVersion: "1",
+    model: "test-model",
+    idempotencyKey: `unknown-job-${Date.now()}`,
+    correlationId: "unknown-job",
+    requestedBy: userId,
+    inputHash: "unknown-job",
+  }).returning().all();
+  const outcome = await processNextAiRun("unknown-job-worker", { provider: { generateStructured: async () => ({ text: "{}" }) } });
+  assert.equal(outcome.status, "failed");
+  const [failed] = await db.select().from(aiRuns).where(eq(aiRuns.id, run.id)).all();
+  assert.equal(failed.status, "failed");
 });
 
 test("deleting an idea cleans up its workflow records", async () => {

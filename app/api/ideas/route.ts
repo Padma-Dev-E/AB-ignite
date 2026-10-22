@@ -2,8 +2,7 @@ import { desc, eq } from "drizzle-orm";
 import { createHash, randomBytes } from "node:crypto";
 import { auth } from "../../../auth";
 import { db } from "../../../src/db/connection";
-import { ideaEvents, ideas } from "../../../src/db/schema";
-import { createIdeaVersion } from "../../../src/lib/ideas/repository";
+import { ideaEvents, ideaVersions, ideas } from "../../../src/db/schema";
 import { IdeaInputSchema } from "../../../src/lib/ideas/schemas";
 import { apiError, handleApiError, ok, requestId } from "../../../src/lib/http/errors";
 
@@ -36,21 +35,25 @@ export async function POST(request: Request) {
     const input = IdeaInputSchema.parse(await request.json());
     const reference = `IDEA-${Date.now()}-${randomBytes(3).toString("hex").toUpperCase()}`;
     const contentHash = createHash("sha256").update(JSON.stringify(input)).digest("hex");
-    const [idea] = await db.insert(ideas).values({
-      authorId: userId,
-      kind: input.kind,
-      title: input.title,
-      summary: input.summary,
-      problem: input.problem,
-      solution: input.solution,
-      benefits: input.benefits,
-      risks: input.risks,
-      category: input.category,
-      reference,
-    }).returning().all();
-    if (!idea) throw new Error("Idea was not created");
-    const version = await createIdeaVersion({ ...input, ideaId: idea.id, authorId: userId, version: 1, contentHash });
-    await db.insert(ideaEvents).values({ ideaId: idea.id, ideaVersionId: version.id, actorType: session.user.role, actorId: userId, eventType: "created", correlationId: id }).run();
+    const { idea, version } = await db.transaction((tx) => {
+      const [createdIdea] = tx.insert(ideas).values({
+        authorId: userId,
+        kind: input.kind,
+        title: input.title,
+        summary: input.summary,
+        problem: input.problem,
+        solution: input.solution,
+        benefits: input.benefits,
+        risks: input.risks,
+        category: input.category,
+        reference,
+      }).returning().all();
+      if (!createdIdea) throw new Error("Idea was not created");
+      const [createdVersion] = tx.insert(ideaVersions).values({ ...input, ideaId: createdIdea.id, authorId: userId, version: 1, contentHash }).returning().all();
+      if (!createdVersion) throw new Error("Idea version was not created");
+      tx.insert(ideaEvents).values({ ideaId: createdIdea.id, ideaVersionId: createdVersion.id, actorType: session.user.role, actorId: userId, eventType: "created", correlationId: id }).run();
+      return { idea: createdIdea, version: createdVersion };
+    });
     return ok({ idea, versionId: version.id }, 201, id);
   } catch (error) {
     return handleApiError(error, id);

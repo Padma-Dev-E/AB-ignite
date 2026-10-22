@@ -43,3 +43,8 @@ test("frontend remains disconnected from Gemini and API routes", async () => {
   const page = await source("app/page.tsx");
   assert.doesNotMatch(page, /GEMINI|generateContent|\/api\/ideas/);
 });
+
+test("idea creation uses one database transaction for aggregate, version, and event", async () => {
+  const route = await source("app/api/ideas/route.ts");
+  assert.match(route, /db\.transaction/);
+});

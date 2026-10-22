@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "../../db/connection";
 import { aiRuns, ideaVersions, ideas } from "../../db/schema";
 import { getAiJob } from "../ai/registry";
+import { getAiConfig } from "../ai/config-core";
 import "../ai/jobs";
 import type { AiActor } from "../ai/types";
 import { appendIdeaEvent, createAiRun, getAuthorizedIdeaSnapshot } from "./repository";
@@ -61,7 +62,7 @@ export async function runIdeaScreeningWorkflow(ideaId: number, versionId: number
     jobKey: job.key,
     jobVersion: job.version,
     promptVersion: job.version,
-    model: job.model ?? "gemini-3.8-flash",
+    model: job.model ?? getAiConfig().model,
     idempotencyKey: idempotencyKey ?? `idea:${ideaId}:version:${version.id}:idea.preflight:v1`,
     correlationId: `idea:${ideaId}:version:${version.id}`,
     requestedBy: actor.id ? Number(actor.id) : null,
