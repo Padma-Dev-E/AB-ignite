@@ -52,6 +52,7 @@ export type AiSafetyPolicy = {
   maxInputChars: number;
   allowedDataClassification: "public" | "internal" | "confidential" | "restricted";
   blockRestricted: boolean;
+  blockSensitive: boolean;
 };
 
 export type AiJobDefinition<TInput, TOutput> = {
