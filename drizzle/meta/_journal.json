@@ -15,6 +15,13 @@
       "when": 1792674861243,
       "tag": "0001_nifty_fenris",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1792689519539,
+      "tag": "0002_fresh_eddie_brock",
+      "breakpoints": true
     }
   ]
 }

@@ -59,6 +59,99 @@ export const ideas = sqliteTable("ideas", {
   index("ideas_status_idx").on(table.status),
 ]);
 
+export const ideaVersions = sqliteTable("idea_versions", {
+  id: integer().primaryKey({ autoIncrement: true }),
+  ideaId: integer().notNull().references(() => ideas.id, { onDelete: "cascade" }),
+  authorId: integer().notNull().references(() => users.id, { onDelete: "cascade" }),
+  version: integer().notNull(),
+  kind: text({ enum: ["idea", "problem"] }).notNull(),
+  title: text().notNull(),
+  summary: text().notNull(),
+  problem: text(),
+  solution: text(),
+  benefits: text(),
+  risks: text(),
+  category: text().notNull(),
+  dataClassification: text({ enum: ["public", "internal", "confidential", "restricted"] }).notNull().default("internal"),
+  contentHash: text().notNull(),
+  ...timestamps,
+}, (table) => [
+  uniqueIndex("idea_versions_idea_version_unique").on(table.ideaId, table.version),
+  index("idea_versions_idea_idx").on(table.ideaId, table.createdAt),
+]);
+
+export const aiRuns = sqliteTable("ai_runs", {
+  id: integer().primaryKey({ autoIncrement: true }),
+  ideaId: integer().notNull().references(() => ideas.id, { onDelete: "cascade" }),
+  ideaVersionId: integer().references(() => ideaVersions.id, { onDelete: "set null" }),
+  jobKey: text().notNull(),
+  jobVersion: text().notNull(),
+  promptVersion: text().notNull(),
+  model: text().notNull(),
+  status: text({ enum: ["queued", "running", "succeeded", "failed", "timed_out", "cancelled"] }).notNull().default("queued"),
+  idempotencyKey: text().notNull(),
+  correlationId: text().notNull(),
+  requestedBy: integer().references(() => users.id, { onDelete: "set null" }),
+  inputHash: text().notNull(),
+  attemptCount: integer().notNull().default(0),
+  resultJson: text(),
+  usageJson: text(),
+  finishReason: text(),
+  errorCode: text(),
+  errorMessage: text(),
+  workerId: text(),
+  availableAt: integer({ mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
+  startedAt: integer({ mode: "timestamp_ms" }),
+  completedAt: integer({ mode: "timestamp_ms" }),
+  ...timestamps,
+}, (table) => [
+  uniqueIndex("ai_runs_idempotency_unique").on(table.idempotencyKey),
+  index("ai_runs_idea_idx").on(table.ideaId, table.createdAt),
+  index("ai_runs_status_available_idx").on(table.status, table.availableAt),
+  index("ai_runs_correlation_idx").on(table.correlationId),
+]);
+
+export const ideaAiResults = sqliteTable("idea_ai_results", {
+  id: integer().primaryKey({ autoIncrement: true }),
+  ideaId: integer().notNull().references(() => ideas.id, { onDelete: "cascade" }),
+  ideaVersionId: integer().references(() => ideaVersions.id, { onDelete: "set null" }),
+  runId: integer().notNull().references(() => aiRuns.id, { onDelete: "cascade" }),
+  jobKey: text().notNull(),
+  jobVersion: text().notNull(),
+  resultJson: text().notNull(),
+  ...timestamps,
+}, (table) => [
+  uniqueIndex("idea_ai_results_run_unique").on(table.runId),
+  index("idea_ai_results_idea_idx").on(table.ideaId, table.createdAt),
+]);
+
+export const ideaEvents = sqliteTable("idea_events", {
+  id: integer().primaryKey({ autoIncrement: true }),
+  ideaId: integer().notNull().references(() => ideas.id, { onDelete: "cascade" }),
+  ideaVersionId: integer().references(() => ideaVersions.id, { onDelete: "set null" }),
+  actorType: text({ enum: ["user", "admin", "system", "ai"] }).notNull(),
+  actorId: integer().references(() => users.id, { onDelete: "set null" }),
+  eventType: text().notNull(),
+  fromStatus: text({ enum: ["screening", "returned", "business_review", "control_review", "decision", "poc", "implementation", "implemented", "rejected", "deferred"] }),
+  toStatus: text({ enum: ["screening", "returned", "business_review", "control_review", "decision", "poc", "implementation", "implemented", "rejected", "deferred"] }),
+  correlationId: text(),
+  metadataJson: text(),
+  createdAt: integer({ mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
+}, (table) => [
+  index("idea_events_idea_idx").on(table.ideaId, table.createdAt),
+  index("idea_events_correlation_idx").on(table.correlationId),
+]);
+
+export const ideaReviews = sqliteTable("idea_reviews", {
+  id: integer().primaryKey({ autoIncrement: true }),
+  ideaId: integer().notNull().references(() => ideas.id, { onDelete: "cascade" }),
+  reviewerId: integer().references(() => users.id, { onDelete: "set null" }),
+  decision: text({ enum: ["approved", "returned", "rejected", "deferred"] }).notNull(),
+  reason: text().notNull(),
+  conflictAcknowledged: integer({ mode: "boolean" }).notNull().default(false),
+  ...timestamps,
+}, (table) => [index("idea_reviews_idea_idx").on(table.ideaId, table.createdAt)]);
+
 export const ideaComments = sqliteTable("idea_comments", {
   id: integer().primaryKey({ autoIncrement: true }),
   ideaId: integer().notNull().references(() => ideas.id, { onDelete: "cascade" }),
@@ -127,10 +220,14 @@ export const userRewards = sqliteTable("user_rewards", {
 
 export const usersRelations = relations(users, ({ many }) => ({
   ideas: many(ideas),
+  ideaVersions: many(ideaVersions),
   comments: many(ideaComments),
   notifications: many(notifications),
   rewards: many(userRewards),
   refreshTokens: many(refreshTokens),
+  aiRuns: many(aiRuns),
+  ideaEvents: many(ideaEvents),
+  ideaReviews: many(ideaReviews),
 }));
 
 export const refreshTokensRelations = relations(refreshTokens, ({ one }) => ({
@@ -140,6 +237,43 @@ export const refreshTokensRelations = relations(refreshTokens, ({ one }) => ({
 export const ideasRelations = relations(ideas, ({ one, many }) => ({
   author: one(users, { fields: [ideas.authorId], references: [users.id] }),
   comments: many(ideaComments),
+  versions: many(ideaVersions),
+  aiRuns: many(aiRuns),
+  aiResults: many(ideaAiResults),
+  events: many(ideaEvents),
+  reviews: many(ideaReviews),
+}));
+
+export const ideaVersionsRelations = relations(ideaVersions, ({ one, many }) => ({
+  idea: one(ideas, { fields: [ideaVersions.ideaId], references: [ideas.id] }),
+  author: one(users, { fields: [ideaVersions.authorId], references: [users.id] }),
+  aiRuns: many(aiRuns),
+  aiResults: many(ideaAiResults),
+  events: many(ideaEvents),
+}));
+
+export const aiRunsRelations = relations(aiRuns, ({ one }) => ({
+  idea: one(ideas, { fields: [aiRuns.ideaId], references: [ideas.id] }),
+  ideaVersion: one(ideaVersions, { fields: [aiRuns.ideaVersionId], references: [ideaVersions.id] }),
+  requester: one(users, { fields: [aiRuns.requestedBy], references: [users.id] }),
+  result: one(ideaAiResults, { fields: [aiRuns.id], references: [ideaAiResults.runId] }),
+}));
+
+export const ideaAiResultsRelations = relations(ideaAiResults, ({ one }) => ({
+  idea: one(ideas, { fields: [ideaAiResults.ideaId], references: [ideas.id] }),
+  ideaVersion: one(ideaVersions, { fields: [ideaAiResults.ideaVersionId], references: [ideaVersions.id] }),
+  run: one(aiRuns, { fields: [ideaAiResults.runId], references: [aiRuns.id] }),
+}));
+
+export const ideaEventsRelations = relations(ideaEvents, ({ one }) => ({
+  idea: one(ideas, { fields: [ideaEvents.ideaId], references: [ideas.id] }),
+  ideaVersion: one(ideaVersions, { fields: [ideaEvents.ideaVersionId], references: [ideaVersions.id] }),
+  actor: one(users, { fields: [ideaEvents.actorId], references: [users.id] }),
+}));
+
+export const ideaReviewsRelations = relations(ideaReviews, ({ one }) => ({
+  idea: one(ideas, { fields: [ideaReviews.ideaId], references: [ideas.id] }),
+  reviewer: one(users, { fields: [ideaReviews.reviewerId], references: [users.id] }),
 }));
 
 export const ideaCommentsRelations = relations(ideaComments, ({ one }) => ({
@@ -160,6 +294,11 @@ export const schema = {
   users,
   refreshTokens,
   ideas,
+  ideaVersions,
+  aiRuns,
+  ideaAiResults,
+  ideaEvents,
+  ideaReviews,
   ideaComments,
   notifications,
   articles,
@@ -173,3 +312,10 @@ export type NewUser = typeof users.$inferInsert;
 export type UserRole = "admin" | "user";
 export type Idea = typeof ideas.$inferSelect;
 export type NewIdea = typeof ideas.$inferInsert;
+export type IdeaVersion = typeof ideaVersions.$inferSelect;
+export type NewIdeaVersion = typeof ideaVersions.$inferInsert;
+export type AiRun = typeof aiRuns.$inferSelect;
+export type NewAiRun = typeof aiRuns.$inferInsert;
+export type IdeaAiResult = typeof ideaAiResults.$inferSelect;
+export type IdeaEvent = typeof ideaEvents.$inferSelect;
+export type IdeaReview = typeof ideaReviews.$inferSelect;
