@@ -1,18 +1,23 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { eq } from "drizzle-orm";
 import { z } from "zod";
 import {
   AiProviderError,
   AiTimeoutError,
   AiProviderOutputError,
   AiSchemaValidationError,
-  type AiProviderErrorCategory,
+  AiPolicyError,
 } from "../src/lib/ai/errors";
 import { createGeminiProvider } from "../src/lib/ai/gemini-provider-core";
 import type { AiConfig } from "../src/lib/ai/config";
 import { evaluateAiInput } from "../src/lib/ai/policy";
 import { redactAiError } from "../src/lib/ai/observability";
-import type { AiSafetyPolicy } from "../src/lib/ai/types";
+import type { AiProviderErrorCategory, AiSafetyPolicy } from "../src/lib/ai/types";
+import { getAiJob, registerAiJob } from "../src/lib/ai/registry";
+import { runStructuredAi } from "../src/lib/ai/runner";
+import { db } from "../src/db/connection";
+import { ideaVersions, ideas, users } from "../src/db/schema";
 import {
   ClarifyingQuestionSchema,
   RiskFindingSchema,
@@ -273,4 +278,93 @@ test("AI error redaction removes provider details and credentials", () => {
   assert.equal(safe.status, 503);
   assert.equal(safe.message, "AI provider request failed");
   assert.doesNotMatch(JSON.stringify(safe), /secret|GEMINI_API_KEY/);
+});
+
+test("generic runner validates, persists, deduplicates, and fails safely", async () => {
+  const [user] = await db.insert(users).values({
+    name: "Runner Test User",
+    email: `runner-${Date.now()}@example.test`,
+    passwordHash: "test-hash",
+  }).returning({ id: users.id }).all();
+  const [idea] = await db.insert(ideas).values({
+    authorId: user.id,
+    title: "Runner test idea",
+    summary: "An idea used to exercise the generic runner.",
+    category: "Operations",
+    reference: `RUN-${Date.now()}`,
+  }).returning({ id: ideas.id }).all();
+  const [version] = await db.insert(ideaVersions).values({
+    ideaId: idea.id,
+    authorId: user.id,
+    version: 1,
+    kind: "idea",
+    title: "Runner test idea",
+    summary: "An idea used to exercise the generic runner.",
+    category: "Operations",
+    dataClassification: "internal",
+    contentHash: "runner-input",
+  }).returning({ id: ideaVersions.id }).all();
+
+  const runnerJob = {
+    key: "test.runner",
+    version: "1",
+    model: "test-model",
+    systemPrompt: "Return only the approved boolean.",
+    inputSchema: z.strictObject({ summary: z.string().min(1).max(200), dataClassification: z.enum(["internal", "restricted"]) }),
+    outputSchema: z.strictObject({ approved: z.boolean() }),
+    responseJsonSchema: { type: "object", properties: { approved: { type: "boolean" } }, required: ["approved"] },
+    buildInput: (_input: unknown, safeInput: { serialized: string }) => safeInput.serialized,
+    safety: { maxInputChars: 500, allowedDataClassification: "internal" as const, blockRestricted: true, blockSensitive: true },
+  };
+  registerAiJob(runnerJob);
+  assert.equal(getAiJob("test.runner", "1").key, "test.runner");
+
+  let calls = 0;
+  const provider = {
+    generateStructured: async () => {
+      calls += 1;
+      return { text: '{"approved":true}', usage: { inputTokens: 5, outputTokens: 2 }, finishReason: "STOP" };
+    },
+  };
+  const baseArgs = {
+    jobKey: "test.runner",
+    ideaId: idea.id,
+    ideaVersionId: version.id,
+    input: { summary: "Safe runner input", dataClassification: "internal" },
+    actor: { kind: "user" as const, id: String(user.id) },
+    correlationId: "runner-correlation",
+    idempotencyKey: `runner-${Date.now()}`,
+  };
+  const result = await runStructuredAi(baseArgs, { provider });
+  assert.deepEqual(result.data, { approved: true });
+  assert.equal(result.usage?.outputTokens, 2);
+  assert.equal(calls, 1);
+
+  const duplicate = await runStructuredAi(baseArgs, {
+    provider: { generateStructured: async () => { throw new Error("duplicate provider call"); } },
+  });
+  assert.equal(duplicate.runId, result.runId);
+  assert.equal(calls, 1);
+
+  await assert.rejects(
+    runStructuredAi({ ...baseArgs, idempotencyKey: `${baseArgs.idempotencyKey}-invalid`, input: { summary: "", dataClassification: "internal" } }, { provider }),
+    (error: unknown) => error instanceof AiSchemaValidationError,
+  );
+  let blockedCalls = 0;
+  await assert.rejects(
+    runStructuredAi({ ...baseArgs, idempotencyKey: `${baseArgs.idempotencyKey}-blocked`, input: { summary: "restricted", dataClassification: "restricted" } }, {
+      provider: { generateStructured: async () => { blockedCalls += 1; return { text: "{}" }; } },
+    }),
+    (error: unknown) => error instanceof AiPolicyError,
+  );
+  assert.equal(blockedCalls, 0);
+  await assert.rejects(
+    runStructuredAi({ ...baseArgs, idempotencyKey: `${baseArgs.idempotencyKey}-bad-output` }, {
+      provider: { generateStructured: async () => ({ text: '{"approved":"yes"}' }) },
+    }),
+    (error: unknown) => error instanceof AiSchemaValidationError,
+  );
+
+  await db.delete(ideas).where(eq(ideas.id, idea.id));
+  await db.delete(users).where(eq(users.id, user.id));
 });

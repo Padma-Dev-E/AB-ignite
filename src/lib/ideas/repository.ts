@@ -84,6 +84,19 @@ export async function claimNextAiRun(workerId: string, now = new Date()): Promis
   });
 }
 
+export async function claimAiRun(runId: number, workerId: string, now = new Date()): Promise<AiRun | null> {
+  const [current] = await db.select().from(aiRuns).where(and(eq(aiRuns.id, runId), eq(aiRuns.status, "queued"))).limit(1).all();
+  if (!current) return null;
+  const updated = await db.update(aiRuns).set({
+    status: "running",
+    workerId,
+    attemptCount: current.attemptCount + 1,
+    startedAt: now,
+    updatedAt: now,
+  }).where(and(eq(aiRuns.id, runId), eq(aiRuns.status, "queued"))).returning().all();
+  return updated[0] ?? null;
+}
+
 export async function completeAiRun(runId: number, result: AiRunResultInput): Promise<void> {
   await db.transaction((tx) => {
     const [run] = tx.select().from(aiRuns).where(eq(aiRuns.id, runId)).limit(1).all();

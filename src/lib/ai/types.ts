@@ -1,4 +1,6 @@
 import type { ZodType } from "zod";
+import type { SafeAiInput } from "./policy";
+import type { AiProvider } from "./provider";
 
 export type AiRunStatus = "queued" | "running" | "succeeded" | "failed" | "timed_out" | "cancelled";
 export type AiActorKind = "user" | "admin" | "system" | "ai";
@@ -63,7 +65,7 @@ export type AiJobDefinition<TInput, TOutput> = {
   inputSchema: ZodType<TInput>;
   outputSchema: ZodType<TOutput>;
   responseJsonSchema: JsonSchema;
-  buildInput: (input: TInput) => string;
+  buildInput: (input: TInput, safeInput: SafeAiInput) => string;
   safety: AiSafetyPolicy;
 };
 
@@ -82,8 +84,20 @@ export type AiRunResult<TOutput> = {
 
 export type RunStructuredAiArgs<TInput> = {
   jobKey: string;
+  ideaId: number;
+  ideaVersionId?: number;
   input: TInput;
   actor: AiActor;
   correlationId: string;
   idempotencyKey: string;
+};
+
+export type AiRunnerDependencies = {
+  provider: AiProvider;
+  workerId?: string;
+  model?: string;
+  timeoutMs?: number;
+  maxOutputTokens?: number;
+  temperature?: number;
+  concurrency?: number;
 };
