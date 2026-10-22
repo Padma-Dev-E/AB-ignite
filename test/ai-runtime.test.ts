@@ -18,6 +18,7 @@ import { getAiJob, registerAiJob } from "../src/lib/ai/registry";
 import { runStructuredAi } from "../src/lib/ai/runner";
 import { db } from "../src/db/connection";
 import { ideaVersions, ideas, users } from "../src/db/schema";
+import "../src/lib/ai/jobs";
 import {
   ClarifyingQuestionSchema,
   RiskFindingSchema,
@@ -367,4 +368,28 @@ test("generic runner validates, persists, deduplicates, and fails safely", async
 
   await db.delete(ideas).where(eq(ideas.id, idea.id));
   await db.delete(users).where(eq(users.id, user.id));
+});
+
+test("all approved idea AI jobs are registered with strict structured contracts", () => {
+  const keys = [
+    "idea.preflight",
+    "idea.validate",
+    "idea.enrich",
+    "idea.questions",
+    "idea.risk",
+    "idea.route",
+    "idea.similar",
+    "idea.estimate",
+    "idea.decision_pack",
+    "idea.impact_plan",
+  ];
+  for (const key of keys) {
+    const job = getAiJob(key, "1");
+    assert.equal(job.key, key);
+    assert.equal(job.version, "1");
+    assert.ok(job.systemPrompt.length > 40);
+    assert.equal(job.responseJsonSchema.type, "object");
+    assert.equal("tools" in job, false);
+    assert.ok(job.safety.maxInputChars > 0);
+  }
 });
