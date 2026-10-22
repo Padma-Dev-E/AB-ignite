@@ -11,9 +11,12 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
-    "db:seed": "tsx src/db/seed.ts"
+    "db:seed": "tsx src/db/seed.ts",
+    "test:ai": "tsx --test test/ai-runtime.test.ts test/idea-workflow.test.ts test/ai-api.test.ts",
+    "ai:worker": "tsx scripts/run-ai-worker.ts"
   },
   "dependencies": {
+    "@google/genai": "^2.30.0",
     "@headlessui/react": "^2.2.9",
     "argon2": "^0.45.1",
     "better-sqlite3": "^11.10.0",
@@ -22,7 +25,8 @@
     "next-auth": "^5.0.0-beta.32",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "server-only": "^0.0.1"
+    "server-only": "^0.0.1",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
