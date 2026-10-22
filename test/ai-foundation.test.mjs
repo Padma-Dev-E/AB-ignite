@@ -52,3 +52,10 @@ test("Gemini provider entrypoint is server-only", async () => {
   const provider = await source("src/lib/ai/gemini-provider.ts");
   assert.match(provider, /import\s+['"]server-only['"]/);
 });
+
+test("AI backend operations are documented", async () => {
+  const docs = await source("docs/ai-backend.md");
+  for (const term of ["server-only", "npm run test:ai", "npm run ai:worker -- --once", "fake provider", "SQLite", "secret manager", "retention"]) {
+    assert.match(docs, new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"), `missing ${term}`);
+  }
+});
