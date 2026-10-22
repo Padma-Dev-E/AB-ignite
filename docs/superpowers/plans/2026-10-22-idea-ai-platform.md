@@ -101,7 +101,7 @@
 
 **Interfaces:**
 - Produces `getAiConfig(): AiConfig`, where `AiConfig` contains provider key, model, base URL, timeout, retry, token/output limits, allowed classification, rate/concurrency, and retention values.
-- Produces package scripts `test:ai` and `ai:worker`.
+- Produces package scripts `test:ai` (all TypeScript AI tests under `test/`) and `ai:worker`.
 
 - [ ] **Step 1: Write failing configuration/source tests**
 
@@ -114,7 +114,7 @@ Expected: FAIL because the AI dependency/configuration does not exist yet.
 
 - [ ] **Step 3: Add dependencies and scripts**
 
-Install the official `@google/genai` SDK and `zod`. Add `test:ai` using `tsx --test test/ai-runtime.test.ts test/idea-workflow.test.ts test/ai-api.test.ts`, and add `ai:worker` using `tsx scripts/run-ai-worker.ts`.
+Install the official `@google/genai` SDK and `zod`. Add `test:ai` using `tsx --test test/*.test.ts`, so it runs the tests that exist at each task boundary, and add `ai:worker` using `tsx scripts/run-ai-worker.ts`.
 
 - [ ] **Step 4: Implement `getAiConfig()`**
 

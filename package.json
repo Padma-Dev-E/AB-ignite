@@ -7,12 +7,12 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test": "node --test",
+    "test": "node --test test/*.test.mjs",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
     "db:seed": "tsx src/db/seed.ts",
-    "test:ai": "tsx --test test/ai-runtime.test.ts test/idea-workflow.test.ts test/ai-api.test.ts",
+    "test:ai": "tsx --test test/*.test.ts",
     "ai:worker": "tsx scripts/run-ai-worker.ts"
   },
   "dependencies": {
