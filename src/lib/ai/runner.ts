@@ -4,7 +4,9 @@ import { AiIdempotencyError, AiPolicyError, AiSchemaValidationError, AiTimeoutEr
 import { redactAiError } from "./observability";
 import { evaluateAiInput, type PolicyBlock } from "./policy";
 import { getAiJob } from "./registry";
+import type { SafeAiInput } from "./policy";
 import type { AiJobDefinition, AiRunnerDependencies, AiRunResult, RunStructuredAiArgs } from "./types";
+import type { AiRun } from "../../db/schema";
 import {
   appendIdeaEvent,
   claimAiRun,
@@ -71,6 +73,50 @@ async function failRun(runId: number, ideaId: number, actor: RunStructuredAiArgs
   });
 }
 
+export async function executeClaimedAiRun<TInput, TOutput>(
+  claimed: AiRun,
+  args: RunStructuredAiArgs<TInput>,
+  job: AiJobDefinition<TInput, TOutput>,
+  safeInput: SafeAiInput,
+  dependencies: AiRunnerDependencies,
+): Promise<AiRunResult<TOutput>> {
+  const semaphore = semaphoreFor(dependencies.concurrency ?? 4);
+  await semaphore.acquire();
+  const started = Date.now();
+  try {
+    const response = await dependencies.provider.generateStructured({
+      model: claimed.model,
+      systemPrompt: job.systemPrompt,
+      userContent: job.buildInput(args.input, safeInput),
+      responseMimeType: "application/json",
+      responseJsonSchema: job.responseJsonSchema,
+      maxOutputTokens: dependencies.maxOutputTokens ?? 4_096,
+      temperature: dependencies.temperature ?? 0,
+      timeoutMs: dependencies.timeoutMs ?? 30_000,
+    });
+    let decoded: unknown;
+    try { decoded = JSON.parse(response.text); } catch (error) { throw new AiSchemaValidationError("AI output was not valid JSON", { cause: error }); }
+    const parsedOutput = job.outputSchema.safeParse(decoded);
+    if (!parsedOutput.success) throw outputError(parsedOutput);
+    await completeAiRun(claimed.id, {
+      resultJson: JSON.stringify(parsedOutput.data),
+      usageJson: response.usage ? JSON.stringify(response.usage) : undefined,
+      finishReason: response.finishReason,
+    });
+    await appendIdeaEvent({ ideaId: args.ideaId, actorType: "ai", eventType: "ai_completed", correlationId: args.correlationId, metadataJson: JSON.stringify({ jobKey: job.key, runId: claimed.id }) });
+    return {
+      runId: String(claimed.id), jobKey: job.key, jobVersion: job.version, promptVersion: job.version,
+      model: claimed.model, data: parsedOutput.data, attempts: claimed.attemptCount, latencyMs: Date.now() - started,
+      usage: response.usage, finishReason: response.finishReason,
+    };
+  } catch (error) {
+    await failRun(claimed.id, args.ideaId, args.actor, error);
+    throw error;
+  } finally {
+    semaphore.release();
+  }
+}
+
 export async function runStructuredAi<TInput, TOutput>(
   args: RunStructuredAiArgs<TInput>,
   dependencies: AiRunnerDependencies,
@@ -115,39 +161,5 @@ export async function runStructuredAi<TInput, TOutput>(
 
   const claimed = await claimAiRun(run.id, dependencies.workerId ?? "inline-runner");
   if (!claimed) throw new AiIdempotencyError("AI run could not be claimed");
-  const semaphore = semaphoreFor(dependencies.concurrency ?? 4);
-  await semaphore.acquire();
-  const started = Date.now();
-  try {
-    const response = await dependencies.provider.generateStructured({
-      model: claimed.model,
-      systemPrompt: job.systemPrompt,
-      userContent: job.buildInput(parsedInput.data, safeInput),
-      responseMimeType: "application/json",
-      responseJsonSchema: job.responseJsonSchema,
-      maxOutputTokens: dependencies.maxOutputTokens ?? 4_096,
-      temperature: dependencies.temperature ?? 0,
-      timeoutMs: dependencies.timeoutMs ?? 30_000,
-    });
-    let decoded: unknown;
-    try { decoded = JSON.parse(response.text); } catch (error) { throw new AiSchemaValidationError("AI output was not valid JSON", { cause: error }); }
-    const parsedOutput = job.outputSchema.safeParse(decoded);
-    if (!parsedOutput.success) throw outputError(parsedOutput);
-    await completeAiRun(claimed.id, {
-      resultJson: JSON.stringify(parsedOutput.data),
-      usageJson: response.usage ? JSON.stringify(response.usage) : undefined,
-      finishReason: response.finishReason,
-    });
-    await appendIdeaEvent({ ideaId: args.ideaId, actorType: "ai", eventType: "ai_completed", correlationId: args.correlationId, metadataJson: JSON.stringify({ jobKey: job.key, runId: claimed.id }) });
-    return {
-      runId: String(claimed.id), jobKey: job.key, jobVersion: job.version, promptVersion: job.version,
-      model: claimed.model, data: parsedOutput.data, attempts: claimed.attemptCount, latencyMs: Date.now() - started,
-      usage: response.usage, finishReason: response.finishReason,
-    };
-  } catch (error) {
-    await failRun(claimed.id, args.ideaId, args.actor, error);
-    throw error;
-  } finally {
-    semaphore.release();
-  }
+  return executeClaimedAiRun(claimed, args, job, safeInput, dependencies);
 }

@@ -132,6 +132,17 @@ export async function failAiRun(runId: number, failure: AiRunFailureInput): Prom
   }).where(eq(aiRuns.id, runId)).run();
 }
 
+export async function requeueAiRun(runId: number, failure: AiRunFailureInput, availableAt = new Date()): Promise<void> {
+  const now = new Date();
+  await db.update(aiRuns).set({
+    status: "queued",
+    errorCode: failure.errorCode,
+    errorMessage: failure.errorMessage,
+    availableAt,
+    updatedAt: now,
+  }).where(eq(aiRuns.id, runId)).run();
+}
+
 export async function appendIdeaEvent(input: CreateIdeaEventInput): Promise<IdeaEvent> {
   const [event] = await db.insert(ideaEvents).values(input).returning().all();
   if (!event) throw new Error("Idea event was not created");

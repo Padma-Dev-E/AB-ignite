@@ -19,6 +19,7 @@ test("AI foundation declares server-side SDK dependencies and scripts", async ()
 test("AI environment configuration is server-only and complete", async () => {
   const env = await source(".env.example");
   const config = await source("src/lib/ai/config.ts");
+  const configCore = await source("src/lib/ai/config-core.ts");
 
   for (const variable of [
     "GEMINI_API_KEY",
@@ -42,8 +43,8 @@ test("AI environment configuration is server-only and complete", async () => {
   }
 
   assert.match(config, /server-only/);
-  assert.match(config, /GEMINI_API_KEY/);
-  assert.match(config, /GOOGLE_API_KEY/);
+  assert.match(configCore, /GEMINI_API_KEY/);
+  assert.match(configCore, /GOOGLE_API_KEY/);
   assert.doesNotMatch(env, /^NEXT_PUBLIC_GEMINI/m);
 });
 

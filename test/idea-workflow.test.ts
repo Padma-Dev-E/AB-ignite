@@ -11,6 +11,13 @@ import {
   ideas,
   users,
 } from "../src/db/schema";
+import { AiProviderError } from "../src/lib/ai/errors";
+import { processNextAiRun } from "../src/lib/ai/worker";
+import {
+  canTransitionIdeaStatus,
+  runIdeaScreeningWorkflow,
+  transitionIdeaStatus,
+} from "../src/lib/ideas/workflow";
 import {
   appendIdeaEvent,
   claimNextAiRun,
@@ -74,6 +81,7 @@ test("creates immutable idea versions and authorized snapshots", async () => {
 
   assert.equal(version.version, 1);
   versionId = version.id;
+  versionId = version.id;
   assert.equal((await getAuthorizedIdeaSnapshot({ kind: "user", id: String(userId) }, ideaId))?.idea.id, ideaId);
   assert.equal(await getAuthorizedIdeaSnapshot({ kind: "user", id: String(otherUserId) }, ideaId), null);
   assert.equal((await getAuthorizedIdeaSnapshot({ kind: "admin", id: String(otherUserId) }, ideaId))?.idea.id, ideaId);
@@ -133,6 +141,53 @@ test("events and human reviews are append-only records", async () => {
   assert.equal(review.decision, "returned");
   assert.equal((await db.select().from(ideaEvents).where(eq(ideaEvents.id, event.id)).all()).length, 1);
   assert.equal((await db.select().from(ideaReviews).where(eq(ideaReviews.id, review.id)).all()).length, 1);
+});
+
+test("workflow policy allows only authorized human/system transitions", async () => {
+  assert.equal(canTransitionIdeaStatus({ kind: "system" }, "screening", "business_review"), true);
+  assert.equal(canTransitionIdeaStatus({ kind: "ai" }, "screening", "business_review"), false);
+  assert.equal(canTransitionIdeaStatus({ kind: "admin", id: String(userId) }, "decision", "implemented"), false);
+  assert.equal(canTransitionIdeaStatus({ kind: "admin", id: String(userId) }, "decision", "poc"), true);
+
+  const updated = await transitionIdeaStatus({ kind: "admin", id: String(userId) }, ideaId, "business_review", "Automated preflight is complete.");
+  assert.equal(updated.status, "business_review");
+  await assert.rejects(
+    transitionIdeaStatus({ kind: "ai" }, ideaId, "control_review", "AI suggested control review."),
+    /not authorized|transition/i,
+  );
+});
+
+test("screening workflow queues a preflight run and worker processes it once", async () => {
+  await runIdeaScreeningWorkflow(ideaId, versionId, { kind: "admin", id: String(userId) });
+  const outcome = await processNextAiRun("workflow-worker", {
+    provider: {
+      generateStructured: async () => ({
+        text: JSON.stringify({
+          decision: "allow",
+          safeToProcess: true,
+          missingFields: [],
+          piiFound: false,
+          secretFound: false,
+          promptInjectionDetected: false,
+          duplicateCandidates: [],
+          notes: [],
+        }),
+      }),
+    },
+  });
+  assert.equal(outcome.status, "succeeded");
+  assert.equal((await processNextAiRun("workflow-worker", { provider: { generateStructured: async () => ({ text: "{}" }) } })).status, "idle");
+});
+
+test("worker retries a transient run and dead-letters after the configured bound", async () => {
+  const idempotencyKey = `worker-failure-${Date.now()}`;
+  await runIdeaScreeningWorkflow(ideaId, versionId, { kind: "admin", id: String(userId) }, idempotencyKey);
+  const failingProvider = { generateStructured: async () => { throw new AiProviderError("transient", "temporary"); } };
+  const first = await processNextAiRun("failure-worker", { provider: failingProvider, maxAttempts: 2 });
+  assert.equal(first.status, "retry_scheduled");
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  const second = await processNextAiRun("failure-worker", { provider: failingProvider, maxAttempts: 2 });
+  assert.equal(second.status, "failed");
 });
 
 test("deleting an idea cleans up its workflow records", async () => {
