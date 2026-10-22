@@ -1,0 +1,78 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url("https://fonts.googleapis.com/css2?family=Readex+Pro:wght@300;400;500;600;700&display=swap");
+
+:root {
+  --blue: #1e5eff;
+  --blue-deep: #0a2a7a;
+  --navy: #061a3f;
+  --cyan: #3ed2ff;
+  --bg: #f5f8ff;
+  --solid: #ffffff;
+  --card: #ffffff;
+  --text: #0b1f44;
+  --muted: #55678a;
+  --dim: #8fa0ba;
+  --line: rgba(11, 60, 140, 0.11);
+  --line-strong: rgba(11, 60, 140, 0.22);
+  --hover: rgba(11, 60, 140, 0.06);
+  --sand: #d97706;
+  --teal: #0e9f7a;
+  --violet: #6d4bd8;
+  --pink: #d6336c;
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  min-height: 100vh;
+  margin: 0;
+  color: var(--text);
+  background: var(--bg);
+  font-family: "Readex Pro", "Segoe UI", system-ui, sans-serif;
+  font-size: 15px;
+  font-weight: 300;
+  line-height: 1.55;
+}
+button, input, select, textarea { font: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: not-allowed; }
+:focus-visible { outline: 2px solid var(--sand); outline-offset: 2px; border-radius: 8px; }
+
+@layer components {
+  .app-card { @apply rounded-[20px] border p-6 shadow-soft; background: var(--card); border-color: var(--line); }
+  .tile { @apply rounded-xl border px-3.5 py-3; border-color: var(--line); }
+  .btn { @apply inline-flex items-center justify-center gap-2 rounded-[11px] border px-[18px] py-[11px] text-[14px] font-medium transition; border-color: var(--line-strong); color: var(--text); }
+  .btn:hover { background: var(--hover); }
+  .btn:active { transform: scale(.97); }
+  .btn-primary { @apply btn border-blue bg-blue text-white; }
+  .btn-primary:hover { background: #174bc9; }
+  .btn-small { @apply rounded-[9px] px-3 py-1.5 text-[13px]; }
+  .input { @apply w-full rounded-[11px] border px-[13px] py-[11px] outline-none transition; border-color: var(--line-strong); background: var(--solid); }
+  .input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(30,94,255,.18); }
+  .pill { @apply inline-flex items-center gap-1.5 rounded-full border px-2.5 py-[3px] text-xs font-medium whitespace-nowrap; color: var(--blue); border-color: rgba(30,94,255,.45); }
+  .pill-dot { @apply h-1.5 w-1.5 rounded-full; background: currentColor; }
+  .icon-button { @apply grid h-10 w-10 place-items-center rounded-[11px] border; border-color: var(--line); background: var(--card); }
+  .muted { color: var(--muted); }
+  .stack { @apply flex flex-col gap-[26px]; }
+  .feed-item { @apply flex gap-3.5 border-b py-[18px]; border-color: var(--line); }
+  .feed-item:last-child { @apply border-b-0 pb-0; }
+  .icon-box { @apply grid h-10 w-10 shrink-0 place-items-center rounded-[11px]; color: var(--blue); background: rgba(30,94,255,.12); }
+  .field-label { @apply mb-1.5 block text-[13.5px] font-medium; }
+}
+
+.app-background {
+  background:
+    radial-gradient(720px 480px at 12% -8%, rgba(30,94,255,.075), transparent 68%),
+    radial-gradient(600px 460px at 100% 92%, rgba(30,94,255,.04), transparent 68%),
+    var(--bg);
+}
+.hero-surface { background: linear-gradient(120deg, var(--blue-deep), var(--blue)); }
+.pinned-surface { background: linear-gradient(120deg, var(--blue-deep), var(--blue) 70%, var(--violet)); }
+.brand-wordmark { line-height: 1.05; }
+.brand-wordmark small { display: block; color: var(--muted); font-size: 9.5px; font-weight: 500; letter-spacing: .22em; }
+.brand-wordmark b { display: block; color: var(--text); font-size: 12.5px; font-weight: 700; letter-spacing: .08em; }
+.login-background { background: radial-gradient(720px 420px at 50% -20%, rgba(30,94,255,.14), transparent 75%), var(--bg); }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
