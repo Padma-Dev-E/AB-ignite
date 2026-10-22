@@ -19,6 +19,13 @@ export class AiProviderError extends AiError {
   }
 }
 
+export class AiProviderOutputError extends AiError {
+  constructor(message: string) {
+    super(message);
+    this.name = "AiProviderOutputError";
+  }
+}
+
 export class AiSchemaValidationError extends AiError {
   constructor(message: string, options?: { cause?: unknown }) {
     super(message, options);

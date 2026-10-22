@@ -12,7 +12,7 @@ test("AI foundation declares server-side SDK dependencies and scripts", async ()
   const packageJson = JSON.parse(await source("package.json"));
   assert.ok(packageJson.dependencies["@google/genai"]);
   assert.ok(packageJson.dependencies.zod);
-  assert.equal(packageJson.scripts["test:ai"], "tsx --test test/ai-runtime.test.ts test/idea-workflow.test.ts test/ai-api.test.ts");
+  assert.equal(packageJson.scripts["test:ai"], "tsx --test test/*.test.ts");
   assert.equal(packageJson.scripts["ai:worker"], "tsx scripts/run-ai-worker.ts");
 });
 
@@ -45,4 +45,9 @@ test("AI environment configuration is server-only and complete", async () => {
   assert.match(config, /GEMINI_API_KEY/);
   assert.match(config, /GOOGLE_API_KEY/);
   assert.doesNotMatch(env, /^NEXT_PUBLIC_GEMINI/m);
+});
+
+test("Gemini provider entrypoint is server-only", async () => {
+  const provider = await source("src/lib/ai/gemini-provider.ts");
+  assert.match(provider, /import\s+['"]server-only['"]/);
 });
