@@ -15,6 +15,60 @@ export function objectResponseSchema(properties: Record<string, JsonSchema>, req
   return { type: "object", properties, required, additionalProperties: false };
 }
 
+export const jsonRiskFinding: JsonSchema = {
+  type: "object",
+  properties: {
+    category: { type: "string" }, severity: { type: "string" }, description: { type: "string" },
+    mitigations: { type: "array", items: { type: "string" }, maxItems: 10 }, requiresHumanReview: { type: "boolean" },
+  },
+  required: ["category", "severity", "description", "mitigations", "requiresHumanReview"],
+};
+export const jsonQuestion: JsonSchema = {
+  type: "object",
+  properties: { id: { type: "string" }, question: { type: "string" }, reason: { type: "string" }, required: { type: "boolean" }, answerType: { type: "string" } },
+  required: ["id", "question", "reason", "required", "answerType"],
+};
+export const jsonDuplicate: JsonSchema = {
+  type: "object",
+  properties: { reference: { type: "string" }, similarity: { type: "number", minimum: 0, maximum: 1 }, reason: { type: "string" } },
+  required: ["reference", "similarity", "reason"],
+};
+export const jsonRoute: JsonSchema = {
+  type: "object",
+  properties: { department: { type: "string" }, category: { type: "string" }, reviewers: { type: "array", items: { type: "string" } }, controlReviews: { type: "array", items: { type: "string" } } },
+  required: ["department", "category", "reviewers", "controlReviews"],
+};
+export const jsonImpact: JsonSchema = {
+  type: "object",
+  properties: { benefits: { type: "array", items: { type: "string" } }, affectedUsers: { type: "string" }, timeSaved: { type: "string" }, costBand: { type: "string" }, effortBand: { type: "string" }, timeToValue: { type: "string" }, confidence: { type: "number", minimum: 0, maximum: 1 } },
+  required: ["benefits", "affectedUsers", "timeSaved", "costBand", "effortBand", "timeToValue", "confidence"],
+};
+export const jsonNextAction: JsonSchema = {
+  type: "object",
+  properties: { action: { type: "string" }, ownerRole: { type: "string" }, priority: { type: "string" }, dueInDays: { type: "number" } },
+  required: ["action", "ownerRole", "priority"],
+};
+export const jsonMetric: JsonSchema = {
+  type: "object",
+  properties: { name: { type: "string" }, baseline: { type: "string" }, target: { type: "string" }, owner: { type: "string" }, measurementWindow: { type: "string" } },
+  required: ["name", "baseline", "target", "owner", "measurementWindow"],
+};
+export const jsonOption: JsonSchema = {
+  type: "object",
+  properties: { name: { type: "string" }, description: { type: "string" }, tradeoffs: { type: "array", items: { type: "string" } } },
+  required: ["name", "description", "tradeoffs"],
+};
+export const jsonScore: JsonSchema = {
+  type: "object",
+  properties: { score: { type: "number", minimum: 0, maximum: 5 }, rationale: { type: "string" } },
+  required: ["score", "rationale"],
+};
+export const jsonScores: JsonSchema = {
+  type: "object",
+  properties: Object.fromEntries(["novelty", "problemClarity", "customerImpact", "employeeImpact", "strategicAlignment", "feasibility", "value", "risk", "urgency", "scalability"].map((key) => [key, jsonScore])),
+  required: ["novelty", "problemClarity", "customerImpact", "employeeImpact", "strategicAlignment", "feasibility", "value", "risk", "urgency", "scalability"],
+};
+
 export function defineIdeaJob<TInput = IdeaAnalysisInput, TOutput = unknown>(definition: {
   key: string;
   systemPrompt: string;
