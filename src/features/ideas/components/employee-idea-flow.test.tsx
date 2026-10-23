@@ -13,6 +13,6 @@ test("employee submission flow starts with the describe stage", () => {
   ));
 
   assert.match(html, /Share an idea/);
-  assert.match(html, /Check originality and continue/);
-  assert.match(html, /The AI coach is connected/);
+  assert.match(html, /Continue to develop/);
+  assert.match(html, /Server originality check/);
 });
