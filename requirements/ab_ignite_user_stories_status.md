@@ -2,15 +2,15 @@
 
 Status audit for [`ab_ignite_user_stories.md`](./ab_ignite_user_stories.md).
 
-Audited against the local branch through quiz backend commit `461222c` and rewards hardening commit `5297258` on 2026-10-23. A story is marked **Complete** only when its acceptance criteria are implemented end-to-end. **Partial** means code or UI exists, but one or more acceptance criteria are still missing. **Not started** means there is no functional implementation for the acceptance criteria; a static mock does not count as complete.
+Audited against the local branch through admin control-room commit `a93b114` and learning-library/feedback commit `377a901` on 2026-10-23. A story is marked **Complete** only when its acceptance criteria are implemented end-to-end. **Partial** means code or UI exists, but one or more acceptance criteria are still missing. **Not started** means there is no functional implementation for the acceptance criteria; a static mock does not count as complete.
 
 ## Summary
 
 | Status | Count |
 | :--- | ---: |
 | Complete | 0 |
-| Partial | 33 |
-| Not started | 13 |
+| Partial | 37 |
+| Not started | 9 |
 | Total | 46 |
 
 ## 1. Ideation journey
@@ -46,11 +46,11 @@ Audited against the local branch through quiz backend commit `461222c` and rewar
 
 | ID | Completed? | Status | Current evidence | Remaining gap |
 | :--- | :---: | :--- | :--- | :--- |
-| AR-01 | No | Partial | Library navigation and static article content are present in the prototype. | No published-article catalogue, category filtering, or article API integration. |
-| AR-02 | No | Partial | The prototype has a library/recommendation presentation surface. | No persisted recommendation records, reason display, or correct empty state. |
-| AR-03 | No | Partial | Article-style screens exist in the prototype. | No functional internal rendering and external-source link contract. |
-| AR-04 | No | Not started | No article completion service exists. | Read completion, recommendation closure, one-time points, and badge unlocking are missing. |
-| AR-05 | No | Not started | Generic Gemini job infrastructure exists under [`src/lib/ai`](../src/lib/ai). | No article recommendation insight endpoint or fallback rule-message implementation. |
+| AR-01 | No | Partial | Published article catalogue, seeded content, category filtering, and secured `GET /api/articles` integration exist. | Employee library UI is not yet connected to the live catalogue with complete loading/error/empty states. |
+| AR-02 | No | Partial | Quiz recommendations persist and `view=recommended` returns article matches, reasons, score context, and an explicit empty state. | Employee recommendation UI and full recommendation lifecycle remain. |
+| AR-03 | No | Partial | Secured article detail returns internal body content while external targets are restricted to HTTPS URLs. | Employee article detail/read UI remains. |
+| AR-04 | No | Partial | Read completion is idempotent, closes the matching recommendation, awards configured points once through the ledger, evaluates badges, and writes audit records. | Frontend completion/reward display and end-to-end UI smoke coverage remain. |
+| AR-05 | No | Partial | Secured article insight endpoint validates recommendation ownership, uses the generic Gemini adapter when configured, audits the source, and falls back to the persisted rule message. | Frontend insight action and live provider smoke coverage remain. |
 
 ## 4. Rewards journey
 
@@ -75,7 +75,7 @@ Audited against the local branch through quiz backend commit `461222c` and rewar
 | AD-06 | No | Not started | Auth currently supports the base admin/user roles only. | Employee/reviewer/business-owner/control/management roles, user management, reset, and deactivation are missing. |
 | AD-07 | No | Not started | No workflow-settings UI or persisted rule configuration exists. | KPI definitions, weights, bands, minimum score, points, levels, SLAs, controls, departments, and demo profiles are missing. |
 | AD-08 | No | Not started | No learning-content management UI/API exists. | Quiz/question management, recommendation rules, and external-link checks are missing. |
-| AD-09 | No | Not started | No campaign, challenge, announcement, or feedback back office exists. | Create/pin announcements, challenge lifecycle, campaign management, and feedback responses are missing. |
+| AD-09 | No | Partial | Secured feedback campaign and administrator response APIs persist categorized feedback, notify employees, and audit responses. | Campaign/announcement/challenge management and admin feedback UI remain. |
 | AD-10 | No | Partial | Idea events and AI run records provide limited traceability. | Complete login/transition/settings/redemption audit coverage, IP detail, filtering, and CSV export are missing. |
 
 ## 6. Cross-cutting stories
@@ -87,7 +87,7 @@ Audited against the local branch through quiz backend commit `461222c` and rewar
 | CC-03 | No | Partial | Notification persistence and read APIs exist in [`app/api/notifications`](../app/api/notifications). | The employee UI still uses static notifications and SMTP email delivery is not implemented. |
 | CC-04 | No | Partial | Append-only points ledger, balance projection, configured point rules, level thresholds, idempotent awards, and audited balance changes are implemented. | All idea/quiz/article event integrations and live frontend display remain. |
 | CC-05 | No | Partial | Persisted badge rules, automatic milestone evaluation, user-badge awards, and badge audit events are implemented. | Full badge UI and admin rule management remain. |
-| CC-06 | No | Not started | No functional feedback campaign/back-office response workflow exists. | Pinned campaign, categorized feedback, response, notification, and audit behavior are missing. |
+| CC-06 | No | Partial | Pinned campaign selection, categorized/idempotent feedback submission, admin response, employee notification, and audit behavior are implemented in the secured API layer. | Employee/admin UI integration and full campaign management remain. |
 
 ## Completion rule
 
