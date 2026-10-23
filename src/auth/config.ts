@@ -10,6 +10,8 @@ function positiveSeconds(name: string, fallback: number) {
 
 export const accessTokenTtlSeconds = positiveSeconds("AUTH_ACCESS_TOKEN_TTL_SECONDS", 900);
 export const refreshTokenTtlSeconds = positiveSeconds("AUTH_REFRESH_TOKEN_TTL_SECONDS", 2_592_000);
+export const sessionIdleSeconds = positiveSeconds("AUTH_SESSION_IDLE_SECONDS", 1_800);
+export const sessionAbsoluteSeconds = positiveSeconds("AUTH_SESSION_ABSOLUTE_SECONDS", 43_200);
 export const authSecret = process.env.AUTH_SECRET ?? (process.env.NODE_ENV === "production" ? "" : "local-development-secret-change-me");
 export const secureCookies = process.env.NODE_ENV === "production";
 
@@ -34,7 +36,7 @@ export const authConfig = {
     authorized({ auth, request }) {
       const pathname = request.nextUrl.pathname;
       if (pathname === "/" || pathname === "/login") return true;
-      if (pathname.startsWith("/private") || pathname.startsWith("/admin")) return Boolean(auth?.user);
+      if (pathname.startsWith("/private") || pathname.startsWith("/admin")) return Boolean(auth?.user && auth.isValid !== false);
       return true;
     },
   },

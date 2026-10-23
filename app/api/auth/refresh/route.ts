@@ -21,7 +21,15 @@ const cookieOptions = {
   path: "/",
 };
 
-async function sessionToken(userId: number) {
+function requestMetadata(request: Request) {
+  return {
+    ipAddress: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
+      ?? request.headers.get("x-real-ip"),
+    userAgent: request.headers.get("user-agent"),
+  };
+}
+
+async function sessionToken(userId: number, sessionId: number, sessionVersion: number) {
   const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
   if (!user) return null;
 
@@ -34,6 +42,8 @@ async function sessionToken(userId: number) {
       name: user.name,
       email: user.email,
       role: user.role,
+      sessionId: String(sessionId),
+      sessionVersion,
       accessTokenExpires: Date.now() + accessTokenTtlSeconds * 1000,
     },
   });
@@ -43,25 +53,27 @@ export async function POST(request: Request) {
   const session = await auth();
   const rawToken = request.headers.get("cookie")?.split(";").map((part) => part.trim()).find((part) => part.startsWith(`${REFRESH_COOKIE_NAME}=`))?.slice(REFRESH_COOKIE_NAME.length + 1);
   const userId = session?.user?.id ? Number(session.user.id) : NaN;
+  const metadata = requestMetadata(request);
 
   const result = rawToken
-    ? await rotateRefreshToken(decodeURIComponent(rawToken), { userAgent: request.headers.get("user-agent") })
-    : Number.isInteger(userId) ? await issueRefreshToken(userId, { userAgent: request.headers.get("user-agent") }) : null;
+    ? await rotateRefreshToken(decodeURIComponent(rawToken), metadata)
+    : Number.isInteger(userId) && session?.isValid !== false ? await issueRefreshToken(userId, metadata) : null;
 
   if (!result) return NextResponse.json({ ok: false, error: "Refresh token is invalid or expired." }, { status: 401 });
 
-  const token = await sessionToken(result.userId ?? userId);
+  const token = await sessionToken(result.userId ?? userId, result.record.id, result.record.sessionVersion);
   if (!token) return NextResponse.json({ ok: false, error: "User no longer exists." }, { status: 401 });
 
-  const response = NextResponse.json({ ok: true, expiresAt: result.record.expiresAt });
-  response.cookies.set(REFRESH_COOKIE_NAME, result.rawToken, { ...cookieOptions, expires: result.record.expiresAt });
-  response.cookies.set(SESSION_COOKIE_NAME, token, { ...cookieOptions, expires: new Date(Date.now() + refreshTokenTtlSeconds * 1000) });
+  const sessionExpiresAt = result.record.absoluteExpiresAt ?? result.record.expiresAt;
+  const response = NextResponse.json({ ok: true, expiresAt: sessionExpiresAt });
+  response.cookies.set(REFRESH_COOKIE_NAME, result.rawToken, { ...cookieOptions, expires: sessionExpiresAt });
+  response.cookies.set(SESSION_COOKIE_NAME, token, { ...cookieOptions, expires: sessionExpiresAt });
   return response;
 }
 
 export async function DELETE(request: Request) {
   const rawToken = request.headers.get("cookie")?.split(";").map((part) => part.trim()).find((part) => part.startsWith(`${REFRESH_COOKIE_NAME}=`))?.slice(REFRESH_COOKIE_NAME.length + 1);
-  if (rawToken) await revokeRefreshToken(decodeURIComponent(rawToken));
+  if (rawToken) await revokeRefreshToken(decodeURIComponent(rawToken), "logout");
 
   const response = NextResponse.json({ ok: true });
   response.cookies.set(REFRESH_COOKIE_NAME, "", { ...cookieOptions, maxAge: 0 });

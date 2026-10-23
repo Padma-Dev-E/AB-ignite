@@ -14,6 +14,14 @@ export const users = sqliteTable("users", {
   department: text().notNull().default("Other"),
   jobTitle: text(),
   passwordHash: text().notNull(),
+  isActive: integer({ mode: "boolean" }).notNull().default(true),
+  failedLoginAttempts: integer().notNull().default(0),
+  lockedUntil: integer({ mode: "timestamp_ms" }),
+  lastFailedLoginAt: integer({ mode: "timestamp_ms" }),
+  lastLoginAt: integer({ mode: "timestamp_ms" }),
+  lastSeenAt: integer({ mode: "timestamp_ms" }),
+  sessionVersion: integer().notNull().default(0),
+  deactivatedAt: integer({ mode: "timestamp_ms" }),
   points: integer().notNull().default(0),
   rank: integer(),
   ...timestamps,
@@ -24,13 +32,38 @@ export const refreshTokens = sqliteTable("refresh_tokens", {
   userId: integer().notNull().references(() => users.id, { onDelete: "cascade" }),
   tokenHash: text().notNull(),
   expiresAt: integer({ mode: "timestamp_ms" }).notNull(),
+  idleExpiresAt: integer({ mode: "timestamp_ms" }),
+  absoluteExpiresAt: integer({ mode: "timestamp_ms" }),
+  ipHash: text(),
+  userAgentHash: text(),
+  lastSeenAt: integer({ mode: "timestamp_ms" }),
+  sessionVersion: integer().notNull().default(0),
   revokedAt: integer({ mode: "timestamp_ms" }),
+  revocationReason: text(),
   rotatedFromId: integer(),
   ...timestamps,
 }, (table) => [
   uniqueIndex("refresh_tokens_hash_unique").on(table.tokenHash),
   index("refresh_tokens_user_idx").on(table.userId),
   index("refresh_tokens_expiry_idx").on(table.expiresAt),
+]);
+
+export const auditEvents = sqliteTable("audit_events", {
+  id: integer().primaryKey({ autoIncrement: true }),
+  actorUserId: integer().references(() => users.id, { onDelete: "set null" }),
+  sessionId: integer().references(() => refreshTokens.id, { onDelete: "set null" }),
+  action: text().notNull(),
+  targetType: text(),
+  targetId: text(),
+  reason: text(),
+  metadataJson: text(),
+  ipHash: text(),
+  userAgentHash: text(),
+  createdAt: integer({ mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
+}, (table) => [
+  index("audit_events_actor_idx").on(table.actorUserId, table.createdAt),
+  index("audit_events_action_idx").on(table.action, table.createdAt),
+  index("audit_events_target_idx").on(table.targetType, table.targetId, table.createdAt),
 ]);
 
 export const ideas = sqliteTable("ideas", {
@@ -237,6 +270,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   supports: many(ideaSupports),
   rewards: many(userRewards),
   refreshTokens: many(refreshTokens),
+  auditEvents: many(auditEvents),
   aiRuns: many(aiRuns),
   ideaEvents: many(ideaEvents),
   ideaReviews: many(ideaReviews),
@@ -244,6 +278,11 @@ export const usersRelations = relations(users, ({ many }) => ({
 
 export const refreshTokensRelations = relations(refreshTokens, ({ one }) => ({
   user: one(users, { fields: [refreshTokens.userId], references: [users.id] }),
+}));
+
+export const auditEventsRelations = relations(auditEvents, ({ one }) => ({
+  actor: one(users, { fields: [auditEvents.actorUserId], references: [users.id] }),
+  session: one(refreshTokens, { fields: [auditEvents.sessionId], references: [refreshTokens.id] }),
 }));
 
 export const ideasRelations = relations(ideas, ({ one, many }) => ({
@@ -311,6 +350,7 @@ export const userRewardsRelations = relations(userRewards, ({ one }) => ({
 export const schema = {
   users,
   refreshTokens,
+  auditEvents,
   ideas,
   ideaVersions,
   aiRuns,
@@ -329,6 +369,7 @@ export const schema = {
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type UserRole = "admin" | "user";
+export type AuditEvent = typeof auditEvents.$inferSelect;
 export type Idea = typeof ideas.$inferSelect;
 export type NewIdea = typeof ideas.$inferInsert;
 export type IdeaVersion = typeof ideaVersions.$inferSelect;
