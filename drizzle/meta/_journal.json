@@ -36,6 +36,13 @@
       "when": 1792724136710,
       "tag": "0004_wave_0_security",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1792724677740,
+      "tag": "0005_wave_5_rewards",
+      "breakpoints": true
     }
   ]
 }
