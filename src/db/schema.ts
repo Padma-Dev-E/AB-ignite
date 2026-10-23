@@ -299,6 +299,16 @@ export const feedbackCampaigns = sqliteTable("feedback_campaigns", {
   ...timestamps,
 }, (table) => [index("feedback_campaigns_active_idx").on(table.active, table.pinned)]);
 
+export const announcements = sqliteTable("announcements", {
+  id: integer().primaryKey({ autoIncrement: true }),
+  title: text().notNull(),
+  body: text().notNull(),
+  pinned: integer({ mode: "boolean" }).notNull().default(false),
+  published: integer({ mode: "boolean" }).notNull().default(false),
+  createdBy: integer().references(() => users.id, { onDelete: "set null" }),
+  ...timestamps,
+}, (table) => [index("announcements_published_pinned_idx").on(table.published, table.pinned)]);
+
 export const feedbackResponses = sqliteTable("feedback_responses", {
   id: integer().primaryKey({ autoIncrement: true }),
   campaignId: integer().notNull().references(() => feedbackCampaigns.id, { onDelete: "cascade" }),
@@ -837,6 +847,7 @@ export const schema = {
   articles,
   articleCompletions,
   feedbackCampaigns,
+  announcements,
   feedbackResponses,
   quizzes,
   quizCategories,

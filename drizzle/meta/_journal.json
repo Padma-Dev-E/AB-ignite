@@ -92,6 +92,13 @@
       "when": 1792730000000,
       "tag": "0012_governance_assignment_due_dates",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1792732200000,
+      "tag": "0013_engagement_announcements",
+      "breakpoints": true
     }
   ]
 }
