@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { completeArticle, getArticle, getQuizAttempt, joinChallenge, listArticles, listChallenges, listJourney, listQuizzes, listRankings, redeemableRecommendations, startQuizAttempt, submitQuizAttempt } from "./api";
+import { completeArticle, getArticle, getArticleInsight, getQuizAttempt, joinChallenge, listArticles, listChallenges, listJourney, listQuizzes, listRankings, redeemableRecommendations, startQuizAttempt, submitQuizAttempt } from "./api";
 import type { QuizAnswer } from "./types";
 
 export const learningQueryKeys = {
@@ -23,6 +23,7 @@ export function useLearningRecommendations() { return useQuery({ queryKey: learn
 export function useLearningRankings(scope: "bank" | "department") { return useQuery({ queryKey: learningQueryKeys.rankings(scope), queryFn: () => listRankings(scope) }); }
 export function useLearningChallenges() { return useQuery({ queryKey: learningQueryKeys.challenges(), queryFn: listChallenges }); }
 export function useLearningArticle(id: number, enabled = true) { return useQuery({ queryKey: learningQueryKeys.article(id), queryFn: () => getArticle(id), enabled: enabled && id > 0 }); }
+export function useArticleInsight() { return useMutation({ mutationFn: ({ articleId, recommendationId }: { articleId: number; recommendationId: number }) => getArticleInsight(articleId, recommendationId) }); }
 export function useQuizAttempt(id: number, enabled = true) { return useQuery({ queryKey: learningQueryKeys.attempt(id), queryFn: () => getQuizAttempt(id), enabled: enabled && id > 0 }); }
 
 function createIdempotencyKey(prefix: string, id: number) {

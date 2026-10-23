@@ -20,6 +20,9 @@ export function redeemableRecommendations() { return apiFetch<ArticleListRespons
 export function listRankings(scope: "bank" | "department") { return apiFetch<{ scope: "bank" | "department"; items: RankingItem[] }>(`/api/quizzes/rankings?scope=${scope}`); }
 export function listChallenges() { return apiFetch<{ items: ChallengeSummary[] }>("/api/challenges"); }
 export function getArticle(id: number) { return apiFetch<LearningArticle>(`/api/articles/${id}`); }
+export function getArticleInsight(articleId: number, recommendationId: number) {
+  return apiFetch<{ insight: string; source: "gemini" | "rule" }>(`/api/articles/${articleId}/insight`, { method: "POST", headers: mutationHeaders(), body: JSON.stringify({ recommendationId }) });
+}
 export function startQuizAttempt(quizId: number, idempotencyKey: string) {
   return apiFetch<AttemptStartResponse>(`/api/quizzes/${quizId}/attempts`, { method: "POST", headers: mutationHeaders(idempotencyKey), body: JSON.stringify({ idempotencyKey }) });
 }

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { completeArticle, listArticles, listJourney, listQuizzes, redeemableRecommendations, startQuizAttempt, submitQuizAttempt } from "./api";
+import { completeArticle, getArticleInsight, listArticles, listJourney, listQuizzes, redeemableRecommendations, startQuizAttempt, submitQuizAttempt } from "./api";
 
 const envelope = (data: unknown) => new Response(JSON.stringify({ data, error: null, requestId: "client-test" }), { status: 200, headers: { "content-type": "application/json" } });
 
@@ -55,6 +55,24 @@ test("quiz submission sends only selected option keys", async () => {
     await submitQuizAttempt(5, [{ questionId: 2, optionKey: "b" }]);
     assert.equal(request?.input, "/api/quizzes/attempts/5/submit");
     assert.deepEqual(JSON.parse(String(request?.init?.body)), { answers: [{ questionId: 2, optionKey: "b" }] });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("article insight uses the secured recommendation insight endpoint", async () => {
+  const originalFetch = globalThis.fetch;
+  let request: { input: RequestInfo | URL; init?: RequestInit } | undefined;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    request = { input, init };
+    return envelope({ insight: "Build confidence in privacy controls.", source: "rule" });
+  }) as typeof fetch;
+  try {
+    const result = await getArticleInsight(8, 21);
+    assert.equal(request?.input, "/api/articles/8/insight");
+    assert.equal(request?.init?.method, "POST");
+    assert.deepEqual(JSON.parse(String(request?.init?.body)), { recommendationId: 21 });
+    assert.equal(result.source, "rule");
   } finally {
     globalThis.fetch = originalFetch;
   }
