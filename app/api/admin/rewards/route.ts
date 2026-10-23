@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { auth } from "../../../../auth";
-import { adminContext, rewardApiError } from "../../../../src/lib/rewards/http";
+import { adminContext, requestAuditMetadata, rewardApiError } from "../../../../src/lib/rewards/http";
 import { createReward, getAdminCatalogue } from "../../../../src/lib/rewards/service";
 import { requirePrivilegedReason } from "../../../../src/lib/auth/authorization";
 import { apiError, ok, requestId } from "../../../../src/lib/http/errors";
@@ -23,7 +23,7 @@ export async function POST(request: Request) {
     const context = await adminContext(await auth());
     const input = createSchema.parse(await request.json());
     const reason = requirePrivilegedReason(input.reason);
-    return ok(await createReward({ ...input, reason, actorUserId: context.userId, sessionId: context.sessionId }), 201, id);
+    return ok(await createReward({ ...input, reason, actorUserId: context.userId, sessionId: context.sessionId, ...requestAuditMetadata(request) }), 201, id);
   } catch (error) {
     return rewardApiError(error, id);
   }

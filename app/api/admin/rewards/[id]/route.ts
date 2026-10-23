@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { auth } from "../../../../../auth";
-import { adminContext, rewardApiError } from "../../../../../src/lib/rewards/http";
+import { adminContext, requestAuditMetadata, rewardApiError } from "../../../../../src/lib/rewards/http";
 import { updateReward } from "../../../../../src/lib/rewards/service";
 import { requirePrivilegedReason } from "../../../../../src/lib/auth/authorization";
 import { apiError, ok, requestId } from "../../../../../src/lib/http/errors";
@@ -15,7 +15,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (!Number.isInteger(rewardId) || rewardId < 1) return apiError("validation_error", "Invalid reward ID.", 400, id);
     const input = updateSchema.parse(await request.json());
     const reason = requirePrivilegedReason(input.reason);
-    return ok(await updateReward({ ...input, reason, rewardId, actorUserId: context.userId, sessionId: context.sessionId }), 200, id);
+    return ok(await updateReward({ ...input, reason, rewardId, actorUserId: context.userId, sessionId: context.sessionId, ...requestAuditMetadata(request) }), 200, id);
   } catch (error) {
     return rewardApiError(error, id);
   }

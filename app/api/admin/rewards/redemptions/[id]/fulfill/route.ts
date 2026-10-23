@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { auth } from "../../../../../../../auth";
-import { adminContext, idempotencyKey, rewardApiError } from "../../../../../../../src/lib/rewards/http";
+import { adminContext, idempotencyKey, requestAuditMetadata, rewardApiError } from "../../../../../../../src/lib/rewards/http";
 import { fulfillRedemption } from "../../../../../../../src/lib/rewards/service";
 import { requirePrivilegedReason } from "../../../../../../../src/lib/auth/authorization";
 import { apiError, ok, requestId } from "../../../../../../../src/lib/http/errors";
@@ -17,7 +17,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const key = idempotencyKey(request, input.idempotencyKey);
     if (!key) return apiError("validation_error", "An Idempotency-Key header is required.", 400, id);
     const reason = requirePrivilegedReason(input.reason);
-    return ok(await fulfillRedemption({ actorUserId: context.userId, sessionId: context.sessionId, redemptionId, reason, idempotencyKey: key }), 200, id);
+    return ok(await fulfillRedemption({ actorUserId: context.userId, sessionId: context.sessionId, redemptionId, reason, idempotencyKey: key, ...requestAuditMetadata(request) }), 200, id);
   } catch (error) {
     return rewardApiError(error, id);
   }

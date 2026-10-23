@@ -4,6 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "../src/db/connection";
 import { auditEvents, badges, levels, pointsBalances, pointsLedger, rewards, users, userBadges } from "../src/db/schema";
 import { awardPoints, getBalance, getBadgeProgress, getLevelForPoints } from "../src/lib/rewards/service";
+import { hashAuditValue } from "../src/lib/audit/redaction-core";
 
 let userId = 0;
 
@@ -29,6 +30,8 @@ test("awards points idempotently and maintains the projection without reading us
     sourceType: "idea",
     sourceId: "idea-1",
     idempotencyKey: `points-${Date.now()}`,
+    ipAddress: "10.0.0.1",
+    userAgent: "rewards-test-agent",
   });
   const replay = await awardPoints({
     userId,
@@ -44,6 +47,9 @@ test("awards points idempotently and maintains the projection without reading us
   assert.equal((await db.select().from(pointsLedger).where(eq(pointsLedger.userId, userId)).all()).length, 1);
   assert.equal((await db.select().from(pointsBalances).where(eq(pointsBalances.userId, userId)).all())[0]?.balance, 50);
   assert.equal((await db.select().from(auditEvents).where(and(eq(auditEvents.action, "points.ledger.appended"), eq(auditEvents.targetId, String(first.ledger.id)))).all()).length, 1);
+  const [audit] = await db.select().from(auditEvents).where(and(eq(auditEvents.action, "points.ledger.appended"), eq(auditEvents.targetId, String(first.ledger.id)))).all();
+  assert.equal(audit?.ipHash, hashAuditValue("10.0.0.1"));
+  assert.equal(audit?.userAgentHash, hashAuditValue("rewards-test-agent"));
 });
 
 test("level and badge projections read deterministically", async () => {
@@ -67,4 +73,18 @@ test("negative point changes cannot create a negative balance", async () => {
     /insufficient|balance/i,
   );
   assert.equal((await getBalance(userId)).balance, 50);
+});
+
+test("positive awards must match an active points rule", async () => {
+  await assert.rejects(
+    awardPoints({
+      userId,
+      amount: 49,
+      eventType: "idea_submission",
+      sourceType: "idea",
+      sourceId: "idea-rule-mismatch",
+      idempotencyKey: `points-rule-mismatch-${Date.now()}`,
+    }),
+    /match the active rule/i,
+  );
 });

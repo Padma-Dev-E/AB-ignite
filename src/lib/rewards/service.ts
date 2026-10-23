@@ -17,6 +17,7 @@ import {
   ensureBalanceProjection,
   getBalance as getBalanceRecord,
   getCurrentRewardVersion,
+  getActivePointRule,
   getLevelForPoints as getLevelRecord,
   getRedemptionByIdempotency,
   listAdminRedemptions,
@@ -34,6 +35,8 @@ import { parseBadgeRule, REWARD_KINDS, type RewardKind } from "./rules";
 export type PointsActor = {
   actorUserId?: number | null;
   sessionId?: number | null;
+  ipAddress?: string | null;
+  userAgent?: string | null;
 };
 
 export type AwardPointsInput = PointsActor & {
@@ -96,6 +99,11 @@ export async function awardPoints(input: AwardPointsInput) {
   const sourceType = requiredText(input.sourceType, "Source type", 100);
   const idempotencyKey = requiredText(input.idempotencyKey, "Idempotency key", 200);
   const result = withRewardsTransaction((tx) => {
+    if (input.amount > 0) {
+      const rule = getActivePointRule(tx, eventType);
+      if (!rule) throw new RewardsError("No active points rule exists for this event.", "POINT_RULE_NOT_FOUND", 409);
+      if (input.amount !== rule.points) throw new RewardsError("The points amount does not match the active rule.", "POINT_RULE_MISMATCH", 409);
+    }
     const entry = appendLedgerEntry(tx, { ...input, eventType, sourceType, idempotencyKey });
     const awarded = evaluateBadgeAwards(tx, input.userId, input.actorUserId ?? input.userId);
     return { ...entry, awarded };
@@ -128,6 +136,8 @@ export async function getBadgeProgress(userId: number) {
 export type RewardInput = {
   actorUserId: number;
   sessionId?: number | null;
+  ipAddress?: string | null;
+  userAgent?: string | null;
   name: string;
   description?: string | null;
   kind: RewardKind;
@@ -154,7 +164,7 @@ export async function createReward(input: RewardInput) {
     if (!reward) throw new RewardsError("Reward was not created.", "REWARD_WRITE_FAILED", 500);
     const [version] = tx.insert(rewardVersions).values({ rewardId: reward.id, version: 1, name: reward.name, description: reward.description, kind: reward.kind, cost: reward.cost, emoji: reward.emoji, active: reward.active, createdBy: input.actorUserId, createdAt: now }).returning().all();
     if (!version) throw new RewardsError("Reward version was not created.", "REWARD_VERSION_WRITE_FAILED", 500);
-    tx.insert(auditEvents).values(buildRewardsAuditRecord({ actorUserId: input.actorUserId, sessionId: input.sessionId, action: "rewards.catalogue.created", targetType: "reward", targetId: reward.id, reason, metadata: { status: "created", resourceType: "reward" }, requiresReason: true }, now)).run();
+    tx.insert(auditEvents).values(buildRewardsAuditRecord({ actorUserId: input.actorUserId, sessionId: input.sessionId, ipAddress: input.ipAddress, userAgent: input.userAgent, action: "rewards.catalogue.created", targetType: "reward", targetId: reward.id, reason, metadata: { status: "created", resourceType: "reward" }, requiresReason: true }, now)).run();
     return { reward, version };
   });
 }
@@ -173,7 +183,7 @@ export async function updateReward(input: RewardUpdateInput) {
     const [reward] = tx.update(rewards).set({ name, description: input.description?.trim() || null, kind: input.kind, cost: input.cost, emoji: input.emoji?.trim() || null, active: input.active ?? current.active, updatedAt: now }).where(eq(rewards.id, current.id)).returning().all();
     const [version] = tx.insert(rewardVersions).values({ rewardId: current.id, version: (latest?.version ?? 0) + 1, name, description: input.description?.trim() || null, kind: input.kind, cost: input.cost, emoji: input.emoji?.trim() || null, active: input.active ?? current.active, createdBy: input.actorUserId, createdAt: now }).returning().all();
     if (!reward || !version) throw new RewardsError("Reward update was not created.", "REWARD_WRITE_FAILED", 500);
-    tx.insert(auditEvents).values(buildRewardsAuditRecord({ actorUserId: input.actorUserId, sessionId: input.sessionId, action: "rewards.catalogue.updated", targetType: "reward", targetId: reward.id, reason, metadata: { status: "updated", resourceType: "reward" }, requiresReason: true }, now)).run();
+    tx.insert(auditEvents).values(buildRewardsAuditRecord({ actorUserId: input.actorUserId, sessionId: input.sessionId, ipAddress: input.ipAddress, userAgent: input.userAgent, action: "rewards.catalogue.updated", targetType: "reward", targetId: reward.id, reason, metadata: { status: "updated", resourceType: "reward" }, requiresReason: true }, now)).run();
     return { reward, version };
   });
 }
@@ -215,9 +225,9 @@ export async function requestRedemption(input: RedemptionInput) {
     const now = new Date();
     const [redemption] = tx.insert(redemptions).values({ userId: input.userId, rewardId: reward.id, rewardVersionId: version.id, rewardName: version.name, rewardDescription: version.description, cost: version.cost, status: "requested", idempotencyKey, requestedAt: now, createdAt: now, updatedAt: now }).returning().all();
     if (!redemption) throw new RewardsError("Redemption was not created.", "REDEMPTION_WRITE_FAILED", 500);
-    appendLedgerEntry(tx, { userId: input.userId, amount: -version.cost, eventType: "reward_redemption", sourceType: "redemption", sourceId: String(redemption.id), idempotencyKey: `redemption:${redemption.id}:debit`, actorUserId: input.actorUserId ?? input.userId, sessionId: input.sessionId });
+    appendLedgerEntry(tx, { userId: input.userId, amount: -version.cost, eventType: "reward_redemption", sourceType: "redemption", sourceId: String(redemption.id), idempotencyKey: `redemption:${redemption.id}:debit`, actorUserId: input.actorUserId ?? input.userId, sessionId: input.sessionId, ipAddress: input.ipAddress, userAgent: input.userAgent });
     const event = addRewardEvent(tx, { redemptionId: redemption.id, actorUserId: input.actorUserId ?? input.userId, eventType: "requested", fromStatus: null, toStatus: "requested", idempotencyKey: `redemption:${redemption.id}:requested`, createdAt: now });
-    tx.insert(auditEvents).values(buildRewardsAuditRecord({ actorUserId: input.actorUserId ?? input.userId, sessionId: input.sessionId, action: "rewards.redemption.requested", targetType: "redemption", targetId: redemption.id, metadata: { status: "requested", resourceType: "redemption" } }, now)).run();
+    tx.insert(auditEvents).values(buildRewardsAuditRecord({ actorUserId: input.actorUserId ?? input.userId, sessionId: input.sessionId, ipAddress: input.ipAddress, userAgent: input.userAgent, action: "rewards.redemption.requested", targetType: "redemption", targetId: redemption.id, metadata: { status: "requested", resourceType: "redemption" } }, now)).run();
     const [, balance] = [redemption, ensureBalanceProjection(tx, input.userId)];
     return { redemption, event, balance };
   });
@@ -232,7 +242,7 @@ export async function getAdminRedemptions(page = 1, pageSize = 20, status?: "req
   return listAdminRedemptions(page, pageSize, status);
 }
 
-export type RedemptionActionInput = { actorUserId: number; sessionId?: number | null; redemptionId: number; reason: string; idempotencyKey: string };
+export type RedemptionActionInput = { actorUserId: number; sessionId?: number | null; ipAddress?: string | null; userAgent?: string | null; redemptionId: number; reason: string; idempotencyKey: string };
 
 function validateAction(input: RedemptionActionInput) {
   validId(input.actorUserId, "actor user ID");
@@ -256,8 +266,8 @@ export async function fulfillRedemption(input: RedemptionActionInput) {
     const now = new Date();
     const [redemption] = tx.update(redemptions).set({ status: "fulfilled", fulfilledAt: now, handledBy: input.actorUserId, updatedAt: now }).where(and(eq(redemptions.id, current.id), eq(redemptions.status, "requested"))).returning().all();
     if (!redemption) throw new RewardsError("Redemption state changed; retry the request.", "REDEMPTION_CONFLICT");
-    const event = addRewardEvent(tx, { redemptionId: redemption.id, actorUserId: input.actorUserId, eventType: "fulfilled", fromStatus: "requested", toStatus: "fulfilled", idempotencyKey, metadataJson: JSON.stringify({ reason }), createdAt: now });
-    tx.insert(auditEvents).values(buildRewardsAuditRecord({ actorUserId: input.actorUserId, sessionId: input.sessionId, action: "rewards.redemption.fulfilled", targetType: "redemption", targetId: redemption.id, reason, metadata: { status: "fulfilled", resourceType: "redemption" }, requiresReason: true }, now)).run();
+    const event = addRewardEvent(tx, { redemptionId: redemption.id, actorUserId: input.actorUserId, eventType: "fulfilled", fromStatus: "requested", toStatus: "fulfilled", idempotencyKey, metadataJson: JSON.stringify({ status: "fulfilled" }), createdAt: now });
+    tx.insert(auditEvents).values(buildRewardsAuditRecord({ actorUserId: input.actorUserId, sessionId: input.sessionId, ipAddress: input.ipAddress, userAgent: input.userAgent, action: "rewards.redemption.fulfilled", targetType: "redemption", targetId: redemption.id, reason, metadata: { status: "fulfilled", resourceType: "redemption" }, requiresReason: true }, now)).run();
     return { redemption, event };
   });
 }
@@ -276,11 +286,11 @@ export async function cancelRedemption(input: RedemptionActionInput) {
     if (!current) throw new RewardsError("Redemption not found.", "REDEMPTION_NOT_FOUND", 404);
     if (current.status !== "requested") throw new RewardsError("Only requested redemptions can be cancelled.", "INVALID_REDEMPTION_STATE");
     const now = new Date();
-    appendLedgerEntry(tx, { userId: current.userId, amount: current.cost, eventType: "reward_refund", sourceType: "redemption", sourceId: String(current.id), idempotencyKey: `redemption:${current.id}:refund`, actorUserId: input.actorUserId, sessionId: input.sessionId });
+    appendLedgerEntry(tx, { userId: current.userId, amount: current.cost, eventType: "reward_refund", sourceType: "redemption", sourceId: String(current.id), idempotencyKey: `redemption:${current.id}:refund`, actorUserId: input.actorUserId, sessionId: input.sessionId, ipAddress: input.ipAddress, userAgent: input.userAgent });
     const [redemption] = tx.update(redemptions).set({ status: "cancelled", cancelledAt: now, handledBy: input.actorUserId, cancellationReason: reason, updatedAt: now }).where(and(eq(redemptions.id, current.id), eq(redemptions.status, "requested"))).returning().all();
     if (!redemption) throw new RewardsError("Redemption state changed; retry the request.", "REDEMPTION_CONFLICT");
-    const event = addRewardEvent(tx, { redemptionId: redemption.id, actorUserId: input.actorUserId, eventType: "cancelled", fromStatus: "requested", toStatus: "cancelled", idempotencyKey, metadataJson: JSON.stringify({ reason }), createdAt: now });
-    tx.insert(auditEvents).values(buildRewardsAuditRecord({ actorUserId: input.actorUserId, sessionId: input.sessionId, action: "rewards.redemption.cancelled", targetType: "redemption", targetId: redemption.id, reason, metadata: { status: "cancelled", resourceType: "redemption" }, requiresReason: true }, now)).run();
+    const event = addRewardEvent(tx, { redemptionId: redemption.id, actorUserId: input.actorUserId, eventType: "cancelled", fromStatus: "requested", toStatus: "cancelled", idempotencyKey, metadataJson: JSON.stringify({ status: "cancelled" }), createdAt: now });
+    tx.insert(auditEvents).values(buildRewardsAuditRecord({ actorUserId: input.actorUserId, sessionId: input.sessionId, ipAddress: input.ipAddress, userAgent: input.userAgent, action: "rewards.redemption.cancelled", targetType: "redemption", targetId: redemption.id, reason, metadata: { status: "cancelled", resourceType: "redemption" }, requiresReason: true }, now)).run();
     return { redemption, event, balance: ensureBalanceProjection(tx, current.userId) };
   });
 }

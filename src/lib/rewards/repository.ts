@@ -42,6 +42,8 @@ export function appendLedgerEntry(
     metadata?: unknown;
     actorUserId?: number | null;
     sessionId?: number | null;
+    ipAddress?: string | null;
+    userAgent?: string | null;
     auditAction?: string;
   },
 ) {
@@ -84,8 +86,15 @@ export function appendLedgerEntry(
     targetType: "points_ledger",
     targetId: ledger.id,
     metadata: { userId: input.userId, amount: input.amount, eventType: input.eventType, sourceType: input.sourceType, sourceId: input.sourceId ?? null },
+    ipAddress: input.ipAddress,
+    userAgent: input.userAgent,
   }, now)).run();
   return { ledger, balance };
+}
+
+export function getActivePointRule(tx: RewardsTx, eventType: string) {
+  const [rule] = tx.select().from(pointRules).where(and(eq(pointRules.code, eventType), eq(pointRules.active, true))).limit(1).all();
+  return rule ?? null;
 }
 
 export function getCurrentRewardVersion(tx: RewardsTx, rewardId: number) {

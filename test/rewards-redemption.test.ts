@@ -2,7 +2,7 @@ import test, { after, before } from "node:test";
 import assert from "node:assert/strict";
 import { and, eq } from "drizzle-orm";
 import { db } from "../src/db/connection";
-import { auditEvents, redemptions, rewardEvents, rewards, users } from "../src/db/schema";
+import { auditEvents, pointRules, redemptions, rewardEvents, rewards, users } from "../src/db/schema";
 import { awardPoints, cancelRedemption, createReward, fulfillRedemption, getBalance, requestRedemption, updateReward } from "../src/lib/rewards/service";
 
 let userId = 0;
@@ -14,6 +14,7 @@ before(async () => {
   const [admin] = await db.insert(users).values({ name: "Rewards Admin", email: `rewards-admin-${Date.now()}@example.test`, role: "admin", passwordHash: "test-hash" }).returning({ id: users.id }).all();
   userId = user.id;
   adminId = admin.id;
+  await db.insert(pointRules).values({ code: "test_grant", name: "Focused test grant", points: 100, active: true }).onConflictDoNothing({ target: pointRules.code }).run();
   await awardPoints({ userId, amount: 100, eventType: "test_grant", sourceType: "test", sourceId: String(userId), idempotencyKey: `grant-${Date.now()}` });
   const reward = await createReward({ actorUserId: adminId, name: "Coffee", description: "A coffee voucher", kind: "redeem", cost: 75, reason: "Seed reward for focused test" });
   rewardId = reward.reward.id;

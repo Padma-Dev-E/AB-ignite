@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { auth } from "../../../../auth";
-import { employeeContext, idempotencyKey, rewardApiError } from "../../../../src/lib/rewards/http";
+import { employeeContext, idempotencyKey, requestAuditMetadata, rewardApiError } from "../../../../src/lib/rewards/http";
 import { getRedemptions, requestRedemption } from "../../../../src/lib/rewards/service";
 import { apiError, ok, requestId } from "../../../../src/lib/http/errors";
 
@@ -25,7 +25,7 @@ export async function POST(request: Request) {
     const input = createSchema.parse(await request.json());
     const key = idempotencyKey(request, input.idempotencyKey);
     if (!key) return apiError("validation_error", "An Idempotency-Key header is required.", 400, id);
-    return ok(await requestRedemption({ userId: context.userId, rewardId: input.rewardId, idempotencyKey: key, actorUserId: context.userId, sessionId: context.sessionId }), 201, id);
+    return ok(await requestRedemption({ userId: context.userId, rewardId: input.rewardId, idempotencyKey: key, actorUserId: context.userId, sessionId: context.sessionId, ...requestAuditMetadata(request) }), 201, id);
   } catch (error) {
     return rewardApiError(error, id);
   }

@@ -10,6 +10,8 @@ export type RewardsAuditInput = {
   targetId?: number | string | null;
   reason?: string | null;
   metadata?: unknown;
+  ipAddress?: string | null;
+  userAgent?: string | null;
   requiresReason?: boolean;
 };
 
@@ -25,8 +27,8 @@ export function buildRewardsAuditRecord(input: RewardsAuditInput, now = new Date
     targetId: input.targetId === undefined || input.targetId === null ? null : String(input.targetId).slice(0, 120),
     reason: reason ? reason.slice(0, 500) : null,
     metadataJson: serializeAuditMetadata(input.metadata),
-    ipHash: null,
-    userAgentHash: null,
+    ipHash: hashAuditValue(input.ipAddress),
+    userAgentHash: hashAuditValue(input.userAgent),
     createdAt: now,
   };
 }
