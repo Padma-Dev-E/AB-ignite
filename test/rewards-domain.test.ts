@@ -18,7 +18,7 @@ before(async () => {
 });
 
 after(async () => {
-  if (userId) await db.delete(users).where(eq(users.id, userId));
+  if (userId) await db.update(users).set({ isActive: false, updatedAt: new Date() }).where(eq(users.id, userId));
 });
 
 test("awards points idempotently and maintains the projection without reading users.points", async () => {
@@ -43,7 +43,7 @@ test("awards points idempotently and maintains the projection without reading us
   assert.equal((await getBalance(userId)).balance, 50);
   assert.equal((await db.select().from(pointsLedger).where(eq(pointsLedger.userId, userId)).all()).length, 1);
   assert.equal((await db.select().from(pointsBalances).where(eq(pointsBalances.userId, userId)).all())[0]?.balance, 50);
-  assert.equal((await db.select().from(auditEvents).where(and(eq(auditEvents.action, "points.ledger.appended"), eq(auditEvents.targetId, String(userId)))).all()).length, 1);
+  assert.equal((await db.select().from(auditEvents).where(and(eq(auditEvents.action, "points.ledger.appended"), eq(auditEvents.targetId, String(first.ledger.id)))).all()).length, 1);
 });
 
 test("level and badge projections read deterministically", async () => {

@@ -13,8 +13,8 @@ import {
   rewards,
   userBadges,
 } from "../../db/schema";
-import { buildAuditRecord } from "../audit/service";
 import { serializeAuditMetadata } from "../audit/redaction-core";
+import { buildRewardsAuditRecord } from "./audit";
 import { RewardsError } from "./errors";
 
 export type RewardsTx = Parameters<typeof db.transaction>[0] extends (tx: infer T) => unknown ? T : never;
@@ -47,7 +47,7 @@ export function appendLedgerEntry(
 ) {
   const [existing] = tx.select().from(pointsLedger).where(eq(pointsLedger.idempotencyKey, input.idempotencyKey)).limit(1).all();
   if (existing) {
-    if (existing.userId !== input.userId || existing.amount !== input.amount || existing.sourceType !== input.sourceType || existing.sourceId !== (input.sourceId ?? null)) {
+    if (existing.userId !== input.userId || existing.amount !== input.amount || existing.eventType !== input.eventType || existing.sourceType !== input.sourceType || existing.sourceId !== (input.sourceId ?? null)) {
       throw new RewardsError("The idempotency key is already used for a different points entry.", "IDEMPOTENCY_CONFLICT");
     }
     return { ledger: existing, balance: ensureBalanceProjection(tx, input.userId) };
@@ -77,7 +77,7 @@ export function appendLedgerEntry(
   }).where(eq(pointsBalances.userId, input.userId)).run();
   const [balance] = tx.select().from(pointsBalances).where(eq(pointsBalances.userId, input.userId)).limit(1).all();
   if (!balance || balance.balance < 0) throw new RewardsError("Points balance cannot be negative.", "BALANCE_INVARIANT_FAILED", 500);
-  tx.insert(auditEvents).values(buildAuditRecord({
+  tx.insert(auditEvents).values(buildRewardsAuditRecord({
     actorUserId: input.actorUserId ?? input.userId,
     sessionId: input.sessionId,
     action: input.auditAction ?? "points.ledger.appended",
@@ -100,7 +100,10 @@ export function getRedemptionByIdempotency(tx: RewardsTx, idempotencyKey: string
 
 export function addRewardEvent(tx: RewardsTx, input: typeof rewardEvents.$inferInsert) {
   const [existing] = tx.select().from(rewardEvents).where(eq(rewardEvents.idempotencyKey, input.idempotencyKey!)).limit(1).all();
-  if (existing) return existing;
+  if (existing) {
+    if (existing.redemptionId !== input.redemptionId || existing.eventType !== input.eventType) throw new RewardsError("The idempotency key is already used for a different reward event.", "IDEMPOTENCY_CONFLICT");
+    return existing;
+  }
   const [event] = tx.insert(rewardEvents).values(input).returning().all();
   if (!event) throw new RewardsError("Reward event was not created.", "REWARD_EVENT_WRITE_FAILED", 500);
   return event;
@@ -126,6 +129,10 @@ export async function listPointHistory(userId: number, page = 1, pageSize = 20) 
 
 export async function listRewardCatalogue() {
   return db.select().from(rewards).where(eq(rewards.active, true)).orderBy(asc(rewards.kind), asc(rewards.cost), asc(rewards.id)).all();
+}
+
+export async function listAllRewards() {
+  return db.select().from(rewards).orderBy(asc(rewards.kind), asc(rewards.cost), asc(rewards.id)).all();
 }
 
 export async function listRewardRedemptions(userId: number, page = 1, pageSize = 20) {

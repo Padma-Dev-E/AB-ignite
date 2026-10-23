@@ -20,8 +20,8 @@ before(async () => {
 });
 
 after(async () => {
-  if (adminId) await db.delete(users).where(eq(users.id, adminId));
-  if (userId) await db.delete(users).where(eq(users.id, userId));
+  if (adminId) await db.update(users).set({ isActive: false, updatedAt: new Date() }).where(eq(users.id, adminId));
+  if (userId) await db.update(users).set({ isActive: false, updatedAt: new Date() }).where(eq(users.id, userId));
 });
 
 test("redemption snapshots cost, deducts once, and replays idempotently", async () => {

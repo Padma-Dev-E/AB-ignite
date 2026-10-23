@@ -48,7 +48,7 @@ test("Wave 5 repository and APIs are isolated to rewards ownership", async () =>
   assert.match(repository, /db\.transaction/);
   assert.match(repository, /pointsLedger/);
   assert.match(repository, /rewardVersions/);
-  assert.match(service, /loadAuthorizationContext|assertCapability/);
+  assert.match(service, /auditEvents/);
   assert.doesNotMatch(service, /users\.points|users\)\.set\(\{[\s\S]*points/);
   for (const path of [
     "app/api/rewards/route.ts",

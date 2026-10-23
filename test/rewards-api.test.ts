@@ -8,11 +8,13 @@ const source = (path: string) => readFile(new URL(path, root), "utf8");
 test("employee reward routes revalidate sessions and expose shared envelopes", async () => {
   const rewards = await source("app/api/rewards/route.ts");
   const redemptions = await source("app/api/rewards/redemptions/route.ts");
-  assert.match(rewards, /loadAuthorizationContext/);
+  const access = await source("src/lib/rewards/http.ts");
+  assert.match(access, /loadAuthorizationContext/);
+  assert.match(access, /handleApiError/);
+  assert.match(rewards, /employeeContext/);
   assert.match(redemptions, /Idempotency-Key/);
   assert.match(redemptions, /requestId/);
   assert.match(redemptions, /ok\(/);
-  assert.match(redemptions, /handleApiError/);
 });
 
 test("admin reward routes use database-backed capability checks and privileged reasons", async () => {
@@ -23,9 +25,11 @@ test("admin reward routes use database-backed capability checks and privileged r
     "app/api/admin/rewards/redemptions/[id]/cancel/route.ts",
   ]) {
     const route = await source(path);
-    assert.match(route, /loadAuthorizationContext/);
-    assert.match(route, /assertCapability/);
-    assert.match(route, /SETTINGS_MANAGE/);
+    assert.match(route, /adminContext/);
+    assert.match(route, /auth/);
     assert.match(route, /reason/);
   }
+  const access = await source("src/lib/rewards/http.ts");
+  assert.match(access, /assertCapability/);
+  assert.match(access, /SETTINGS_MANAGE/);
 });
