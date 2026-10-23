@@ -18,6 +18,23 @@ export const IdeaInputSchema = z.strictObject({
   risks: z.string().trim().max(5_000).optional(),
   category: z.string().trim().min(1).max(120),
   dataClassification: z.enum(["public", "internal", "confidential", "restricted"]).default("internal"),
+  answers: z.strictObject({
+    beneficiaries: z.string().trim().min(1).max(1_000),
+    currentProcess: z.string().trim().min(1).max(1_000),
+    needed: z.string().trim().min(1).max(1_000),
+    risks: z.string().trim().min(1).max(1_000),
+    successMeasure: z.string().trim().min(1).max(1_000),
+  }).optional(),
+  metrics: z.strictObject({
+    turnaround: z.number().min(0).max(3),
+    volume: z.number().min(0).max(3),
+    value: z.number().min(0).max(3),
+    turnaroundExplanation: z.string().trim().max(1_000).optional(),
+    volumeExplanation: z.string().trim().max(1_000).optional(),
+    valueExplanation: z.string().trim().max(1_000).optional(),
+  }).optional(),
+  buildsOnId: z.number().int().positive().optional(),
+  differentiation: z.string().trim().max(2_000).optional(),
 });
 
 export type IdeaInput = z.infer<typeof IdeaInputSchema>;
@@ -62,6 +79,40 @@ export type IdeaUpdate = z.infer<typeof IdeaUpdateSchema>;
 export const IdeaCommentSchema = z.strictObject({
   body: z.string().trim().min(1).max(2_000),
 });
+
+export const IdeaSubmitSchema = z.strictObject({
+  validationPassed: z.literal(true),
+});
+
+export const IdeaSubmissionDetailsSchema = z.strictObject({
+  answers: z.strictObject({
+    beneficiaries: z.string().trim().min(1).max(1_000),
+    currentProcess: z.string().trim().min(1).max(1_000),
+    needed: z.string().trim().min(1).max(1_000),
+    risks: z.string().trim().min(1).max(1_000),
+    successMeasure: z.string().trim().min(1).max(1_000),
+  }),
+  metrics: z.strictObject({
+    turnaround: z.number().min(0).max(3),
+    volume: z.number().min(0).max(3),
+    value: z.number().min(0).max(3),
+    turnaroundExplanation: z.string().trim().max(1_000).optional(),
+    volumeExplanation: z.string().trim().max(1_000).optional(),
+    valueExplanation: z.string().trim().max(1_000).optional(),
+  }),
+  buildsOnId: z.number().int().positive().optional(),
+  differentiation: z.string().trim().max(2_000).optional(),
+});
+
+export function calculateIdeaPriority(metrics: { turnaround: number; volume: number; value: number }) {
+  const score = Math.round((metrics.turnaround * 0.3 + metrics.volume * 0.3 + metrics.value * 0.4) * 100) / 100;
+  const band: "Priority" | "Qualify" | "Watch" = score >= 2.5 ? "Priority" : score >= 1.5 ? "Qualify" : "Watch";
+  return { score, band, breakdown: [
+    { key: "turnaround", score: metrics.turnaround, weight: 0.3, contribution: Math.round(metrics.turnaround * 30) / 100 },
+    { key: "volume", score: metrics.volume, weight: 0.3, contribution: Math.round(metrics.volume * 30) / 100 },
+    { key: "value", score: metrics.value, weight: 0.4, contribution: Math.round(metrics.value * 40) / 100 },
+  ] };
+}
 
 export const CommentListQuerySchema = z.strictObject({
   page: paginationNumber(1),

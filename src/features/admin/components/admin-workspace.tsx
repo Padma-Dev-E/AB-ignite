@@ -4,8 +4,8 @@ import Link from "next/link";
 import { Tab, TabGroup, TabList, TabPanel, TabPanels } from "@headlessui/react";
 import { useState, type ReactNode } from "react";
 import { Card, IconBox, SectionHeading, StatTile } from "../../../components/ui";
-import { useAdminChallenges, useAdminQuizCatalogue, useAdminRedemptions, useAdminRewards } from "../hooks";
-import type { AdminChallenge, AdminQuiz, AdminRedemption, AdminReward } from "../types";
+import { useAdminAudit, useAdminChallenges, useAdminQuizCatalogue, useAdminRedemptions, useAdminRewards, useAdminUsers } from "../hooks";
+import type { AdminAuditEvent, AdminChallenge, AdminQuiz, AdminRedemption, AdminReward, AdminUser } from "../types";
 
 type AdminWorkspaceProps = { email: string };
 type SubnavItem = { id: string; label: string };
@@ -109,13 +109,21 @@ function GovernancePanel() {
 
 function PeoplePanel() {
   const [active, setActive] = useState("users");
+  const usersQuery = useAdminUsers(active === "users");
   const copy = {
     users: ["Users", "View user lifecycle, account state and ownership once the admin directory endpoint is connected."],
     rbac: ["RBAC", "Review role assignments and capability grants without exposing privilege-changing controls in an unconfigured surface."],
     sessions: ["Sessions", "Inspect active and recent sessions with revocation evidence and last-seen context."],
   } as const;
   const [title, description] = copy[active as keyof typeof copy];
-  return <div className="stack"><SectionHeading title="People & access" detail="Protected by admin role" /><SectionTabs items={peopleItems} active={active} onChange={setActive} /><UnconfiguredSection title={title} description={description} owner={`${title} administration`} /></div>;
+  return <div className="stack"><SectionHeading title="People & access" detail="Protected by admin role" /><SectionTabs items={peopleItems} active={active} onChange={setActive} />{active === "users" ? <UserTable query={usersQuery} /> : <UnconfiguredSection title={title} description={description} owner={`${title} administration`} />}</div>;
+}
+
+function UserTable({ query }: { query: ReturnType<typeof useAdminUsers> }) {
+  if (query.isPending) return <LoadingRows label="Loading users" />;
+  if (query.isError) return <StatePanel title="Users unavailable" detail={queryMessage(query.error, "The user directory could not be loaded.")} tone="error" />;
+  if (!query.data?.items.length) return <EmptyPanel title="No users" detail="No bank users are available for this view." />;
+  return <Card><div className="overflow-x-auto"><table className="w-full min-w-[680px] text-left text-sm"><thead className="border-b text-xs text-muted"><tr><th className="px-2 py-3 font-medium">User</th><th className="px-2 py-3 font-medium">Role</th><th className="px-2 py-3 font-medium">State</th><th className="px-2 py-3 font-medium">Last seen</th><th className="px-2 py-3 font-medium">Sessions</th></tr></thead><tbody>{query.data.items.map((user: AdminUser) => <tr key={user.id} className="border-b last:border-0" style={{ borderColor: "var(--line)" }}><td className="px-2 py-3"><b>{user.name}</b><span className="block text-xs text-muted">{user.email} · {user.department}</span></td><td className="px-2 py-3"><span className="pill">{user.role}</span></td><td className={`px-2 py-3 font-medium ${user.isActive ? "text-teal" : "text-pink"}`}>{user.isActive ? "Active" : "Deactivated"}</td><td className="px-2 py-3 text-muted">{dateLabel(user.lastSeenAt)}</td><td className="px-2 py-3 text-muted">{user.failedLoginAttempts ? `${user.failedLoginAttempts} failed attempts` : "No recent failures"}</td></tr>)}</tbody></table></div></Card>;
 }
 
 function QuizCatalogue({ items, isLoading, isError, error }: { items: AdminQuiz[] | undefined; isLoading: boolean; isError: boolean; error: unknown }) {
@@ -162,9 +170,17 @@ function RewardsPanel() {
 
 function AuditPanel() {
   const [active, setActive] = useState("audit-log");
+  const auditQuery = useAdminAudit(active === "audit-log");
   const items = [{ id: "audit-log", label: "Audit log" }, { id: "exports", label: "Exports" }];
   const copy = active === "audit-log" ? ["Audit log", "Review immutable activity evidence with actor, session and network context.", "Audit event query"] : ["Exports", "Create controlled evidence packages with purpose, scope and retention metadata.", "Audit export pipeline"];
-  return <div className="stack"><SectionHeading title="Audit & export" detail="Evidence-first controls" /><SectionTabs items={items} active={active} onChange={setActive} /><UnconfiguredSection title={copy[0]} description={copy[1]} owner={copy[2]} /></div>;
+  return <div className="stack"><SectionHeading title="Audit & export" detail="Evidence-first controls" /><SectionTabs items={items} active={active} onChange={setActive} />{active === "audit-log" ? <AuditTable query={auditQuery} /> : <Card><h2 className="text-xl font-medium">CSV export</h2><p className="mt-1 text-sm text-muted">Download the bounded audit page for controlled evidence review.</p><a className="btn-primary mt-4 inline-flex" href="/api/admin/audit/export?limit=1000">Download audit CSV</a></Card>}</div>;
+}
+
+function AuditTable({ query }: { query: ReturnType<typeof useAdminAudit> }) {
+  if (query.isPending) return <LoadingRows label="Loading audit events" />;
+  if (query.isError) return <StatePanel title="Audit log unavailable" detail={queryMessage(query.error, "The audit log could not be loaded.")} tone="error" />;
+  if (!query.data?.items.length) return <EmptyPanel title="No audit events" detail="No immutable activity has been recorded yet." />;
+  return <Card><div className="space-y-2">{query.data.items.map((event: AdminAuditEvent) => <article key={event.id} className="rounded-xl border p-3" style={{ borderColor: "var(--line)" }}><div className="flex flex-wrap items-center gap-2"><span className="pill">{event.action}</span><span className="text-xs text-muted">{dateLabel(event.createdAt)}</span><span className="text-xs text-muted">actor {event.actorUserId ?? "system"}</span></div><p className="mt-1 text-sm text-muted">{event.targetType ?? "event"} {event.targetId ?? ""}{event.reason ? ` · ${event.reason}` : ""}</p></article>)}</div></Card>;
 }
 
 function SettingsPanel() {

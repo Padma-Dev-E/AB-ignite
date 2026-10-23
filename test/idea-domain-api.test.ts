@@ -10,7 +10,8 @@ import {
   supportIdea,
   updateReturnedIdea,
 } from "../src/lib/ideas/repository";
-import { IdeaListQuerySchema, IdeaUpdateSchema } from "../src/lib/ideas/schemas";
+import { calculateIdeaPriority, IdeaInputSchema, IdeaListQuerySchema, IdeaUpdateSchema } from "../src/lib/ideas/schemas";
+import { getIdeaMinimumScore, getIdeaSubmissionDetails, saveIdeaSubmission, setIdeaMinimumScore } from "../src/lib/ideas/repository";
 
 let ownerId = 0;
 let otherUserId = 0;
@@ -55,10 +56,8 @@ before(async () => {
 });
 
 after(async () => {
-  if (returnedIdeaId) await db.delete(ideas).where(eq(ideas.id, returnedIdeaId));
-  if (publicIdeaId) await db.delete(ideas).where(eq(ideas.id, publicIdeaId));
-  if (ownerId) await db.delete(users).where(eq(users.id, ownerId));
-  if (otherUserId) await db.delete(users).where(eq(users.id, otherUserId));
+  // Reward and audit records are append-only in production; do not cascade-delete
+  // their owning users during tests because immutable triggers must remain active.
 });
 
 test("idea list query validates filters and clamps pagination", () => {
@@ -125,4 +124,38 @@ test("idea update schema rejects unknown fields and invalid content", () => {
   assert.throws(() => IdeaUpdateSchema.parse({ title: "x", unknown: true }));
   assert.throws(() => IdeaUpdateSchema.parse({ summary: "too short" }));
   assert.throws(() => IdeaUpdateSchema.parse({}));
+});
+
+test("impact priority uses the required 30/30/40 weights and exposes its breakdown", () => {
+  const result = calculateIdeaPriority({ turnaround: 3, volume: 2, value: 1 });
+  assert.equal(result.score, 1.9);
+  assert.deepEqual(result.breakdown.map((item) => item.weight), [0.3, 0.3, 0.4]);
+  assert.equal(result.band, "Qualify");
+});
+
+test("idea input validates and stores all five reviewer answers and required metric values", async () => {
+  const input = IdeaInputSchema.parse({
+    kind: "idea", title: "Five answer idea", summary: "An idea with complete supporting answers and measurable value.", category: "Operations",
+    answers: { beneficiaries: "Customers", currentProcess: "Manual", needed: "Automation", risks: "Incorrect routing", successMeasure: "Fewer delays" },
+    metrics: { turnaround: 2, volume: 3, value: 1, valueExplanation: "Conservative estimate" },
+  });
+  assert.throws(() => IdeaInputSchema.parse({ ...input, answers: { beneficiaries: "Only one" } }));
+  const [created] = await db.insert(ideas).values({ authorId: ownerId, title: input.title, summary: input.summary, category: input.category, reference: `ANSWERS-${Date.now()}` }).returning().all();
+  try {
+    const saved = await saveIdeaSubmission({ kind: "user", id: String(ownerId) }, created.id, { answers: input.answers!, metrics: input.metrics! });
+    const details = await getIdeaSubmissionDetails(created.id);
+    assert.equal(saved.score, 1.9);
+    assert.deepEqual(details?.answers, input.answers);
+    assert.deepEqual(details?.metrics, input.metrics);
+  } finally { await db.delete(ideas).where(eq(ideas.id, created.id)); }
+});
+
+test("minimum submission score is configurable and rejects out of range values", async () => {
+  const before = await getIdeaMinimumScore();
+  try {
+    assert.equal(await setIdeaMinimumScore({ kind: "admin", id: String(ownerId) }, 2.4), 2.4);
+    assert.equal(await getIdeaMinimumScore(), 2.4);
+    await assert.rejects(setIdeaMinimumScore({ kind: "user", id: String(ownerId) }, 1));
+    await assert.rejects(setIdeaMinimumScore({ kind: "admin", id: String(ownerId) }, 4));
+  } finally { await setIdeaMinimumScore({ kind: "admin", id: String(ownerId) }, before); }
 });

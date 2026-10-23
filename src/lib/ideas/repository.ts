@@ -8,6 +8,11 @@ import {
   ideaReviews,
   ideaComments,
   ideaSupports,
+  ideaSubmissions,
+  ideaSettings,
+  ideaReferenceSequences,
+  notifications,
+  auditEvents,
   ideaVersions,
   ideas,
   users,
@@ -21,6 +26,8 @@ import {
 } from "../../db/schema";
 import type { AiActor } from "../ai/types";
 import type { IdeaListQuery, IdeaUpdate } from "./schemas";
+import { awardPoints } from "../rewards/service";
+import { appendAuditEvent } from "../audit/service";
 
 export type CreateIdeaVersionInput = NewIdeaVersion;
 
@@ -89,7 +96,7 @@ export async function createAiRun(input: CreateAiRunInput): Promise<AiRun> {
 }
 
 export async function claimNextAiRun(workerId: string, now = new Date()): Promise<AiRun | null> {
-  return db.transaction((tx) => {
+  const result = await db.transaction((tx) => {
     const [candidate] = tx.select().from(aiRuns).where(and(
       eq(aiRuns.status, "queued"),
       lte(aiRuns.availableAt, now),
@@ -105,6 +112,7 @@ export async function claimNextAiRun(workerId: string, now = new Date()): Promis
     }).where(and(eq(aiRuns.id, candidate.id), eq(aiRuns.status, "queued"))).returning().all();
     return updated[0] ?? null;
   });
+  return result;
 }
 
 export async function claimAiRun(runId: number, workerId: string, now = new Date()): Promise<AiRun | null> {
@@ -229,6 +237,12 @@ export async function getIdeaById(ideaId: number): Promise<Idea | null> {
   return idea ?? null;
 }
 
+export async function getIdeaSubmissionDetails(ideaId: number) {
+  const [row] = await db.select().from(ideaSubmissions).where(eq(ideaSubmissions.ideaId, ideaId)).limit(1).all();
+  if (!row) return null;
+  return { answers: JSON.parse(row.answersJson) as Record<string, string>, metrics: JSON.parse(row.metricsJson) as Record<string, string | number>, score: row.score, minimumScore: row.minimumScore, validationPassed: row.validationPassed, differentiation: row.differentiation };
+}
+
 export async function updateReturnedIdea(actor: IdeaActor, ideaId: number, input: IdeaUpdate) {
   const userId = actorUserId(actor);
   return db.transaction((tx) => {
@@ -268,15 +282,25 @@ function createContentHash(input: unknown) {
 
 export async function supportIdea(actor: IdeaActor, ideaId: number) {
   const userId = actorUserId(actor);
-  return db.transaction((tx) => {
+  const result = await db.transaction((tx) => {
     const [idea] = tx.select().from(ideas).where(eq(ideas.id, ideaId)).limit(1).all();
     if (!idea) throw new Error("Idea not found");
-    tx.insert(ideaSupports).values({ ideaId, userId }).onConflictDoNothing({ target: [ideaSupports.ideaId, ideaSupports.userId] }).run();
+    if (idea.authorId === userId) throw new Error("You cannot support your own idea");
+    const [createdSupport] = tx.insert(ideaSupports).values({ ideaId, userId }).onConflictDoNothing({ target: [ideaSupports.ideaId, ideaSupports.userId] }).returning().all();
     const [{ count }] = tx.select({ count: sql<number>`count(*)` }).from(ideaSupports).where(eq(ideaSupports.ideaId, ideaId)).all();
     const supports = Number(count ?? 0);
     tx.update(ideas).set({ supports, updatedAt: new Date() }).where(eq(ideas.id, ideaId)).run();
+    if (createdSupport) {
+      tx.insert(notifications).values({ userId: idea.authorId, type: "idea_supported", title: "Your idea received support", body: `${idea.reference} received a new support.`, link: `/ideas/${ideaId}` }).run();
+    }
     return { supported: true, supports };
   });
+  const [idea] = await db.select().from(ideas).where(eq(ideas.id, ideaId)).limit(1).all();
+  const [created] = await db.select().from(ideaSupports).where(and(eq(ideaSupports.ideaId, ideaId), eq(ideaSupports.userId, userId))).limit(1).all();
+  if (idea && created) {
+    await awardPoints({ userId: idea.authorId, amount: 2, eventType: "idea_support", sourceType: "idea_support", sourceId: `${ideaId}:${userId}`, idempotencyKey: `idea:${ideaId}:support-author:${userId}` });
+  }
+  return result;
 }
 
 export async function listIdeaComments(ideaId: number, query: { page: number; pageSize: number }): Promise<CommentPage> {
@@ -295,14 +319,108 @@ export async function createIdeaComment(actor: IdeaActor, ideaId: number, body: 
   const userId = actorUserId(actor);
   const text = body.trim();
   if (!text || text.length > 2_000) throw new Error("Comment is invalid");
-  return db.transaction((tx) => {
-    const [idea] = tx.select({ id: ideas.id }).from(ideas).where(eq(ideas.id, ideaId)).limit(1).all();
+  const result = await db.transaction((tx) => {
+    const [idea] = tx.select({ id: ideas.id, authorId: ideas.authorId }).from(ideas).where(eq(ideas.id, ideaId)).limit(1).all();
     if (!idea) throw new Error("Idea not found");
     const [comment] = tx.insert(ideaComments).values({ ideaId, authorId: userId, body: text }).returning().all();
     if (!comment) throw new Error("Comment was not created");
     const [author] = tx.select({ id: users.id, name: users.name, department: users.department })
       .from(users).where(eq(users.id, userId)).limit(1).all();
     tx.update(ideas).set({ comments: sql`${ideas.comments} + 1`, updatedAt: new Date() }).where(eq(ideas.id, ideaId)).run();
-    return { ...comment, author: author ?? null };
+    if (idea.authorId !== userId) tx.insert(notifications).values({ userId: idea.authorId, type: "idea_comment", title: "Your idea received a comment", body: "A colleague commented on your idea.", link: `/ideas/${ideaId}` }).run();
+    return { comment: { ...comment, author: author ?? null }, ideaAuthorId: idea.authorId };
   });
+  if (result.ideaAuthorId !== userId) {
+    await awardPoints({ userId, amount: 5, eventType: "idea_comment", sourceType: "idea_comment", sourceId: String(result.comment.id), idempotencyKey: `idea:comment:${result.comment.id}:author:${userId}` });
+  }
+  return result.comment;
+}
+
+export async function getIdeaMinimumScore() {
+  const [setting] = await db.select().from(ideaSettings).where(eq(ideaSettings.key, "minimum_priority_score")).limit(1).all();
+  const configured = Number(setting?.value ?? 2);
+  return Number.isFinite(configured) && configured >= 0 && configured <= 3 ? configured : 2;
+}
+
+export async function setIdeaMinimumScore(actor: IdeaActor, value: number) {
+  const userId = actorUserId(actor);
+  if (actor.kind !== "admin") throw new Error("Administrator access required");
+  if (!Number.isFinite(value) || value < 0 || value > 3) throw new Error("Minimum priority score must be between 0 and 3");
+  await db.insert(ideaSettings).values({ key: "minimum_priority_score", value: String(value), updatedBy: userId, updatedAt: new Date() })
+    .onConflictDoUpdate({ target: ideaSettings.key, set: { value: String(value), updatedBy: userId, updatedAt: new Date() } }).run();
+  await appendAuditEvent({ action: "ideas.minimum_score.updated", targetType: "idea_setting", targetId: "minimum_priority_score", metadata: { status: "updated", result: value } });
+  return value;
+}
+
+export async function saveIdeaSubmission(actor: IdeaActor, ideaId: number, input: {
+  answers: Record<string, string>;
+  metrics: { turnaround: number; volume: number; value: number; turnaroundExplanation?: string; volumeExplanation?: string; valueExplanation?: string };
+  differentiation?: string;
+  buildsOnId?: number;
+}) {
+  const userId = actorUserId(actor);
+  const [idea] = await db.select().from(ideas).where(and(eq(ideas.id, ideaId), eq(ideas.authorId, userId))).limit(1).all();
+  if (!idea) throw new Error("Idea not found or not authorized");
+  if (idea.status !== "screening" && idea.status !== "returned") throw new Error("Submission details cannot be changed at this workflow stage");
+  const [existing] = await db.select().from(ideaSubmissions).where(eq(ideaSubmissions.ideaId, ideaId)).limit(1).all();
+  if (existing?.submittedAt) throw new Error("Submitted idea details are locked");
+  let originalAuthorId: number | null = null;
+  if (input.buildsOnId) {
+    const [original] = await db.select().from(ideas).where(eq(ideas.id, input.buildsOnId)).limit(1).all();
+    if (!original || original.authorId === userId || input.buildsOnId === ideaId) throw new Error("Selected original idea is invalid");
+    originalAuthorId = original.authorId;
+    await db.update(ideas).set({ buildsOnId: input.buildsOnId }).where(eq(ideas.id, ideaId)).run();
+  }
+  const minimumScore = await getIdeaMinimumScore();
+  const score = Math.round((input.metrics.turnaround * 0.3 + input.metrics.volume * 0.3 + input.metrics.value * 0.4) * 100) / 100;
+  const [submission] = await db.insert(ideaSubmissions).values({
+    ideaId,
+    answersJson: JSON.stringify(input.answers),
+    metricsJson: JSON.stringify(input.metrics),
+    score,
+    minimumScore,
+    validationPassed: false,
+    differentiation: input.differentiation ?? null,
+  }).onConflictDoUpdate({
+    target: ideaSubmissions.ideaId,
+    set: { answersJson: JSON.stringify(input.answers), metricsJson: JSON.stringify(input.metrics), score, minimumScore, differentiation: input.differentiation ?? null, updatedAt: new Date() },
+  }).returning().all();
+  if (!submission) throw new Error("Idea submission details were not saved");
+  if (originalAuthorId !== null) await db.insert(notifications).values({ userId: originalAuthorId, type: "idea_builds_on", title: "A colleague built on your idea", body: `A colleague registered a related idea based on your contribution.`, link: `/ideas/${input.buildsOnId}` }).run();
+  return submission;
+}
+
+export async function submitIdea(actor: IdeaActor, ideaId: number) {
+  const userId = actorUserId(actor);
+  const result = await db.transaction((tx) => {
+    const [idea] = tx.select().from(ideas).where(and(eq(ideas.id, ideaId), eq(ideas.authorId, userId))).limit(1).all();
+    if (!idea) throw new Error("Idea not found or not authorized");
+    const [submission] = tx.select().from(ideaSubmissions).where(eq(ideaSubmissions.ideaId, ideaId)).limit(1).all();
+    if (!submission) throw new Error("Five answers and all three impact metrics are required before submission");
+    if (submission.submittedAt) return { idea, reference: idea.reference, score: submission.score, minimumScore: submission.minimumScore, breakdown: { turnaround: 30, volume: 30, value: 40 } };
+    const [preflight] = tx.select().from(aiRuns).where(and(eq(aiRuns.ideaId, ideaId), eq(aiRuns.jobKey, "idea.preflight"), eq(aiRuns.status, "succeeded"))).orderBy(desc(aiRuns.createdAt)).limit(1).all();
+    let safe = false;
+    try { const result = JSON.parse(preflight?.resultJson ?? "{}"); safe = result.decision === "allow" && result.safeToProcess === true; } catch { safe = false; }
+    if (!safe) throw new Error("Idea must pass validation before it can be submitted");
+    const [minimumSetting] = tx.select().from(ideaSettings).where(eq(ideaSettings.key, "minimum_priority_score")).limit(1).all();
+    const minimum = Number(minimumSetting?.value ?? 2);
+    if (submission.score < minimum) throw new Error(`Priority score ${submission.score.toFixed(2)} is below the minimum ${minimum.toFixed(2)}`);
+    if (idea.status !== "screening" && idea.status !== "returned") throw new Error("Idea cannot be submitted from its current status");
+    const year = new Date().getUTCFullYear();
+    const [{ count: existingReferences }] = tx.select({ count: sql<number>`count(*)` }).from(ideas).where(like(ideas.reference, `ABI-${year}-%`)).all();
+    const [sequence] = tx.insert(ideaReferenceSequences).values({ year, lastValue: Number(existingReferences ?? 0) + 1 }).onConflictDoUpdate({
+      target: ideaReferenceSequences.year,
+      set: { lastValue: sql`${ideaReferenceSequences.lastValue} + 1` },
+    }).returning().all();
+    if (!sequence || sequence.lastValue > 99_999) throw new Error("The annual idea reference sequence is exhausted");
+    const reference = `ABI-${year}-${String(sequence.lastValue).padStart(5, "0")}`;
+    const [updated] = tx.update(ideas).set({ reference, priorityScore: submission.score, priorityBand: submission.score >= 2.5 ? "Priority" : submission.score >= 1.5 ? "Qualify" : "Watch", status: "screening", updatedAt: new Date() }).where(eq(ideas.id, ideaId)).returning().all();
+    tx.update(ideaSubmissions).set({ validationPassed: true, submittedAt: new Date(), minimumScore: minimum, updatedAt: new Date() }).where(eq(ideaSubmissions.ideaId, ideaId)).run();
+    tx.insert(ideaEvents).values({ ideaId, actorType: actor.kind, actorId: userId, eventType: "submitted", toStatus: "screening", metadataJson: JSON.stringify({ score: submission.score, minimum, breakdown: { turnaround: 0.3, volume: 0.3, value: 0.4 } }) }).run();
+    tx.insert(notifications).values({ userId, type: "idea_submitted", title: "Idea submitted", body: `${reference} has been submitted for review.`, link: `/ideas/${ideaId}` }).run();
+    tx.insert(auditEvents).values({ actorUserId: userId, action: "ideas.submitted", targetType: "idea", targetId: String(ideaId), metadataJson: JSON.stringify({ status: "submitted", result: submission.score }), createdAt: new Date() }).run();
+    return { idea: updated, reference, score: submission.score, minimumScore: minimum, breakdown: { turnaround: 30, volume: 30, value: 40 } };
+  });
+  await awardPoints({ userId, amount: 50, eventType: "idea_submission", sourceType: "idea", sourceId: String(ideaId), idempotencyKey: `idea:${ideaId}:submission:points` });
+  return result;
 }

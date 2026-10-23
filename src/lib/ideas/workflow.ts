@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "../../db/connection";
-import { aiRuns, ideaVersions, ideas } from "../../db/schema";
+import { aiRuns, ideaVersions, ideas, notifications } from "../../db/schema";
 import { getAiJob } from "../ai/registry";
 import { getAiConfig } from "../ai/config-core";
 import "../ai/jobs";
@@ -47,6 +47,14 @@ export async function transitionIdeaStatus(actor: AiActor, ideaId: number, to: I
     toStatus: to,
     metadataJson: JSON.stringify({ reason }),
   });
+  const accepted = to === "poc";
+  await db.insert(notifications).values({
+    userId: updated.authorId,
+    type: accepted ? "idea_accepted" : "idea_status_changed",
+    title: accepted ? "Idea accepted for proof of concept" : "Idea workflow updated",
+    body: accepted ? `Congratulations, ${updated.reference} has been accepted.` : `${updated.reference} moved to ${to.replaceAll("_", " ")}.`,
+    link: `/ideas/${ideaId}`,
+  }).run();
   return updated;
 }
 

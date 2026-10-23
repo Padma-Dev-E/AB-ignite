@@ -1,8 +1,8 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { addIdeaComment, createIdea, getIdea, ideaQueryKeys, listIdeaComments, listIdeas, submitIdea, supportIdea, updateIdea } from "./api";
-import type { IdeaCreateInput, IdeaListParams, IdeaUpdateInput } from "./types";
+import { addIdeaComment, createIdea, getIdea, ideaQueryKeys, listIdeaComments, listIdeas, saveIdeaSubmission, submitIdea, supportIdea, updateIdea } from "./api";
+import type { IdeaCreateInput, IdeaListParams, IdeaSubmissionInput, IdeaUpdateInput } from "./types";
 
 export function useIdeas(params: IdeaListParams = {}) { return useQuery({ queryKey: ideaQueryKeys.list(params), queryFn: () => listIdeas(params) }); }
 export function useCreateIdea() {
@@ -15,6 +15,10 @@ export function useSubmitIdea() {
     void client.invalidateQueries({ queryKey: ideaQueryKeys.detail(variables.id) });
     void client.invalidateQueries({ queryKey: ideaQueryKeys.all });
   } });
+}
+export function useSaveIdeaSubmission() {
+  const client = useQueryClient();
+  return useMutation({ mutationFn: ({ id, input }: { id: number; input: IdeaSubmissionInput }) => saveIdeaSubmission(id, input), onSuccess: (_data, variables) => { void client.invalidateQueries({ queryKey: ideaQueryKeys.detail(variables.id) }); } });
 }
 export function useIdea(id: number, enabled = true) { return useQuery({ queryKey: ideaQueryKeys.detail(id), queryFn: () => getIdea(id), enabled: enabled && id > 0 }); }
 export function useIdeaComments(id: number, params: { page?: number; pageSize?: number } = {}) { return useQuery({ queryKey: ideaQueryKeys.comments(id, params), queryFn: () => listIdeaComments(id, params), enabled: id > 0 }); }

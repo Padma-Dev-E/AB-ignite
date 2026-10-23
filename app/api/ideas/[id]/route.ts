@@ -1,5 +1,5 @@
 import { auth } from "../../../../auth";
-import { getIdeaById, listIdeaComments, updateReturnedIdea } from "../../../../src/lib/ideas/repository";
+import { getIdeaById, getIdeaSubmissionDetails, listIdeaComments, updateReturnedIdea } from "../../../../src/lib/ideas/repository";
 import { CommentListQuerySchema, IdeaUpdateSchema } from "../../../../src/lib/ideas/schemas";
 import { apiError, handleApiError, ok, requestId } from "../../../../src/lib/http/errors";
 
@@ -19,7 +19,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     if (!idea) return apiError("not_found", "Idea not found.", 404, id);
     const commentsQuery = CommentListQuerySchema.parse(Object.fromEntries(new URL(request.url).searchParams.entries()));
     const comments = await listIdeaComments(ideaId, commentsQuery);
-    return ok({ idea, comments }, 200, id);
+    const submission = await getIdeaSubmissionDetails(ideaId);
+    return ok({ idea, comments, submission }, 200, id);
   } catch (error) {
     return handleApiError(error, id);
   }

@@ -113,6 +113,30 @@ export const ideaVersions = sqliteTable("idea_versions", {
   index("idea_versions_idea_idx").on(table.ideaId, table.createdAt),
 ]);
 
+export const ideaSubmissions = sqliteTable("idea_submissions", {
+  ideaId: integer().primaryKey().references(() => ideas.id, { onDelete: "cascade" }),
+  answersJson: text().notNull(),
+  metricsJson: text().notNull(),
+  score: real().notNull(),
+  minimumScore: real().notNull(),
+  validationPassed: integer({ mode: "boolean" }).notNull().default(false),
+  differentiation: text(),
+  submittedAt: integer({ mode: "timestamp_ms" }),
+  ...timestamps,
+});
+
+export const ideaSettings = sqliteTable("idea_settings", {
+  key: text().primaryKey(),
+  value: text().notNull(),
+  updatedBy: integer().references(() => users.id, { onDelete: "set null" }),
+  updatedAt: integer({ mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
+});
+
+export const ideaReferenceSequences = sqliteTable("idea_reference_sequences", {
+  year: integer().primaryKey(),
+  lastValue: integer().notNull().default(0),
+});
+
 export const aiRuns = sqliteTable("ai_runs", {
   id: integer().primaryKey({ autoIncrement: true }),
   ideaId: integer().notNull().references(() => ideas.id, { onDelete: "cascade" }),
@@ -782,6 +806,9 @@ export const schema = {
   refreshTokens,
   auditEvents,
   ideas,
+  ideaSubmissions,
+  ideaSettings,
+  ideaReferenceSequences,
   ideaVersions,
   aiRuns,
   ideaAiResults,

@@ -9,8 +9,8 @@ Audited against the local branch through admin control-room commit `a93b114` and
 | Status | Count |
 | :--- | ---: |
 | Complete | 0 |
-| Partial | 37 |
-| Not started | 9 |
+| Partial | 40 |
+| Not started | 6 |
 | Total | 46 |
 
 ## 1. Ideation journey
@@ -18,15 +18,15 @@ Audited against the local branch through admin control-room commit `a93b114` and
 | ID | Completed? | Status | Current evidence | Remaining gap |
 | :--- | :---: | :--- | :--- | :--- |
 | ID-01 | No | Partial | Five-stage UI has idea/problem selection and free-text input in [`employee-idea-flow.tsx`](../src/features/ideas/components/employee-idea-flow.tsx). | The first step is not yet backed by the complete AI development flow described by the story. |
-| ID-02 | No | Partial | UI exposes originality-check and builds-on states. | No server-side similarity search, duplicate stop, 20-character explanation, author credit, or notification workflow. |
+| ID-02 | No | Partial | Secured idea creation performs bounded server-side similarity checks, blocks near-duplicates unless a valid original/differentiation is supplied, and notifies the original author when work builds on it. | The employee UI still needs to present server candidates and capture the differentiation/original selection interactively. |
 | ID-03 | No | Partial | Editable title, summary, problem, solution, benefits, and risks fields exist. | Gemini does not yet pre-fill and persist the structure from the first step; manual fallback is only client-side. |
 | ID-04 | No | Partial | Five reviewer-question prompts are rendered in the submission flow. | Answers are not persisted with the idea or exposed to reviewers. |
 | ID-05 | No | Partial | Client validation state and submit gating exist; AI validation jobs/schemas exist under [`src/lib/ai`](../src/lib/ai). | The employee flow does not call the AI validation result and does not provide server-enforced pass/fail re-validation. |
 | ID-06 | No | Partial | Three impact inputs are shown in the UI. | No optional explanation per number, live weighted 30/30/40 score, or Watch/Qualify/Priority calculation. |
-| ID-07 | No | Not started | Submit is gated by a local field-count check. | No configurable minimum score, server rejection, score breakdown response, or admin setting. |
+| ID-07 | No | Partial | Persisted minimum-score settings, server-side rejection, weighted score calculation, and an admin settings endpoint are implemented. | Settings UI and complete employee score-breakdown presentation remain. |
 | ID-08 | No | Partial | Idea creation and submit APIs exist in [`app/api/ideas`](../app/api/ideas), and the result screen displays the returned reference. | Reference/priority criteria, final scoring breakdown, and 50-point milestone credit are not implemented end-to-end. |
 | ID-09 | No | Partial | Idea status, versions, events, detail, comments, and support APIs exist. | Complete lifecycle transitions and notifications at every step are not implemented. |
-| ID-10 | No | Not started | No complete acceptance-to-POC notification flow exists. | Business-owner approval, transformation confirmation, accepted status, and notification are missing. |
+| ID-10 | No | Partial | Workflow transitions now create accepted/status-change notifications, including the proof-of-concept acceptance message. | Business-owner and transformation-team decision workspaces and their server-enforced role paths remain. |
 | ID-11 | No | Partial | Comment and support APIs/hooks and detail UI exist. | Own-idea support enforcement and the 5-point commenter / 2-point author reward rules are missing. |
 
 ## 2. Quizzes journey
@@ -72,7 +72,7 @@ Audited against the local branch through admin control-room commit `a93b114` and
 | AD-03 | No | Not started | No business-owner evaluation workspace exists. | Routed-only visibility, five answers, AI assessment, explanations, and decision actions are missing. |
 | AD-04 | No | Partial | Idea scoring fields and AI schemas exist in the backend. | Reviewer UI does not show each KPI answer, score, weight, and author explanation. |
 | AD-05 | No | Not started | No management dashboard or export implementation exists. | Pipeline analytics, department/points/learning metrics, and CSV exports are missing. |
-| AD-06 | No | Not started | Auth currently supports the base admin/user roles only. | Employee/reviewer/business-owner/control/management roles, user management, reset, and deactivation are missing. |
+| AD-06 | No | Partial | Admin-only user directory, role changes, activation/deactivation, security reset, session revocation, and audit records are implemented; the UI lists users and lifecycle state. | The role model is still admin/user rather than the full profile set, and mutation forms/password reset UI remain. |
 | AD-07 | No | Not started | No workflow-settings UI or persisted rule configuration exists. | KPI definitions, weights, bands, minimum score, points, levels, SLAs, controls, departments, and demo profiles are missing. |
 | AD-08 | No | Not started | No learning-content management UI/API exists. | Quiz/question management, recommendation rules, and external-link checks are missing. |
 | AD-09 | No | Partial | Secured feedback campaign and administrator response APIs persist categorized feedback, notify employees, and audit responses. | Campaign/announcement/challenge management and admin feedback UI remain. |

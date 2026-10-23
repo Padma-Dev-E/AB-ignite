@@ -1,5 +1,3 @@
-import "server-only";
-
 import { and, eq } from "drizzle-orm";
 import { db } from "../../db/connection";
 import { refreshTokens, users } from "../../db/schema";

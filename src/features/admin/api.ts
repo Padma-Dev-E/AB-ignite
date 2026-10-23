@@ -1,5 +1,5 @@
 import { apiFetch } from "../../lib/api/client";
-import type { AdminChallenge, AdminQuiz, AdminRedemption, AdminReward, Paginated } from "./types";
+import type { AdminAuditEvent, AdminChallenge, AdminQuiz, AdminRedemption, AdminReward, AdminUser, Paginated } from "./types";
 
 type ListResponse<T> = { items: T[] };
 
@@ -19,6 +19,8 @@ export async function listAdminRewards() {
 export function listAdminRedemptions() {
   return apiFetch<Paginated<AdminRedemption>>("/api/admin/rewards/redemptions");
 }
+export function listAdminUsers() { return apiFetch<{ items: AdminUser[]; nextAfter: number | null }>("/api/admin/users?limit=50"); }
+export function listAdminAudit() { return apiFetch<{ items: AdminAuditEvent[]; nextAfter: number | null }>("/api/admin/audit?limit=50"); }
 
 export const adminQueryKeys = {
   all: ["admin"] as const,
@@ -26,4 +28,6 @@ export const adminQueryKeys = {
   challenges: ["admin", "challenges"] as const,
   rewards: ["admin", "rewards"] as const,
   redemptions: ["admin", "rewards", "redemptions"] as const,
+  users: ["admin", "users"] as const,
+  audit: ["admin", "audit"] as const,
 };

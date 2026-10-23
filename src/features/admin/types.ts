@@ -52,3 +52,31 @@ export type Paginated<T> = {
   total: number;
   totalPages: number;
 };
+
+export type AdminUser = {
+  id: number;
+  name: string;
+  email: string;
+  role: "admin" | "user";
+  department: string;
+  jobTitle: string | null;
+  isActive: boolean;
+  failedLoginAttempts: number;
+  lockedUntil: string | null;
+  lastLoginAt: string | null;
+  lastSeenAt: string | null;
+  deactivatedAt: string | null;
+  createdAt: string;
+};
+
+export type AdminAuditEvent = {
+  id: number;
+  createdAt: string;
+  actorUserId: number | null;
+  sessionId: number | null;
+  action: string;
+  targetType: string | null;
+  targetId: string | null;
+  reason: string | null;
+  metadata: Record<string, unknown>;
+};

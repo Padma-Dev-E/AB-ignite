@@ -1,8 +1,6 @@
-import "server-only";
-
 import { db } from "../../db/connection";
 import { auditEvents } from "../../db/schema";
-import { requirePrivilegedReason } from "../auth/authorization";
+import { requirePrivilegedReason } from "../auth/authorization-core";
 import { hashAuditValue, serializeAuditMetadata } from "./redaction-core";
 
 export type AuditEventInput = {
