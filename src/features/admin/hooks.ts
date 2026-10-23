@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { adminQueryKeys, listAdminAudit, listAdminChallenges, listAdminQuizCatalogue, listAdminRedemptions, listAdminRewards, listAdminUsers } from "./api";
+import { adminQueryKeys, getAdminSettings, listAdminAudit, listAdminChallenges, listAdminQuizCatalogue, listAdminRedemptions, listAdminRewards, listAdminScreening, listAdminTransformation, listAdminUsers } from "./api";
 
 export function useAdminQuizCatalogue(enabled = true) {
   return useQuery({ queryKey: adminQueryKeys.quizzes, queryFn: listAdminQuizCatalogue, enabled });
@@ -20,3 +20,6 @@ export function useAdminRedemptions(enabled = true) {
 }
 export function useAdminUsers(enabled = true) { return useQuery({ queryKey: adminQueryKeys.users, queryFn: listAdminUsers, enabled }); }
 export function useAdminAudit(enabled = true) { return useQuery({ queryKey: adminQueryKeys.audit, queryFn: listAdminAudit, enabled }); }
+export function useAdminScreening(enabled = true) { return useQuery({ queryKey: adminQueryKeys.screening, queryFn: listAdminScreening, enabled }); }
+export function useAdminTransformation(enabled = true) { return useQuery({ queryKey: adminQueryKeys.transformation, queryFn: listAdminTransformation, enabled }); }
+export function useAdminSettings(enabled = true) { return useQuery({ queryKey: adminQueryKeys.settings, queryFn: getAdminSettings, enabled }); }

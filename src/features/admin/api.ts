@@ -1,5 +1,5 @@
 import { apiFetch } from "../../lib/api/client";
-import type { AdminAuditEvent, AdminChallenge, AdminQuiz, AdminRedemption, AdminReward, AdminUser, Paginated } from "./types";
+import type { AdminAuditEvent, AdminChallenge, AdminIdea, AdminQuiz, AdminRedemption, AdminReward, AdminSettings, AdminUser, Paginated } from "./types";
 
 type ListResponse<T> = { items: T[] };
 
@@ -21,6 +21,9 @@ export function listAdminRedemptions() {
 }
 export function listAdminUsers() { return apiFetch<{ items: AdminUser[]; nextAfter: number | null }>("/api/admin/users?limit=50"); }
 export function listAdminAudit() { return apiFetch<{ items: AdminAuditEvent[]; nextAfter: number | null }>("/api/admin/audit?limit=50"); }
+export function listAdminScreening() { return apiFetch<{ items: AdminIdea[]; nextAfter: number | null }>("/api/admin/governance/queues/screening?limit=50"); }
+export function listAdminTransformation() { return apiFetch<{ items: AdminIdea[]; nextAfter: number | null }>("/api/admin/governance/queues/transformation?limit=50"); }
+export function getAdminSettings() { return apiFetch<AdminSettings>("/api/admin/settings"); }
 
 export const adminQueryKeys = {
   all: ["admin"] as const,
@@ -30,4 +33,7 @@ export const adminQueryKeys = {
   redemptions: ["admin", "rewards", "redemptions"] as const,
   users: ["admin", "users"] as const,
   audit: ["admin", "audit"] as const,
+  screening: ["admin", "governance", "screening"] as const,
+  transformation: ["admin", "governance", "transformation"] as const,
+  settings: ["admin", "settings"] as const,
 };

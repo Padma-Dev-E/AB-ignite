@@ -4,8 +4,8 @@ import Link from "next/link";
 import { Tab, TabGroup, TabList, TabPanel, TabPanels } from "@headlessui/react";
 import { useState, type ReactNode } from "react";
 import { Card, IconBox, SectionHeading, StatTile } from "../../../components/ui";
-import { useAdminAudit, useAdminChallenges, useAdminQuizCatalogue, useAdminRedemptions, useAdminRewards, useAdminUsers } from "../hooks";
-import type { AdminAuditEvent, AdminChallenge, AdminQuiz, AdminRedemption, AdminReward, AdminUser } from "../types";
+import { useAdminAudit, useAdminChallenges, useAdminQuizCatalogue, useAdminRedemptions, useAdminRewards, useAdminScreening, useAdminSettings, useAdminTransformation, useAdminUsers } from "../hooks";
+import type { AdminAuditEvent, AdminChallenge, AdminIdea, AdminQuiz, AdminRedemption, AdminReward, AdminUser } from "../types";
 
 type AdminWorkspaceProps = { email: string };
 type SubnavItem = { id: string; label: string };
@@ -98,13 +98,23 @@ function UnconfiguredSection({ title, description, owner }: { title: string; des
 
 function GovernancePanel() {
   const [active, setActive] = useState("screening");
+  const screening = useAdminScreening(active === "screening");
+  const transformation = useAdminTransformation(active === "transformation");
   const copy = {
     screening: ["Screening queue", "Review submitted ideas and their AI screening evidence with traceable decisions.", "Idea screening"],
     transformation: ["Transformation pipeline", "Follow ideas moving from validated opportunity to an accountable delivery path.", "Transformation workflow"],
     evaluation: ["Evaluation workspace", "Compare impact, risk and feasibility evidence before a governed decision.", "Idea evaluation"],
   } as const;
   const [title, description, owner] = copy[active as keyof typeof copy];
-  return <div className="stack"><SectionHeading title="Idea governance" detail="Readiness: staged" /><SectionTabs items={governanceItems} active={active} onChange={setActive} /><UnconfiguredSection title={title} description={description} owner={owner} /></div>;
+  const query = active === "screening" ? screening : transformation;
+  return <div className="stack"><SectionHeading title="Idea governance" detail="Live queue reads · reasoned mutations" /><SectionTabs items={governanceItems} active={active} onChange={setActive} />{active === "evaluation" ? <UnconfiguredSection title={title} description={description} owner={owner} /> : <IdeaQueue query={query} title={title} detail={description} />}</div>;
+}
+
+function IdeaQueue({ query, title, detail }: { query: ReturnType<typeof useAdminScreening> | ReturnType<typeof useAdminTransformation>; title: string; detail: string }) {
+  if (query.isPending) return <LoadingRows label={`Loading ${title}`} />;
+  if (query.isError) return <StatePanel title={`${title} unavailable`} detail={queryMessage(query.error, "The governance queue could not be loaded.")} tone="error" />;
+  if (!query.data?.items.length) return <EmptyPanel title={`No ideas in ${title.toLowerCase()}`} detail="The governed queue is connected, but no records match this stage." />;
+  return <Card><div className="mb-4"><h2 className="text-xl font-medium">{title}</h2><p className="mt-1 text-sm text-muted">{detail}</p></div><div className="space-y-2">{query.data.items.map((idea: AdminIdea) => <article key={idea.id} className="rounded-xl border p-3" style={{ borderColor: "var(--line)" }}><div className="flex flex-wrap items-center gap-2"><span className="pill">{idea.reference}</span><span className="pill text-blue border-blue/40">{idea.priorityBand ?? "Unscored"}</span><span className="ml-auto text-xs text-muted">{dateLabel(idea.createdAt)}</span></div><h3 className="mt-2 font-medium">{idea.title}</h3><p className="mt-1 text-sm text-muted">{idea.authorName} · {idea.department} · {idea.priorityScore?.toFixed(2) ?? "—"}</p></article>)}</div></Card>;
 }
 
 function PeoplePanel() {
@@ -184,7 +194,12 @@ function AuditTable({ query }: { query: ReturnType<typeof useAdminAudit> }) {
 }
 
 function SettingsPanel() {
-  return <div className="stack"><SectionHeading title="Platform settings" detail="Change control protected" /><UnconfiguredSection title="Settings" description="Review environment, AI, session and notification policies when the configuration endpoint is connected." owner="Platform settings" /></div>;
+  const settings = useAdminSettings();
+  if (settings.isPending) return <div className="stack"><SectionHeading title="Platform settings" detail="Change control protected" /><LoadingRows label="Loading settings" /></div>;
+  if (settings.isError) return <div className="stack"><SectionHeading title="Platform settings" detail="Change control protected" /><StatePanel title="Settings unavailable" detail={queryMessage(settings.error, "Settings could not be loaded.")} tone="error" /></div>;
+  const data = settings.data;
+  if (!data) return <StatePanel title="Settings unavailable" detail="No configuration data was returned." tone="error" />;
+  return <div className="stack"><SectionHeading title="Platform settings" detail="Live read-only configuration" /><Card><h2 className="text-xl font-medium">Priority and recognition rules</h2><p className="mt-1 text-sm text-muted">Configuration is read from the audited admin settings endpoint. Mutations require a privileged reason.</p><div className="mt-5 grid gap-3 sm:grid-cols-2">{Object.entries(data.priority).map(([key, value]) => <div className="tile" key={key}><span className="block text-xs text-muted">{key}</span><b className="font-medium">{String(value)}</b></div>)}<div className="tile"><span className="block text-xs text-muted">Point rules</span><b className="font-medium">{data.pointRules.length} configured</b></div><div className="tile"><span className="block text-xs text-muted">Recommendation rules</span><b className="font-medium">{data.recommendationRules.length} configured</b></div></div></Card></div>;
 }
 
 export function AdminWorkspace({ email }: AdminWorkspaceProps) {
