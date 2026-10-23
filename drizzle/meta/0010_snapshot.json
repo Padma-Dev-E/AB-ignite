@@ -4712,6 +4712,14 @@
           "autoincrement": false,
           "default": "'user'"
         },
+        "profile": {
+          "name": "profile",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'employee'"
+        },
         "department": {
           "name": "department",
           "type": "text",

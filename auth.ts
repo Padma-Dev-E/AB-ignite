@@ -64,6 +64,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           return null;
         }
 
+        if (user.email.endsWith("@demo.abignite.invalid")) return null;
+
         const now = new Date();
         if (!user.isActive || isLoginLocked(user, now)) {
           appendAuditEvent({ actorUserId: user.id, action: "auth.login.locked", metadata: { reasonCode: user.isActive ? "locked" : "inactive" }, ...metadata });
@@ -91,6 +93,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           name: user.name,
           email: user.email,
           role: user.role,
+          profile: user.profile,
           sessionId: String(issued.record.id),
           sessionVersion: user.sessionVersion,
         };
@@ -104,6 +107,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (user) {
         token.sub = user.id;
         token.role = user.role;
+        token.profile = user.profile;
         token.name = user.name;
         token.email = user.email;
         token.sessionId = user.sessionId;
@@ -122,6 +126,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           token.sessionRevoked = true;
         } else {
           token.role = current.role;
+          token.profile = current.profile;
           token.name = current.name;
           token.email = current.email;
           token.sessionVersion = current.sessionVersion;
@@ -133,6 +138,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     session({ session, token }) {
       if (token.sub) session.user.id = token.sub;
       if (token.role) session.user.role = token.role;
+      if (token.profile) session.user.profile = token.profile;
       if (token.sessionId) session.user.sessionId = token.sessionId;
       session.accessTokenExpires = token.accessTokenExpires;
       session.isValid = token.sessionRevoked !== true;

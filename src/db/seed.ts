@@ -16,7 +16,7 @@ async function main() {
   const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1);
 
   if (existing) {
-    await db.update(users).set({ role: "admin", name: "Platform Admin", updatedAt: new Date() }).where(eq(users.id, existing.id));
+    await db.update(users).set({ role: "admin", profile: "admin", name: "Platform Admin", updatedAt: new Date() }).where(eq(users.id, existing.id));
     console.log(`Admin role ensured for ${email}.`);
     return;
   }
@@ -25,6 +25,7 @@ async function main() {
     name: "Platform Admin",
     email,
     role: "admin",
+    profile: "admin",
     department: "Technology",
     jobTitle: "Platform Admin",
     passwordHash: await hashPassword(defaultAdminPassword),

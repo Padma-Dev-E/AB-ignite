@@ -11,6 +11,7 @@ export const users = sqliteTable("users", {
   name: text().notNull(),
   email: text().notNull(),
   role: text({ enum: ["admin", "user"] }).notNull().default("user"),
+  profile: text({ enum: ["employee", "reviewer", "business_owner", "control", "management", "admin"] }).notNull().default("employee"),
   department: text().notNull().default("Other"),
   jobTitle: text(),
   passwordHash: text().notNull(),
@@ -849,6 +850,7 @@ export const schema = {
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type UserRole = "admin" | "user";
+export type UserProfile = "employee" | "reviewer" | "business_owner" | "control" | "management" | "admin";
 export type AuditEvent = typeof auditEvents.$inferSelect;
 export type Idea = typeof ideas.$inferSelect;
 export type NewIdea = typeof ideas.$inferInsert;

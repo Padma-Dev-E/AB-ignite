@@ -4,11 +4,12 @@ import { and, eq } from "drizzle-orm";
 import { db } from "../../db/connection";
 import { auditEvents, refreshTokens, users } from "../../db/schema";
 import { adminAccess, CAPABILITIES } from "./http";
-import { changeUserRole, setUserActive, resetUserSecurity, listUsers, getUserDetail, listUserSessions, listAuditEvents } from "./service";
+import { changeUserRole, setUserActive, resetUserSecurity, resetUserPassword, revokeUserSession, createUser, listUsers, getUserDetail, listUserSessions, listAuditEvents } from "./service";
+import { verifyPassword } from "../../auth/password-core";
 
 test("admin operations persist, revoke sessions, audit reasons, and return no secrets", async () => {
   const stamp = `${Date.now()}-${Math.random()}`;
-  const actor = db.insert(users).values({ name: "Admin actor", email: `admin-actor-${stamp}@example.test`, role: "admin", passwordHash: "actor-secret" }).returning({ id: users.id }).get();
+  const actor = db.insert(users).values({ name: "Admin actor", email: `admin-actor-${stamp}@example.test`, role: "admin", profile: "admin", passwordHash: "actor-secret" }).returning({ id: users.id }).get();
   const target = db.insert(users).values({ name: "Admin target", email: `admin-target-${stamp}@example.test`, passwordHash: "target-secret", failedLoginAttempts: 5, lockedUntil: new Date(Date.now() + 60_000) }).returning({ id: users.id }).get();
   const actorSession = db.insert(refreshTokens).values({ userId: actor.id, tokenHash: `actor-token-${stamp}`, expiresAt: new Date(Date.now() + 60_000), sessionVersion: 0 }).returning({ id: refreshTokens.id }).get();
   const targetSession = db.insert(refreshTokens).values({ userId: target.id, tokenHash: `target-token-${stamp}`, expiresAt: new Date(Date.now() + 60_000), sessionVersion: 0 }).returning({ id: refreshTokens.id }).get();
@@ -40,5 +41,37 @@ test("admin operations persist, revoke sessions, audit reasons, and return no se
     await assert.rejects(adminAccess(actorCookie, CAPABILITIES.USERS_READ));
   } finally {
     db.update(users).set({ isActive: false, updatedAt: new Date() }).where(eq(users.id, actor.id)).run();
+  }
+});
+
+test("profile assignment, user creation, password reset and individual revocation are audited", async () => {
+  const stamp = `${Date.now()}-${Math.random()}`;
+  const actor = db.insert(users).values({ name: "Admin", email: `admin-rbac-${stamp}@example.test`, role: "admin", profile: "admin", passwordHash: "test" }).returning({ id: users.id }).get();
+  const actorSession = db.insert(refreshTokens).values({ userId: actor.id, tokenHash: `admin-rbac-${stamp}`, expiresAt: new Date(Date.now() + 60_000), sessionVersion: 0 }).returning({ id: refreshTokens.id }).get();
+  const context = { userId: actor.id, sessionId: actorSession.id };
+  const created = await createUser(context, { name: "Owner", email: `owner-${stamp}@example.test`, department: "Risk", profile: "business_owner" }, "approved onboarding");
+  const userId = created.user.id;
+  try {
+    assert.equal(created.user.role, "user");
+    assert.equal(created.user.profile, "business_owner");
+    assert.equal(await verifyPassword(db.select().from(users).where(eq(users.id, userId)).get()!.passwordHash, created.temporaryPassword), true);
+    const sessionA = db.insert(refreshTokens).values({ userId, tokenHash: `owner-a-${stamp}`, expiresAt: new Date(Date.now() + 60_000), sessionVersion: 0 }).returning({ id: refreshTokens.id }).get();
+    const sessionB = db.insert(refreshTokens).values({ userId, tokenHash: `owner-b-${stamp}`, expiresAt: new Date(Date.now() + 60_000), sessionVersion: 0 }).returning({ id: refreshTokens.id }).get();
+    revokeUserSession(context, userId, sessionA.id, "suspected lost device");
+    assert.ok(db.select().from(refreshTokens).where(eq(refreshTokens.id, sessionA.id)).get()?.revokedAt);
+    assert.equal(db.select().from(refreshTokens).where(eq(refreshTokens.id, sessionB.id)).get()?.revokedAt, null);
+    const password = await resetUserPassword(context, userId, "verified identity");
+    assert.equal(await verifyPassword(db.select().from(users).where(eq(users.id, userId)).get()!.passwordHash, password.temporaryPassword), true);
+    assert.ok(db.select().from(refreshTokens).where(eq(refreshTokens.id, sessionB.id)).get()?.revokedAt);
+    await changeUserRole(context, userId, "reviewer", "transfer to transformation");
+    assert.equal(db.select().from(users).where(eq(users.id, userId)).get()?.profile, "reviewer");
+    assert.equal(db.select().from(users).where(eq(users.id, userId)).get()?.role, "user");
+    const audit = db.select().from(auditEvents).where(eq(auditEvents.targetId, String(userId))).all();
+    assert.ok(audit.some((row) => row.action === "admin.user.created"));
+    assert.ok(audit.some((row) => row.action === "admin.user.password_reset"));
+    assert.equal(JSON.stringify(audit).includes(password.temporaryPassword), false);
+    assert.throws(() => revokeUserSession(context, actor.id, actorSession.id, "self"));
+  } finally {
+    db.update(users).set({ isActive: false }).where(eq(users.id, actor.id)).run();
   }
 });

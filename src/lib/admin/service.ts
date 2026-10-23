@@ -1,6 +1,8 @@
 import { and, desc, eq, lt, sql, type SQL } from "drizzle-orm";
 import { db } from "../../db/connection";
-import { auditEvents, refreshTokens, users, type UserRole } from "../../db/schema";
+import { auditEvents, refreshTokens, users, type UserProfile } from "../../db/schema";
+import { hashPassword } from "../../auth/password-core";
+import { randomBytes } from "node:crypto";
 import { isSessionActive } from "../../auth/security-core";
 import { buildAuditRecord } from "../audit/service";
 import { requirePrivilegedReason, AuthorizationError } from "../auth/authorization-core";
@@ -11,7 +13,7 @@ type Actor = { userId: number; sessionId: number };
 type AuditFilters = Page & { actorUserId?: number | null; action?: string | null; targetType?: string | null; targetId?: string | null };
 
 const userFields = {
-  id: users.id, name: users.name, email: users.email, role: users.role,
+  id: users.id, name: users.name, email: users.email, role: users.role, profile: users.profile,
   department: users.department, jobTitle: users.jobTitle, isActive: users.isActive,
   failedLoginAttempts: users.failedLoginAttempts, lockedUntil: users.lockedUntil,
   lastLoginAt: users.lastLoginAt, lastSeenAt: users.lastSeenAt,
@@ -50,30 +52,30 @@ export async function listUserSessions(userId: number, page: Page) {
 }
 
 function assertActor(tx: Parameters<Parameters<typeof db.transaction>[0]>[0], actor: Actor, now: Date) {
-  const current = tx.select({ id: users.id, role: users.role, isActive: users.isActive, sessionVersion: users.sessionVersion })
+  const current = tx.select({ id: users.id, profile: users.profile, isActive: users.isActive, sessionVersion: users.sessionVersion })
     .from(users).where(eq(users.id, actor.userId)).limit(1).get();
   const session = tx.select({ userId: refreshTokens.userId, expiresAt: refreshTokens.expiresAt,
     revokedAt: refreshTokens.revokedAt, idleExpiresAt: refreshTokens.idleExpiresAt,
     absoluteExpiresAt: refreshTokens.absoluteExpiresAt, sessionVersion: refreshTokens.sessionVersion })
     .from(refreshTokens).where(eq(refreshTokens.id, actor.sessionId)).limit(1).get();
-  if (!current || current.role !== "admin" || !current.isActive || !session || session.userId !== current.id || session.expiresAt <= now || !isSessionActive(session, current, now)) {
+  if (!current || current.profile !== "admin" || !current.isActive || !session || session.userId !== current.id || session.expiresAt <= now || !isSessionActive(session, current, now)) {
     throw new AuthorizationError("Administrator session is no longer valid.");
   }
 }
 
-function mutateUser(actor: Actor, userId: number, reasonInput: unknown, action: "role" | "active" | "reset", value?: UserRole | boolean, metadata?: { ipAddress?: string | null; userAgent?: string | null }) {
+function mutateUser(actor: Actor, userId: number, reasonInput: unknown, action: "role" | "active" | "reset", value?: UserProfile | boolean, metadata?: { ipAddress?: string | null; userAgent?: string | null }) {
   const reason = requirePrivilegedReason(reasonInput);
   const now = new Date();
   return db.transaction((tx) => {
     assertActor(tx, actor, now);
     const target = tx.select().from(users).where(eq(users.id, userId)).limit(1).get();
     if (!target) throw new AdminNotFoundError("User not found.");
-    if (action === "role" && value !== "admin" && value !== "user") throw new AdminConflictError("Invalid role.");
+    if (action === "role" && !["employee", "reviewer", "business_owner", "control", "management", "admin"].includes(value as string)) throw new AdminConflictError("Invalid profile.");
     if (action === "active" && typeof value !== "boolean") throw new AdminConflictError("Invalid active state.");
     if (userId === actor.userId && action !== "reset") throw new AdminConflictError("Administrators cannot change their own role or active state.");
-    if (action === "role" && target.role === value) throw new AdminConflictError("Role is already set.");
+    if (action === "role" && target.profile === value) throw new AdminConflictError("Profile is already set.");
     if (action === "active" && target.isActive === value) throw new AdminConflictError("Active state is already set.");
-    if (action === "role") tx.update(users).set({ role: value as UserRole, sessionVersion: sql`${users.sessionVersion} + 1`, updatedAt: now }).where(eq(users.id, userId)).run();
+    if (action === "role") tx.update(users).set({ profile: value as UserProfile, role: value === "admin" ? "admin" : "user", sessionVersion: sql`${users.sessionVersion} + 1`, updatedAt: now }).where(eq(users.id, userId)).run();
     if (action === "active") tx.update(users).set({ isActive: value as boolean, deactivatedAt: value ? null : now, sessionVersion: sql`${users.sessionVersion} + 1`, updatedAt: now }).where(eq(users.id, userId)).run();
     if (action === "reset") tx.update(users).set({ failedLoginAttempts: 0, lockedUntil: null, lastFailedLoginAt: null, sessionVersion: sql`${users.sessionVersion} + 1`, updatedAt: now }).where(eq(users.id, userId)).run();
     const auditAction = action === "role" ? "admin.user.role_changed" : action === "reset" ? "admin.user.security_reset" : value ? "admin.user.reactivated" : "admin.user.deactivated";
@@ -81,15 +83,15 @@ function mutateUser(actor: Actor, userId: number, reasonInput: unknown, action: 
       .where(and(eq(refreshTokens.userId, userId), sql`${refreshTokens.revokedAt} IS NULL`)).run();
     tx.insert(auditEvents).values(buildAuditRecord({ actorUserId: actor.userId, sessionId: actor.sessionId,
       action: auditAction, targetType: "user", targetId: userId, reason, requiresReason: true,
-      metadata: action === "role" ? { fromStatus: target.role, toStatus: value } : { status: action === "reset" ? "reset" : value ? "active" : "inactive" },
+      metadata: action === "role" ? { fromStatus: target.profile, toStatus: value } : { status: action === "reset" ? "reset" : value ? "active" : "inactive" },
       ...metadata,
     }, now)).run();
     return tx.select(userFields).from(users).where(eq(users.id, userId)).limit(1).get()!;
   });
 }
 
-export function changeUserRole(actor: Actor, userId: number, role: UserRole, reason: unknown, metadata?: { ipAddress?: string | null; userAgent?: string | null }) {
-  return mutateUser(actor, userId, reason, "role", role, metadata);
+export function changeUserRole(actor: Actor, userId: number, profile: UserProfile, reason: unknown, metadata?: { ipAddress?: string | null; userAgent?: string | null }) {
+  return mutateUser(actor, userId, reason, "role", profile, metadata);
 }
 
 export function setUserActive(actor: Actor, userId: number, active: boolean, reason: unknown, metadata?: { ipAddress?: string | null; userAgent?: string | null }) {
@@ -98,6 +100,58 @@ export function setUserActive(actor: Actor, userId: number, active: boolean, rea
 
 export function resetUserSecurity(actor: Actor, userId: number, reason: unknown, metadata?: { ipAddress?: string | null; userAgent?: string | null }) {
   return mutateUser(actor, userId, reason, "reset", undefined, metadata);
+}
+
+export async function createUser(actor: Actor, input: { name: string; email: string; department: string; jobTitle?: string; profile: UserProfile }, reasonInput: unknown, metadata?: { ipAddress?: string | null; userAgent?: string | null }) {
+  const reason = requirePrivilegedReason(reasonInput);
+  const now = new Date();
+  // Administrators deliver this one-time credential through an approved bank channel.
+  const temporaryPassword = randomBytes(24).toString("base64url");
+  const passwordHash = await hashPassword(temporaryPassword);
+  try {
+    const user = db.transaction((tx) => {
+      assertActor(tx, actor, now);
+      const created = tx.insert(users).values({ name: input.name.trim(), email: input.email.trim().toLowerCase(), department: input.department.trim(), jobTitle: input.jobTitle?.trim() || null, profile: input.profile, role: input.profile === "admin" ? "admin" : "user", passwordHash, createdAt: now, updatedAt: now }).returning(userFields).get();
+      tx.insert(auditEvents).values(buildAuditRecord({ actorUserId: actor.userId, sessionId: actor.sessionId, action: "admin.user.created", targetType: "user", targetId: created.id, reason, requiresReason: true, metadata: { profile: created.profile }, ...metadata }, now)).run();
+      return created;
+    });
+    return { user, temporaryPassword };
+  } catch (error) {
+    if (String(error).includes("users_email_unique")) throw new AdminConflictError("Email is already registered.");
+    throw error;
+  }
+}
+
+export async function resetUserPassword(actor: Actor, userId: number, reasonInput: unknown, metadata?: { ipAddress?: string | null; userAgent?: string | null }) {
+  const reason = requirePrivilegedReason(reasonInput);
+  const now = new Date();
+  const temporaryPassword = randomBytes(24).toString("base64url");
+  const passwordHash = await hashPassword(temporaryPassword);
+  db.transaction((tx) => {
+    assertActor(tx, actor, now);
+    if (userId === actor.userId) throw new AdminConflictError("Administrators cannot reset their own password through this endpoint.");
+    const target = tx.select({ id: users.id }).from(users).where(eq(users.id, userId)).get();
+    if (!target) throw new AdminNotFoundError("User not found.");
+    tx.update(users).set({ passwordHash, failedLoginAttempts: 0, lockedUntil: null, lastFailedLoginAt: null, sessionVersion: sql`${users.sessionVersion} + 1`, updatedAt: now }).where(eq(users.id, userId)).run();
+    tx.update(refreshTokens).set({ revokedAt: now, revocationReason: "admin.user.password_reset", updatedAt: now }).where(and(eq(refreshTokens.userId, userId), sql`${refreshTokens.revokedAt} IS NULL`)).run();
+    tx.insert(auditEvents).values(buildAuditRecord({ actorUserId: actor.userId, sessionId: actor.sessionId, action: "admin.user.password_reset", targetType: "user", targetId: userId, reason, requiresReason: true, ...metadata }, now)).run();
+  });
+  return { temporaryPassword };
+}
+
+export function revokeUserSession(actor: Actor, userId: number, targetSessionId: number, reasonInput: unknown, metadata?: { ipAddress?: string | null; userAgent?: string | null }) {
+  const reason = requirePrivilegedReason(reasonInput);
+  const now = new Date();
+  return db.transaction((tx) => {
+    assertActor(tx, actor, now);
+    if (targetSessionId === actor.sessionId) throw new AdminConflictError("Administrators cannot revoke their current session here.");
+    const target = tx.select({ id: refreshTokens.id, revokedAt: refreshTokens.revokedAt }).from(refreshTokens).where(and(eq(refreshTokens.id, targetSessionId), eq(refreshTokens.userId, userId))).get();
+    if (!target) throw new AdminNotFoundError("Session not found.");
+    if (target.revokedAt) throw new AdminConflictError("Session is already revoked.");
+    tx.update(refreshTokens).set({ revokedAt: now, revocationReason: "admin.session.revoked", updatedAt: now }).where(eq(refreshTokens.id, targetSessionId)).run();
+    tx.insert(auditEvents).values(buildAuditRecord({ actorUserId: actor.userId, sessionId: actor.sessionId, action: "admin.session.revoked", targetType: "session", targetId: targetSessionId, reason, requiresReason: true, metadata: { userId }, ...metadata }, now)).run();
+    return { id: targetSessionId, revokedAt: now };
+  });
 }
 
 export async function listAuditEvents(filters: AuditFilters) {

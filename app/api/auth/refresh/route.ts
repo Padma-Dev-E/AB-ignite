@@ -42,6 +42,7 @@ async function sessionToken(userId: number, sessionId: number, sessionVersion: n
       name: user.name,
       email: user.email,
       role: user.role,
+      profile: user.profile,
       sessionId: String(sessionId),
       sessionVersion,
       accessTokenExpires: Date.now() + accessTokenTtlSeconds * 1000,
@@ -57,7 +58,7 @@ export async function POST(request: Request) {
 
   const result = rawToken
     ? await rotateRefreshToken(decodeURIComponent(rawToken), metadata)
-    : Number.isInteger(userId) && session?.isValid !== false ? await issueRefreshToken(userId, metadata) : null;
+    : Number.isInteger(userId) && session?.isValid !== false && !session?.user?.email?.endsWith("@demo.abignite.invalid") ? await issueRefreshToken(userId, metadata) : null;
 
   if (!result) return NextResponse.json({ ok: false, error: "Refresh token is invalid or expired." }, { status: 401 });
 
