@@ -30,6 +30,7 @@ import {
   useAdminTransformation,
   useAdminUsers,
 } from "../hooks";
+import { AdminEngagementManager } from "./admin-engagement-manager";
 import { AdminFeedbackResponses } from "./admin-feedback-responses";
 import { AdminPeopleManagement } from "./admin-people-management";
 import { AdminRewardCatalogueManager } from "./admin-reward-catalogue-manager";
@@ -1140,6 +1141,7 @@ function EngagementPanel() {
         title="Employee engagement"
         detail="Campaign feedback with accountable responses"
       />
+      <AdminEngagementManager />
       <AdminFeedbackResponses />
     </div>
   );

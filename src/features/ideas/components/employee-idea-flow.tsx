@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import React from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { ApiError } from "../../../lib/api/client";
@@ -33,6 +33,9 @@ import type {
   IdeaSubmissionInput,
   IdeaValidation,
 } from "../types";
+
+import { useEmployeeProfile } from "../../employee/profile-hooks";
+import { useLearningChallenges, useLearningRankings } from "../../learning/hooks";
 
 type Page =
   | "community"
@@ -169,13 +172,21 @@ function errorMessage(error: unknown) {
         : "Something went wrong. Please try again.";
 }
 
+const statusLabels: Record<Idea["status"], string> = {
+  screening: "Screening", returned: "Returned for changes", business_review: "Business review",
+  control_review: "Control review", decision: "Confirmation", poc: "Accepted: proof of concept",
+  implementation: "Implementation", implemented: "Impact", rejected: "Rejected", deferred: "Deferred",
+};
+
+// Some API versions include author metadata; otherwise retain the real author ID.
+function ideaAuthor(idea: Idea) {
+  const author = (idea as Idea & { author?: { name: string; department?: string } | null }).author;
+  return { name: author?.name || `Contributor #${idea.authorId}`, department: author?.department };
+}
+
 function IdeaCard({ idea, onOpen }: { idea: Idea; onOpen: () => void }) {
-  const tone =
-    idea.priorityBand === "Priority"
-      ? "#7c5ce0"
-      : idea.priorityBand === "Qualify"
-        ? "#12a383"
-        : "#2f80ed";
+  const author = ideaAuthor(idea);
+  const tone = idea.category.toLowerCase() === "customer" ? "#e94b87" : "#0e9ad6";
   const bandTone =
     idea.priorityBand === "Priority"
       ? "sand"
@@ -188,24 +199,25 @@ function IdeaCard({ idea, onOpen }: { idea: Idea; onOpen: () => void }) {
       style={{ borderTopColor: tone }}
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="pill text-blue border-blue/45">{idea.category}</span>
-        <StatusPill tone={bandTone}>
-          {idea.priorityBand ?? idea.status}
-        </StatusPill>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="pill border-transparent bg-blue/10 text-blue">{idea.category}</span>
+          {idea.priorityBand && <StatusPill tone={bandTone}>{idea.priorityBand}</StatusPill>}
+        </div>
+        <StatusPill tone={idea.status === "returned" ? "sand" : "blue"}>{statusLabels[idea.status]}</StatusPill>
       </div>
       <button
         onClick={onOpen}
-        className="mt-3 text-left text-base font-medium leading-snug hover:text-blue"
+        className="mt-4 text-left text-lg font-semibold leading-snug hover:text-blue"
       >
         {idea.kind === "problem" ? "🔎 " : ""}
         {idea.title}
       </button>
       <p className="mt-2 text-sm text-muted">{idea.summary}</p>
-      <div className="mt-3 flex items-center gap-2">
-        <Avatar name="padmadev" />
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <Avatar name={author.name} />
         <span className="flex-1 text-sm">
-          <b className="font-medium">Community member</b>{" "}
-          <span className="text-muted">Idea contributor</span>
+          <b className="font-medium">{author.name}</b>{" "}
+          <span className="text-muted">{author.department}</span>
         </span>
         <span className="font-mono text-xs tracking-[.08em] text-muted">
           {idea.reference}
@@ -232,6 +244,13 @@ export function EmployeeCommunityPage({
   onOpenIdea: (id: number) => void;
   points?: number;
 }) {
+  const profileQuery = useEmployeeProfile();
+  const challengesQuery = useLearningChallenges();
+  const rankingsQuery = useLearningRankings("bank");
+  const profile = profileQuery.data;
+  const rank = rankingsQuery.data?.items.find((item) => item.name === profile?.name && item.department === profile?.department);
+  const challenge = challengesQuery.data?.items[0];
+  const [showFeedback, setShowFeedback] = useState(false);
   const [filter, setFilter] = useState("Everything");
   const [query, setQuery] = useState("");
   const params = useMemo(
@@ -256,10 +275,10 @@ export function EmployeeCommunityPage({
   );
   return (
     <div className="stack">
-      <div className="flex flex-col justify-between gap-5 xl:flex-row">
+      <div className="flex flex-col justify-between gap-6 lg:flex-row lg:items-center">
         <div>
           <h1 className="text-[26px] font-medium tracking-[-.02em] sm:text-[32px]">
-            Good afternoon, padmadev <span>👋</span>
+            Hello{profile?.name ? `, ${profile.name}` : ""} <span aria-hidden="true">👋</span>
           </h1>
           <p className="mt-1.5 text-base text-muted">
             Your next idea could improve how we serve customers and each other.
@@ -271,22 +290,46 @@ export function EmployeeCommunityPage({
             <Icon name="spark" /> Share an idea
           </button>
         </div>
-        <div className="hero-surface rounded-[18px] p-5 text-white shadow-[0_18px_36px_-18px_var(--blue-deep)] sm:w-[340px]">
+        <div className="hero-surface rounded-[18px] p-5 text-white shadow-[0_18px_36px_-18px_var(--blue-deep)] w-full shrink-0 sm:w-[340px]">
           <div className="text-xs font-medium tracking-[.14em]">
-            AB IGNITE · LEVEL 1
+            AB IGNITE
           </div>
-          <div className="mt-8 text-[32px] font-semibold leading-none">
+          <div className="mt-4 h-7 w-10 rounded-md bg-gradient-to-br from-amber-200 to-amber-500" aria-hidden="true" />
+          <div className="mt-4 text-[36px] font-semibold leading-none">
             💡 {points.toLocaleString("en-US")}
           </div>
           <div className="mt-1 text-xs text-white/80">
             Ignite account balance, in points
           </div>
+          <div className="mt-5 flex flex-wrap justify-between gap-2 text-xs text-white/80">
+            <span>{profile?.name ?? "Your Ignite account"}</span>
+            {rank && <span>Rank {rank.rank} this season</span>}
+          </div>
         </div>
       </div>
-      <div className="grid gap-4 xl:grid-cols-2">
-        <EmployeeFeedbackCampaignForm />
-        <EmployeeNotificationsPanel />
+      <section className="hero-surface overflow-hidden rounded-[24px] p-6 text-white shadow-lg sm:p-8" aria-label="Feedback campaign">
+        <div className="[&>div]:border-0 [&>div]:bg-transparent [&>div]:p-0 [&>div]:shadow-none [&_h2]:text-2xl [&_p]:text-white/85 [&_span]:text-white [&_.field-label]:text-white [&_input]:text-ink [&_textarea]:text-ink [&_select]:text-ink [&_form]:rounded-xl [&_form]:bg-white/10 [&_form]:p-4">
+          <button className="mb-4 rounded-lg border border-white/50 px-4 py-2 text-sm font-medium" aria-expanded={showFeedback} onClick={() => setShowFeedback((value) => !value)}>
+            <span className="inline-flex items-center gap-2"><Icon name="msg" />{showFeedback ? "Close feedback form" : "Share Your Feedback"}</span>
+          </button>
+          <div className={showFeedback ? "" : "[&_form]:hidden"}><EmployeeFeedbackCampaignForm /></div>
+        </div>
+      </section>
+      <div className="grid items-stretch gap-5 md:grid-cols-2">
+        <section className="app-card">
+          <h2 className="text-xl font-semibold">Happening now</h2>
+          <div className="mt-5 divide-y divide-[var(--line)]">
+            <div className="pb-5">
+              <h3 className="font-medium">{challenge?.title ?? "Challenge of the month"}</h3>
+              {challengesQuery.isPending ? <p role="status" className="mt-2 text-sm text-muted">Loading challenges…</p> : challengesQuery.isError ? <p role="alert" className="mt-2 text-sm text-muted">{errorMessage(challengesQuery.error)} <button className="underline" onClick={() => void challengesQuery.refetch()}>Retry</button></p> : challenge ? <><p className="mt-1 text-sm leading-6 text-muted">{challenge.question}</p><p className="mt-2 text-xs text-muted">{challenge.participants} participants · closes {new Date(challenge.deadlineAt).toLocaleDateString()}</p><button className="btn btn-small mt-3" onClick={() => onNavigate("new")}>Share an idea</button></> : <p className="mt-2 text-sm text-muted">No open challenges right now.</p>}
+            </div>
+            <div className="py-5"><h3 className="font-medium">Grow your knowledge</h3><p className="mt-1 text-sm leading-6 text-muted">Find out where you stand and get reading picked for you.</p><button className="btn btn-small mt-3" onClick={() => onNavigate("learn")}>Take a quiz</button></div>
+            <div className="pt-5"><h3 className="font-medium">Season ranking</h3><p className="mt-1 text-sm text-muted">{rank ? `You are ranked ${rank.rank} across the bank.` : rankingsQuery.isPending ? "Loading ranking…" : rankingsQuery.isError ? "Ranking is temporarily unavailable." : "Explore the bank’s innovation champions."}</p><button className="btn btn-small mt-3" onClick={() => onNavigate("learn")}>See the ranking</button></div>
+          </div>
+        </section>
+        <section className="app-card" aria-label="What’s new"><h2 className="mb-4 text-xl font-semibold">What’s new</h2><div className="[&>div]:border-0 [&>div]:bg-transparent [&>div]:p-0 [&>div]:shadow-none [&_h2]:sr-only"><EmployeeNotificationsPanel /></div></section>
       </div>
+      <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="text-xl font-semibold">Ideas from across the bank</h2><span className="text-sm text-muted">{ideasQuery.data ? `${ideasQuery.data.total} shared` : "Community ideas"}</span></div>
       <div className="flex flex-wrap items-center gap-3">
         <div
           className="inline-flex max-w-full gap-0.5 overflow-x-auto rounded-xl border bg-white p-1"
@@ -295,6 +338,7 @@ export function EmployeeCommunityPage({
           {["Everything", "Ideas", "Problems", "Mine"].map((item) => (
             <button
               key={item}
+              aria-pressed={filter === item}
               onClick={() => setFilter(item)}
               className={`whitespace-nowrap rounded-[9px] px-3.5 py-2 text-[13.5px] font-medium ${filter === item ? "bg-blue text-white" : "text-muted hover:bg-[var(--hover)]"}`}
             >
@@ -369,8 +413,8 @@ export function EmployeeCommunityPage({
 
 const questionPrompts = [
   "Who experiences this problem today?",
-  "What evidence tells you it is worth solving?",
-  "Which teams or customers will benefit most?",
+  "What happens today?",
+  "What is needed to make this work?",
   "What could make the proposal difficult?",
   "How would you know the change worked?",
 ];
@@ -470,6 +514,7 @@ export function EmployeeIdeaSubmissionPage({
   const [submitError, setSubmitError] = useState<unknown>(null);
   const [developmentError, setDevelopmentError] = useState<string | null>(null);
   const [appliedRunId, setAppliedRunId] = useState<number | null>(null);
+  const validationSnapshot = useRef<string | null>(null);
   const [validatedContent, setValidatedContent] = useState<string | null>(null);
   const createMutation = useCreateIdea();
   const draftMutation = useUpdateIdeaDraft();
@@ -502,14 +547,14 @@ export function EmployeeIdeaSubmissionPage({
   );
   const enrichment =
     enrichmentRun?.status === "succeeded"
-      ? (enrichmentRun.result as IdeaEnrichment | null)
+      ? (enrichmentRun.result as (IdeaEnrichment & { solutionStatement?: string; riskStatement?: string }) | null)
       : null;
   const validation =
     validationRun?.status === "succeeded"
       ? (validationRun.result as IdeaValidation | null)
       : null;
   const validationPassed = validation?.decision === "accept";
-  const currentContent = JSON.stringify({ title, summary, details });
+  const currentContent = JSON.stringify({ kind, raw, title, summary, details });
   const validationIsCurrent = Boolean(
     validationRun &&
     created &&
@@ -550,6 +595,7 @@ export function EmployeeIdeaSubmissionPage({
     title.trim().length >= 3 &&
     summary.trim().length >= 10 &&
     answers.every((answer) => answer.trim().length > 0) &&
+    Object.values(impact).every((value) => value.trim().length > 0) &&
     [metrics.turnaround, metrics.volume, metrics.value].every(
       (value) => Number.isFinite(value) && value >= 0 && value <= 3,
     );
@@ -562,12 +608,14 @@ export function EmployeeIdeaSubmissionPage({
   useEffect(() => {
     if (!enrichment || !enrichmentRun || appliedRunId === enrichmentRun.id)
       return;
-    setTitle(enrichment.suggestedTitle);
-    setSummary(enrichment.conciseSummary);
+    setTitle((current) => current.trim() ? current : enrichment.suggestedTitle);
+    setSummary((current) => current.trim() ? current : enrichment.conciseSummary);
     setDetails((current) => ({
       ...current,
-      problem: enrichment.problemStatement,
-      benefits: enrichment.valueStatement,
+      problem: current.problem.trim() ? current.problem : enrichment.problemStatement,
+      benefits: current.benefits.trim() ? current.benefits : enrichment.valueStatement,
+      solution: current.solution.trim() ? current.solution : (enrichment.solutionStatement ?? current.solution),
+      risks: current.risks.trim() ? current.risks : (enrichment.riskStatement ?? current.risks),
     }));
     setAppliedRunId(enrichmentRun.id);
   }, [appliedRunId, enrichment, enrichmentRun]);
@@ -578,7 +626,7 @@ export function EmployeeIdeaSubmissionPage({
       created &&
       validationRun.ideaVersionId === created.versionId
     ) {
-      setValidatedContent((current) => current ?? currentContent);
+      setValidatedContent(validationSnapshot.current);
     }
   }, [created, currentContent, validation, validationRun]);
   const applyEnrichment = () => {
@@ -589,12 +637,20 @@ export function EmployeeIdeaSubmissionPage({
       ...current,
       problem: enrichment.problemStatement,
       benefits: enrichment.valueStatement,
+      solution: enrichment.solutionStatement ?? current.solution,
+      risks: enrichment.riskStatement ?? current.risks,
     }));
     setAppliedRunId(enrichmentRun.id);
   };
 
   const nextFromDescribe = () => {
-    if (raw.trim().length >= 10) dispatch(setIdeaWizardStep(2));
+    if (raw.trim().length < 10) return;
+    if (!title.trim()) setTitle(raw.trim().split("\n")[0].slice(0, 120));
+    if (!summary.trim()) setSummary(raw.trim());
+    if (!details[kind === "problem" ? "problem" : "solution"].trim()) {
+      setDetails((current) => ({ ...current, [kind === "problem" ? "problem" : "solution"]: raw.trim() }));
+    }
+    dispatch(setIdeaWizardStep(2));
   };
   const draftInput = (): IdeaCreateInput => ({
     kind,
@@ -641,6 +697,10 @@ export function EmployeeIdeaSubmissionPage({
     if (title.trim().length < 3 || summary.trim().length < 10) return;
     setDevelopmentError(null);
     try {
+      if (action === "validate") {
+        validationSnapshot.current = currentContent;
+        setValidatedContent(null);
+      }
       const draft = await syncDraft();
       await developmentMutation.mutateAsync({ id: draft.idea.id, action });
     } catch (error) {
@@ -1259,7 +1319,7 @@ export function EmployeeIdeaSubmissionPage({
             disabled={raw.trim().length < 10 || candidateQuery.isPending}
             onClick={nextFromDescribe}
           >
-            <Icon name="spark" /> Continue to develop
+            <Icon name="spark" /> Develop with AI<span className="sr-only"> — Continue to develop</span>
           </button>
         </div>
       )}
@@ -1301,6 +1361,8 @@ export function EmployeeIdeaDetailPage({
     risks: "",
   });
   const idea = detailQuery.data?.idea;
+  const author = idea ? ideaAuthor(idea) : { name: "Contributor", department: undefined };
+  const activeStage = idea ? ({ screening: 0, returned: 0, business_review: 1, control_review: 2, decision: 3, poc: 4, implementation: 5, implemented: 6, rejected: -1, deferred: -1 }[idea.status]) : -1;
   const comments =
     commentsQuery.data?.items ?? detailQuery.data?.comments.items ?? [];
   const startEdit = () => {
@@ -1366,43 +1428,32 @@ export function EmployeeIdeaDetailPage({
         <div className="flex flex-wrap items-center justify-between gap-2">
           <StatusPill tone="blue">{idea.category}</StatusPill>
           <StatusPill tone={idea.status === "returned" ? "sand" : "blue"}>
-            {idea.status.replaceAll("_", " ")}
+            {statusLabels[idea.status]}
           </StatusPill>
         </div>
         <h1 className="mt-4 text-[28px] font-medium leading-tight">
           {idea.title}
         </h1>
-        <div className="mt-3 flex items-center gap-2">
-          <Avatar name="padmadev" />
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <Avatar name={author.name} />
           <span className="text-sm">
-            <b className="font-medium">Community member</b>{" "}
-            <span className="text-muted">Technology</span>
+            <b className="font-medium">{author.name}</b>{" "}
+            <span className="text-muted">{author.department}</span>
           </span>
           <span className="ml-auto font-mono text-xs text-muted">
             {idea.reference}
           </span>
         </div>
-        <div className="my-5 grid grid-cols-7 gap-1.5">
-          {lifecycle.map((stage, index) => (
-            <div
-              key={stage}
-              className={`text-center text-[11px] ${index === 0 ? "text-sand" : "text-[var(--dim)]"}`}
-            >
-              <span
-                className={`mx-auto mb-1 grid h-8 w-8 place-items-center rounded-full border ${index === 0 ? "border-sand text-sand" : ""}`}
-                style={{
-                  borderColor:
-                    index === 0 ? "var(--sand)" : "var(--line-strong)",
-                }}
-              >
-                <Icon
-                  name={index === 0 ? "spark" : "check"}
-                  className="h-4 w-4"
-                />
-              </span>
-              <span className="hidden sm:block">{stage}</span>
-            </div>
-          ))}
+        <div className="my-7 overflow-x-auto pb-2" aria-label="Idea progress">
+          <ol className="grid min-w-[620px] grid-cols-7 gap-0">
+            {lifecycle.map((stage, index) => (
+              <li key={stage} aria-current={index === activeStage ? "step" : undefined} className={`relative text-center text-xs ${index === activeStage ? "text-sand" : index < activeStage ? "text-blue" : "text-muted"}`}>
+                {index < lifecycle.length - 1 && <span className="absolute left-1/2 right-[-50%] top-5 border-t border-[var(--line-strong)]" aria-hidden="true" />}
+                <span className={`relative mx-auto mb-2 grid h-10 w-10 place-items-center rounded-full border bg-white ${index === activeStage ? "border-sand ring-4 ring-sand/10" : "border-[var(--line-strong)]"}`}><Icon name={index < activeStage ? "check" : (["spark", "msg", "shield", "check", "bot", "arrow", "up"] as const)[index]} /></span>
+                <span>{stage}</span>
+              </li>
+            ))}
+          </ol>
         </div>
         {editing ? (
           <div className="space-y-4">
@@ -1478,7 +1529,7 @@ export function EmployeeIdeaDetailPage({
             >
               <Icon name="lock" className="mt-0.5 h-5 w-5 shrink-0 text-blue" />
               <div>
-                <b className="font-medium">Registered to its author</b>
+                <b className="font-medium">Registered to {author.name}{author.department ? `, ${author.department}` : ""}</b>
                 <p className="text-muted">
                   Record {idea.reference}. Supporters and commenters are
                   credited by name.
@@ -1503,7 +1554,7 @@ export function EmployeeIdeaDetailPage({
               <button
                 className="btn-primary"
                 disabled={supportMutation.isPending}
-                onClick={() => void supportMutation.mutateAsync(idea.id)}
+                onClick={() => supportMutation.mutate(idea.id)}
               >
                 <Icon name="up" />{" "}
                 {supportMutation.isPending
@@ -1566,6 +1617,7 @@ export function EmployeeIdeaDetailPage({
             className="input min-h-[76px]"
             value={comment}
             onChange={(event) => setComment(event.target.value)}
+            aria-label="Add a comment or a suggestion"
             placeholder="Add a comment or a suggestion"
           />
           <button

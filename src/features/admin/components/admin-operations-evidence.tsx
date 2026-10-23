@@ -101,10 +101,10 @@ export function AdminOperationsEvidence() {
     </Card>
     <Card>
       <h2 className="text-xl font-medium">Challenge and campaign operations</h2>
-      <p className="mt-1 text-sm text-muted">Challenges are currently view-only. Campaign feedback can be reviewed and answered using the existing secured response workflow.</p>
+      <p className="mt-1 text-sm text-muted">Manage challenges, campaigns and announcements in Engagement. Campaign feedback can be reviewed and answered through the secured response workflow.</p>
       {challenges.isPending ? <p className="mt-4 text-sm text-muted" role="status">Loading challenges…</p> : challenges.isError ? <p className="mt-4 text-sm text-pink" role="alert">Challenge list is unavailable.</p> : <div className="mt-4 space-y-2">{challenges.data?.items.length ? challenges.data.items.map((challenge) => <article key={challenge.id} className="rounded-xl border p-3" style={{ borderColor: "var(--line)" }}><div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-medium">{challenge.title}</h3><span className="pill">{challenge.participants} participants · {challenge.points} points</span></div><p className="mt-1 text-sm text-muted">{challenge.question}</p><p className="mt-2 text-xs text-muted">Closes {new Intl.DateTimeFormat("en", { dateStyle: "medium" }).format(new Date(challenge.deadlineAt))}</p></article>) : <p className="text-sm text-muted">No active challenges are available.</p>}</div>}
       <div className="mt-5 border-t pt-5" style={{ borderColor: "var(--line)" }}><AdminFeedbackResponses /></div>
-      <div className="mt-5 rounded-xl border border-dashed p-4" style={{ borderColor: "var(--line-strong)" }}><h3 className="font-medium">Announcements</h3><p className="mt-1 text-sm text-muted">No secured admin announcement list or management endpoint is present. This control is unavailable until a bank-authorized endpoint exists.</p></div>
+      <div className="mt-5 rounded-xl border border-dashed p-4" style={{ borderColor: "var(--line-strong)" }}><h3 className="font-medium">Announcements</h3><p className="mt-1 text-sm text-muted">Create and pin announcements in the Engagement workspace. Each change requires an audit reason.</p></div>
     </Card>
   </div>;
 }

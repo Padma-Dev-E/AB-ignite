@@ -17,13 +17,18 @@ export function AdminFeedbackResponses({ className = "" }: AdminFeedbackResponse
   const [drafts, setDrafts] = useState<Record<number, string>>({});
   const [errors, setErrors] = useState<Record<number, string>>({});
   const [success, setSuccess] = useState<Record<number, string>>({});
+  const [requestedPage, setRequestedPage] = useState(1);
 
   if (feedback.isPending) return <section className={`app-card ${className}`} aria-busy="true"><p className="text-sm text-muted" role="status">Loading campaign feedback…</p></section>;
   if (feedback.isError) return <section className={`app-card ${className}`}><p className="text-sm text-[#d6336c]" role="alert">{feedback.error instanceof Error ? feedback.error.message : "Feedback could not be loaded."}</p><button type="button" className="btn mt-3" onClick={() => void feedback.refetch()}>Try again</button></section>;
 
   const items = Array.isArray(feedback.data?.items) ? feedback.data.items : [];
+  const pageSize = 10;
+  const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
+  const page = Math.min(requestedPage, totalPages);
+  const visibleItems = items.slice((page - 1) * pageSize, page * pageSize);
   const campaigns = new Map<number, typeof items>();
-  for (const item of items) campaigns.set(item.campaignId, [...(campaigns.get(item.campaignId) ?? []), item]);
+  for (const item of visibleItems) campaigns.set(item.campaignId, [...(campaigns.get(item.campaignId) ?? []), item]);
 
   async function submit(event: FormEvent<HTMLFormElement>, id: number) {
     event.preventDefault();
@@ -55,7 +60,7 @@ export function AdminFeedbackResponses({ className = "" }: AdminFeedbackResponse
           <Button variant="primary" type="submit" disabled={respond.isPending || !(drafts[item.id] ?? "").trim()}>{respond.isPending ? "Sending…" : "Send response"}</Button>
         </form>}
       </article>)}</div>
-    </section>)}</div>}
+    </section>)}{totalPages > 1 && <nav aria-label="Campaign feedback pages" className="flex items-center justify-between gap-3 border-t pt-4 text-sm"><button className="btn btn-small" type="button" disabled={page === 1} onClick={() => setRequestedPage(page - 1)}>Previous</button><span>Page {page} of {totalPages}</span><button className="btn btn-small" type="button" disabled={page >= totalPages} onClick={() => setRequestedPage(page + 1)}>Next</button></nav>}</div>}
   </section>;
 }
 

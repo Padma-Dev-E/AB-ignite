@@ -17,6 +17,7 @@ test("admin learning requests target secured routes and retain audited reasons",
     assert.deepEqual(requests.map((request) => request.url), ["/api/admin/learning/quizzes?limit=100", "/api/admin/learning/quiz-versions/7/questions", "/api/admin/learning/quiz-versions/7/questions", "/api/admin/learning/articles?limit=100", "/api/admin/learning/articles", "/api/admin/learning/articles/3"]);
     assert.equal(requests[2].init?.method, "PATCH");
     assert.equal(JSON.parse(String(requests[2].init?.body)).reason, "Fix answer");
+    assert.equal(JSON.parse(String(requests[2].init?.body)).questionId, 9);
     assert.equal(requests[2].init?.headers && new Headers(requests[2].init.headers).get("Idempotency-Key"), "question-update-key");
     assert.equal(requests[4].init?.method, "POST");
     assert.equal(JSON.parse(String(requests[4].init?.body)).reason, "Content review");

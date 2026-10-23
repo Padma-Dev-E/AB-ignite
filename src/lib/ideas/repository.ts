@@ -86,7 +86,7 @@ export type CreateIdeaReviewInput = typeof ideaReviews.$inferInsert;
 export type IdeaActor = { kind: "user" | "admin"; id: string };
 
 export type IdeaPage = {
-  items: Idea[];
+  items: Array<Idea & { author: Pick<typeof users.$inferSelect, "id" | "name" | "department"> | null; supported: boolean }>;
   page: number;
   pageSize: number;
   total: number;
@@ -343,18 +343,23 @@ export async function listIdeas(actor: IdeaActor, query: Pick<IdeaListQuery, "pa
   }
   const where = filters.length ? and(...filters) : undefined;
   const { limit, offset } = pageBounds(query.page, query.pageSize);
-  const [items, totalRow] = await Promise.all([
-    db.select().from(ideas).where(where).orderBy(desc(ideas.createdAt), desc(ideas.id)).limit(limit).offset(offset).all(),
+  const [rows, totalRow] = await Promise.all([
+    db.select({ idea: ideas, author: { id: users.id, name: users.name, department: users.department },
+      supported: sql<number>`exists (select 1 from ${ideaSupports} where ${ideaSupports.ideaId} = ${ideas.id} and ${ideaSupports.userId} = ${userId})`,
+    }).from(ideas).leftJoin(users, eq(users.id, ideas.authorId)).where(where)
+      .orderBy(desc(ideas.createdAt), desc(ideas.id)).limit(limit).offset(offset).all(),
     db.select({ count: sql<number>`count(*)` }).from(ideas).where(where).all(),
   ]);
   const total = Number(totalRow[0]?.count ?? 0);
+  const items = rows.map(({ idea, author, supported }) => ({ ...idea, author, supported: Boolean(supported) }));
   return { items, page: query.page, pageSize: query.pageSize, total, totalPages: Math.ceil(total / query.pageSize) };
 }
 
-export async function getIdeaById(ideaId: number): Promise<Idea | null> {
+export async function getIdeaById(ideaId: number): Promise<(Idea & { author: Pick<typeof users.$inferSelect, "id" | "name" | "department"> | null }) | null> {
   if (!Number.isInteger(ideaId) || ideaId < 1) return null;
-  const [idea] = await db.select().from(ideas).where(eq(ideas.id, ideaId)).limit(1).all();
-  return idea ?? null;
+  const [row] = await db.select({ idea: ideas, author: { id: users.id, name: users.name, department: users.department } })
+    .from(ideas).leftJoin(users, eq(users.id, ideas.authorId)).where(eq(ideas.id, ideaId)).limit(1).all();
+  return row ? { ...row.idea, author: row.author } : null;
 }
 
 export async function getIdeaSubmissionDetails(ideaId: number) {

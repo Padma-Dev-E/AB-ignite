@@ -4,7 +4,7 @@ import {
   adminApiError,
   CAPABILITIES,
 } from "../../../../../../../src/lib/admin/http";
-import { positiveId } from "../../../../../../../src/lib/admin/query";
+import { positiveId, AdminNotFoundError } from "../../../../../../../src/lib/admin/query";
 import {
   getAdminQuizQuestions,
   updateAdminQuestion,
@@ -20,6 +20,7 @@ import {
 import { ok, requestId } from "../../../../../../../src/lib/http/errors";
 import { z } from "zod";
 const schema = z.strictObject({
+  questionId: z.number().int().positive(),
   reason: z.unknown(),
   prompt: z.string().trim().min(1).max(3000),
   topic: z.string().trim().min(1).max(120),
@@ -64,7 +65,12 @@ export async function PATCH(
   try {
     const actor = await adminAccess(await auth(), CAPABILITIES.SETTINGS_MANAGE);
     const input = schema.parse(await request.json());
-    const { reason, ...question } = input;
+    const { reason, questionId, ...question } = input;
+    const versionId = positiveId((await params).id);
+    const questions = await getAdminQuizQuestions(versionId);
+    if (!questions.some((item) => item.id === questionId)) {
+      throw new AdminNotFoundError("Question not found in this quiz version.");
+    }
     return ok(
       await updateAdminQuestion(
         {
@@ -73,7 +79,7 @@ export async function PATCH(
           reason,
           ...requestAuditMetadata(request),
         },
-        positiveId((await params).id),
+        questionId,
         question,
         idempotencyKey(request),
       ),

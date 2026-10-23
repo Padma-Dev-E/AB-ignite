@@ -177,6 +177,8 @@ export const IdeaEnrichmentOutputSchema = z.strictObject({
   conciseSummary: boundedText(1_000),
   problemStatement: boundedText(2_000),
   valueStatement: boundedText(2_000),
+  solutionStatement: boundedText(2_000).optional(),
+  riskStatement: boundedText(2_000).optional(),
   tags: z.array(boundedText(80)).max(20),
   taxonomy: z.array(boundedText(120)).max(10),
   affectedTeams: z.array(boundedText(120)).max(20),

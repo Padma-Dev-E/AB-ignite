@@ -1,5 +1,7 @@
 "use client";
 
+import { AccountOverview } from "../src/features/account/account-page";
+
 import {
   Dialog,
   DialogPanel,
@@ -1750,29 +1752,7 @@ function RewardsPage() {
 }
 
 function AccountPage({ onNavigate }: { onNavigate: (page: Page) => void }) {
-  return (
-    <div className="stack">
-      <Hero
-        art="arena"
-        title="My account"
-        subtitle="Your profile, idea history and Ignite journey."
-      />
-      <EmployeeProfileCard />
-      <section className="app-card">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="text-xl font-medium">My ideas</h2>
-            <p className="mt-1 text-sm text-muted">
-              Your submitted ideas and workflow updates appear in Community.
-            </p>
-          </div>
-          <button className="btn-primary" onClick={() => onNavigate("new")}>
-            Share an idea
-          </button>
-        </div>
-      </section>
-    </div>
-  );
+  return <AccountOverview onNavigate={onNavigate} />;
 }
 
 function LegacyAccountPage({
@@ -1874,7 +1854,7 @@ function LiveLearnPage() {
       <Hero
         art="arena"
         title="Ignite Your Knowledge"
-        subtitle="Build confidence in banking, transformation and technology — one useful question at a time."
+        subtitle="Challenge yourself, learn from your gaps and watch your skills grow."
       />
       <Tabs
         items={["My journey", "Quizzes", "Ranking", "Challenges"]}
@@ -1914,12 +1894,13 @@ function LiveLearnPage() {
 
 function LiveLibraryPage({ onArticle }: { onArticle: (id: number) => void }) {
   const [tab, setTab] = useState("All");
+  const [page, setPage] = useState(1);
   const categoryMap: Record<string, string | undefined> = {
     All: undefined,
     Recommended: undefined,
-    Banking: "banking",
-    Transformation: "transformation",
-    Technology: "technology",
+    "Banking Excellence": "banking",
+    "Innovation & Business Transformation": "transformation",
+    "Technology & AI": "technology",
   };
   const category = categoryMap[tab];
   const articlesQuery = useArticles(category);
@@ -1929,23 +1910,26 @@ function LiveLibraryPage({ onArticle }: { onArticle: (id: number) => void }) {
   const items = isRecommended
     ? (recommendations.data?.items ?? [])
     : (articlesQuery.data?.items ?? []);
+  const pageSize = 12;
+  const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
+  const visibleItems = items.slice((page - 1) * pageSize, page * pageSize);
   return (
     <div className="stack">
       <Hero
         art="library"
         title="Library"
-        subtitle="Practical reading for better ideas, sharper decisions and stronger outcomes."
+        subtitle="Reading on banking, transformation and technology. Articles recommended from your quiz results are marked."
       />
       <Tabs
         items={[
           "All",
           "Recommended",
-          "Banking",
-          "Transformation",
-          "Technology",
+          "Banking Excellence",
+          "Innovation & Business Transformation",
+          "Technology & AI",
         ]}
         active={tab}
-        onChange={setTab}
+        onChange={(nextTab) => { setTab(nextTab); setPage(1); }}
       />
       {query.isPending ? (
         <LearningState state="loading" label="Loading the library…" />
@@ -1955,11 +1939,16 @@ function LiveLibraryPage({ onArticle }: { onArticle: (id: number) => void }) {
           label="The library could not be loaded."
           onRetry={() => void query.refetch()}
         />
+      ) : !items.length ? (
+        <LearningState state="empty" label={isRecommended ? "No recommended reading yet. Complete a quiz to get reading suggestions for your topic gaps." : "No published articles in this category yet."} />
       ) : (
-        <ArticleList
-          articles={items}
-          onOpen={(article) => onArticle(article.id)}
-        />
+        <>
+          <ArticleList
+            articles={visibleItems}
+            onOpen={(article) => onArticle(article.id)}
+          />
+          {totalPages > 1 && <nav aria-label="Library pages" className="flex items-center justify-between gap-3 rounded-xl border bg-white p-3 text-sm"><button className="btn btn-small" type="button" disabled={page === 1} onClick={() => setPage(current => current - 1)}>Previous</button><span>Page {page} of {totalPages}</span><button className="btn btn-small" type="button" disabled={page >= totalPages} onClick={() => setPage(current => current + 1)}>Next</button></nav>}
+        </>
       )}
     </div>
   );

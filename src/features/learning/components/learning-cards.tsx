@@ -65,16 +65,22 @@ function ArticleInsightAction({ article }: { article: LearningArticle }) {
 }
 
 export function ArticleCard({ article, onOpen, onComplete, pending = false, completed = false, successMessage, errorMessage }: { article: LearningArticle; onOpen?: () => void; onComplete?: () => void; pending?: boolean; completed?: boolean; successMessage?: string; errorMessage?: string }) {
-  return <article className={panelClass} aria-labelledby={`article-${article.id}-title`}>
-    <p className="text-xs font-semibold uppercase tracking-wide text-indigo-800">{article.publisher} · {article.readingMinutes} min read</p>
-    <h3 id={`article-${article.id}-title`} className="mt-2 text-lg font-semibold text-slate-950">{article.title}</h3>
-    <p className="mt-1 text-sm text-slate-700">{article.summary}</p>
+  const categoryLabel = ({ banking: "Banking Excellence", transformation: "Innovation & Business Transformation", technology: "Technology & AI" } as Record<string, string>)[article.category] ?? article.category;
+  let source = article.contentType === "internal" ? "In-app article" : "External article";
+  if (article.sourceUrl) {
+    try { source = new URL(article.sourceUrl).hostname; } catch { /* Keep the content-type label for malformed source URLs. */ }
+  }
+  return <article className="h-full rounded-3xl border border-slate-200 border-l-[3px] border-l-blue-600 bg-white p-5 shadow-sm sm:p-7" aria-labelledby={`article-${article.id}-title`}>
+    <div className="flex items-center gap-3"><span aria-hidden="true" className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-blue-950 font-serif text-lg font-bold text-white">{article.publisher.split(/\s+/).filter(Boolean).slice(0, 2).map((word) => word.charAt(0)).join("").toUpperCase()}</span><div className="min-w-0"><p className="break-words text-sm font-semibold text-blue-600">{article.publisher}</p><p className="mt-1 break-words text-xs text-slate-500">{source}</p></div></div>
+    <h3 id={`article-${article.id}-title`} className="mt-4 text-lg font-bold leading-snug text-slate-900">{article.title}</h3>
+    <p className="mt-3 text-sm leading-relaxed text-slate-500">{article.summary}</p>
+    <div className="mt-4 flex flex-wrap items-center gap-2 text-xs"><span className="rounded-full border border-slate-200 px-3 py-1 font-semibold text-slate-600">{categoryLabel}</span><span className="rounded-full border border-blue-200 px-3 py-1 font-semibold capitalize text-blue-600">{article.difficulty}</span><span className="text-slate-500">{article.readingMinutes} min{article.topic ? ` · ${article.topic}` : ""}</span></div>
     {article.recommendation && <ArticleInsightAction article={article} />}
-    <Disclosure>
+    {!onOpen && <Disclosure>
       <DisclosureButton className="mt-4 rounded-md text-sm font-medium text-indigo-800 underline decoration-indigo-300 underline-offset-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-700">Read article details</DisclosureButton>
       <DisclosurePanel className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-700">{article.body ?? (article.sourceUrl ? <a className="underline" href={article.sourceUrl} target="_blank" rel="noreferrer">Read at {article.publisher} (opens in a new tab)</a> : article.summary)}</DisclosurePanel>
-    </Disclosure>
-    <div className="mt-4 flex flex-wrap gap-2">{onOpen && <button className="inline-flex min-h-10 items-center justify-center rounded-lg border border-indigo-300 px-4 py-2 text-sm font-semibold text-indigo-800 hover:bg-indigo-50" type="button" onClick={onOpen}>Open article</button>}{onComplete && <button className={buttonClass} type="button" onClick={onComplete} disabled={pending || completed}>{pending ? "Saving…" : completed ? "Completed" : "Mark as read"}</button>}</div>
+    </Disclosure>}
+    <div className="mt-4 flex flex-wrap gap-2">{onOpen && <button className="inline-flex min-h-11 items-center justify-center rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600" type="button" onClick={onOpen}>Read</button>}{onComplete && <button className={buttonClass} type="button" onClick={onComplete} disabled={pending || completed}>{pending ? "Saving…" : completed ? "Completed" : "Mark as read"}</button>}</div>
     {successMessage && <p className="mt-3 text-sm text-emerald-800" role="status">{successMessage}</p>}{errorMessage && <p className="mt-3 text-sm text-red-800" role="alert">{errorMessage}</p>}
   </article>;
 }
