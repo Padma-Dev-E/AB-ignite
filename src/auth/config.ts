@@ -12,6 +12,8 @@ export const accessTokenTtlSeconds = positiveSeconds("AUTH_ACCESS_TOKEN_TTL_SECO
 export const refreshTokenTtlSeconds = positiveSeconds("AUTH_REFRESH_TOKEN_TTL_SECONDS", 2_592_000);
 export const sessionIdleSeconds = positiveSeconds("AUTH_SESSION_IDLE_SECONDS", 1_800);
 export const sessionAbsoluteSeconds = positiveSeconds("AUTH_SESSION_ABSOLUTE_SECONDS", 43_200);
+export const demoSessionSeconds = Math.min(positiveSeconds("DEMO_SESSION_TTL_SECONDS", 2_592_000), 2_592_000);
+export const demoAccessEnabled = process.env.DEMO_ACCESS_ENABLED === "true" || (process.env.NODE_ENV !== "production" && process.env.DEMO_ACCESS_ENABLED !== "false");
 export const authSecret = process.env.AUTH_SECRET ?? (process.env.NODE_ENV === "production" ? "" : "local-development-secret-change-me");
 export const secureCookies = process.env.NODE_ENV === "production";
 

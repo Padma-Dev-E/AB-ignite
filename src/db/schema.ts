@@ -240,6 +240,18 @@ export const notifications = sqliteTable("notifications", {
   ...timestamps,
 }, (table) => [index("notifications_user_idx").on(table.userId, table.isRead)]);
 
+export const notificationEmailDeliveries = sqliteTable("notification_email_deliveries", {
+  notificationId: integer().primaryKey().references(() => notifications.id, { onDelete: "cascade" }),
+  status: text({ enum: ["pending", "sending", "sent", "failed", "skipped"] }).notNull().default("pending"),
+  attempts: integer().notNull().default(0),
+  claimToken: text(),
+  claimedUntil: integer({ mode: "timestamp_ms" }),
+  nextAttemptAt: integer({ mode: "timestamp_ms" }),
+  sentAt: integer({ mode: "timestamp_ms" }),
+  lastErrorCode: text(),
+  ...timestamps,
+}, (table) => [index("notification_email_delivery_retry_idx").on(table.status, table.nextAttemptAt)]);
+
 export const articles = sqliteTable("articles", {
   id: integer().primaryKey({ autoIncrement: true }),
   title: text().notNull(),
@@ -818,6 +830,7 @@ export const schema = {
   ideaComments,
   ideaSupports,
   notifications,
+  notificationEmailDeliveries,
   articles,
   articleCompletions,
   feedbackCampaigns,

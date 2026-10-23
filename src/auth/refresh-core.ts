@@ -4,7 +4,7 @@ import { db } from "../db/connection";
 import { refreshTokens, users } from "../db/schema";
 import { hashAuditValue } from "../lib/audit/redaction-core";
 import { isSessionActive, SESSION_ABSOLUTE_MS, SESSION_IDLE_MS } from "./security-core";
-import { refreshTokenTtlSeconds } from "./config";
+import { demoSessionSeconds, refreshTokenTtlSeconds } from "./config";
 
 export function hashRefreshToken(token: string) {
   return createHash("sha256").update(token).digest("hex");
@@ -14,9 +14,7 @@ function newRawToken() {
   return randomBytes(32).toString("base64url");
 }
 
-function expiryFrom(now: Date) {
-  return new Date(now.getTime() + refreshTokenTtlSeconds * 1000);
-}
+const isDemo = (email: string) => email.endsWith("@demo.abignite.invalid");
 
 export type RefreshMetadata = { userAgent?: string | null; ipAddress?: string | null };
 
@@ -27,16 +25,21 @@ function insertRefreshToken(
   now: Date,
   rotatedFromId: number | null,
   metadata?: RefreshMetadata,
-  absoluteExpiresAt = new Date(now.getTime() + SESSION_ABSOLUTE_MS),
+  absoluteExpiresAt?: Date,
 ) {
+  const [user] = executor.select({ email: users.email }).from(users).where(eq(users.id, userId)).limit(1).all();
+  if (!user) throw new Error("Session user no longer exists");
+  const demo = isDemo(user.email);
+  const ttlMs = (demo ? demoSessionSeconds : refreshTokenTtlSeconds) * 1000;
+  const boundedAbsoluteExpiresAt = absoluteExpiresAt ?? new Date(now.getTime() + (demo ? ttlMs : SESSION_ABSOLUTE_MS));
   const rawToken = newRawToken();
-  const idleExpiresAt = new Date(now.getTime() + SESSION_IDLE_MS);
+  const idleExpiresAt = new Date(Math.min(now.getTime() + (demo ? ttlMs : SESSION_IDLE_MS), boundedAbsoluteExpiresAt.getTime()));
   const [record] = executor.insert(refreshTokens).values({
     userId,
     tokenHash: hashRefreshToken(rawToken),
-    expiresAt: expiryFrom(now),
+    expiresAt: new Date(Math.min(now.getTime() + ttlMs, boundedAbsoluteExpiresAt.getTime())),
     idleExpiresAt,
-    absoluteExpiresAt,
+    absoluteExpiresAt: boundedAbsoluteExpiresAt,
     ipHash: hashAuditValue(metadata?.ipAddress),
     userAgentHash: hashAuditValue(metadata?.userAgent),
     lastSeenAt: now,

@@ -18,5 +18,12 @@ export default function LoginPage() {
     router.refresh();
   }
 
-  return <LoginScreen showDemo={false} onCredentials={authenticate} />;
+  async function joinDemo(details: { name: string; department: string }) {
+    const response = await fetch("/api/demo/session", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify(details) });
+    if (!response.ok) throw new Error(response.status === 403 ? "Demo entry is unavailable." : "Unable to create a demo session. Please try again.");
+    router.replace("/private");
+    router.refresh();
+  }
+
+  return <LoginScreen onEnter={joinDemo} onCredentials={authenticate} />;
 }
