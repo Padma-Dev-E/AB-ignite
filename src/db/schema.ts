@@ -227,8 +227,55 @@ export const articles = sqliteTable("articles", {
   readingMinutes: integer().notNull(),
   publishedLabel: text(),
   url: text(),
+  published: integer({ mode: "boolean" }).notNull().default(false),
+  contentType: text({ enum: ["internal", "external"] }).notNull().default("internal"),
+  categoryCode: text().notNull().default("general"),
   ...timestamps,
 }, (table) => [index("articles_category_idx").on(table.category)]);
+
+export const articleCompletions = sqliteTable("article_completions", {
+  id: integer().primaryKey({ autoIncrement: true }),
+  userId: integer().notNull().references(() => users.id, { onDelete: "cascade" }),
+  articleId: integer().notNull().references(() => articles.id, { onDelete: "cascade" }),
+  recommendationId: integer().references(() => quizRecommendations.id, { onDelete: "set null" }),
+  idempotencyKey: text().notNull(),
+  pointsAwarded: integer().notNull().default(0),
+  completedAt: integer({ mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
+}, (table) => [
+  uniqueIndex("article_completions_user_article_unique").on(table.userId, table.articleId),
+  uniqueIndex("article_completions_idempotency_unique").on(table.userId, table.idempotencyKey),
+  index("article_completions_user_idx").on(table.userId, table.completedAt),
+]);
+
+export const feedbackCampaigns = sqliteTable("feedback_campaigns", {
+  id: integer().primaryKey({ autoIncrement: true }),
+  title: text().notNull(),
+  description: text().notNull(),
+  active: integer({ mode: "boolean" }).notNull().default(true),
+  pinned: integer({ mode: "boolean" }).notNull().default(false),
+  startsAt: integer({ mode: "timestamp_ms" }),
+  endsAt: integer({ mode: "timestamp_ms" }),
+  createdBy: integer().references(() => users.id, { onDelete: "set null" }),
+  ...timestamps,
+}, (table) => [index("feedback_campaigns_active_idx").on(table.active, table.pinned)]);
+
+export const feedbackResponses = sqliteTable("feedback_responses", {
+  id: integer().primaryKey({ autoIncrement: true }),
+  campaignId: integer().notNull().references(() => feedbackCampaigns.id, { onDelete: "cascade" }),
+  userId: integer().notNull().references(() => users.id, { onDelete: "cascade" }),
+  category: text({ enum: ["experience", "ideas", "content", "technical", "other"] }).notNull(),
+  message: text().notNull(),
+  idempotencyKey: text().notNull(),
+  respondedBy: integer().references(() => users.id, { onDelete: "set null" }),
+  response: text(),
+  respondedAt: integer({ mode: "timestamp_ms" }),
+  createdAt: integer({ mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer({ mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
+}, (table) => [
+  uniqueIndex("feedback_responses_user_key_unique").on(table.userId, table.idempotencyKey),
+  index("feedback_responses_campaign_idx").on(table.campaignId, table.createdAt),
+  index("feedback_responses_user_idx").on(table.userId, table.createdAt),
+]);
 
 export const quizzes = sqliteTable("quizzes", {
   id: integer().primaryKey({ autoIncrement: true }),
@@ -744,6 +791,9 @@ export const schema = {
   ideaSupports,
   notifications,
   articles,
+  articleCompletions,
+  feedbackCampaigns,
+  feedbackResponses,
   quizzes,
   quizCategories,
   quizVersions,
