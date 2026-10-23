@@ -7,8 +7,9 @@ import { isActiveNav, NAV_ITEMS, pageTitle } from "../src/lib/navigation";
 import { Button, IconBox, SectionHeading, StatTile } from "../src/components/ui";
 import { LoginScreen as AuthLoginScreen } from "../src/components/auth/login-screen";
 import { EmployeeCommunityPage, EmployeeIdeaDetailPage, EmployeeIdeaSubmissionPage } from "../src/features/ideas/components/employee-idea-flow";
-import { ArticleList, JourneyCard, LearningState, QuizList } from "../src/features/learning/components/learning-cards";
-import { useArticles, useCompleteArticle, useLearningArticle, useLearningJourney, useLearningRecommendations, useQuizzes, useStartQuizAttempt } from "../src/features/learning/hooks";
+import { ArticleList, JourneyCard, LearningState } from "../src/features/learning/components/learning-cards";
+import { QuizJourney } from "../src/features/learning/components/quiz-journey";
+import { useArticles, useCompleteArticle, useLearningArticle, useLearningJourney, useLearningRecommendations } from "../src/features/learning/hooks";
 import { ArticleCard } from "../src/features/learning/components/learning-cards";
 import { useRedemptions, useRequestRedemption, useRewards } from "../src/features/rewards/hooks";
 import { RedemptionHistory, RewardCatalogue, RewardsBalanceCard, RewardsState } from "../src/features/rewards/components/reward-cards";
@@ -206,14 +207,10 @@ function AccountPage({ onNavigate }: { onNavigate: (page: Page) => void }) {
 function LiveLearnPage() {
   const [tab, setTab] = useState("My journey");
   const journey = useLearningJourney();
-  const quizzes = useQuizzes();
-  const startAttempt = useStartQuizAttempt();
-  const [startedQuiz, setStartedQuiz] = useState<number | null>(null);
   const journeyState = journey.isPending ? "loading" : journey.isError ? "error" : "success" as const;
   return <div className="stack"><Hero art="arena" title="Ignite Your Knowledge" subtitle="Build confidence in banking, transformation and technology — one useful question at a time." /><Tabs items={["My journey", "Quizzes"]} active={tab} onChange={setTab} />
     {tab === "My journey" && <>{journey.data ? <JourneyCard journey={journey.data} /> : <LearningState state={journeyState} label={journey.isError ? "Your learning journey could not be loaded." : "Loading your learning journey…"} onRetry={() => void journey.refetch()} />}<button className="btn-primary self-start" type="button" onClick={() => setTab("Quizzes")}>Take a quiz</button></>}
-    {tab === "Quizzes" && (quizzes.isPending ? <LearningState state="loading" label="Loading quizzes…" /> : quizzes.isError ? <LearningState state="error" label="Quizzes could not be loaded." onRetry={() => void quizzes.refetch()} /> : <QuizList quizzes={quizzes.data.items} pendingQuizId={startAttempt.isPending ? startedQuiz ?? undefined : undefined} onStart={(quiz) => { setStartedQuiz(quiz.id); startAttempt.mutate({ quizId: quiz.id }, { onSettled: () => setStartedQuiz(null) }); }} />)}
-    {startAttempt.isSuccess && <p className="rounded-xl border border-teal/30 bg-teal/10 p-3 text-sm text-[#0e9f7a]" role="status">Quiz started. Your attempt is saved and ready for the timed questions.</p>}{startAttempt.isError && <p className="rounded-xl border border-pink/30 bg-pink/10 p-3 text-sm text-[#d6336c]" role="alert">{startAttempt.error instanceof Error ? startAttempt.error.message : "The quiz could not be started."}</p>}
+    {tab === "Quizzes" && <QuizJourney />}
   </div>;
 }
 
