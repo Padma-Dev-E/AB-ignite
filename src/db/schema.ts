@@ -160,6 +160,17 @@ export const ideaComments = sqliteTable("idea_comments", {
   ...timestamps,
 }, (table) => [index("idea_comments_idea_idx").on(table.ideaId)]);
 
+export const ideaSupports = sqliteTable("idea_supports", {
+  id: integer().primaryKey({ autoIncrement: true }),
+  ideaId: integer().notNull().references(() => ideas.id, { onDelete: "cascade" }),
+  userId: integer().notNull().references(() => users.id, { onDelete: "cascade" }),
+  createdAt: integer({ mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
+}, (table) => [
+  uniqueIndex("idea_supports_idea_user_unique").on(table.ideaId, table.userId),
+  index("idea_supports_idea_idx").on(table.ideaId),
+  index("idea_supports_user_idx").on(table.userId),
+]);
+
 export const notifications = sqliteTable("notifications", {
   id: integer().primaryKey({ autoIncrement: true }),
   userId: integer().notNull().references(() => users.id, { onDelete: "cascade" }),
@@ -223,6 +234,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   ideaVersions: many(ideaVersions),
   comments: many(ideaComments),
   notifications: many(notifications),
+  supports: many(ideaSupports),
   rewards: many(userRewards),
   refreshTokens: many(refreshTokens),
   aiRuns: many(aiRuns),
@@ -237,6 +249,7 @@ export const refreshTokensRelations = relations(refreshTokens, ({ one }) => ({
 export const ideasRelations = relations(ideas, ({ one, many }) => ({
   author: one(users, { fields: [ideas.authorId], references: [users.id] }),
   comments: many(ideaComments),
+  supports: many(ideaSupports),
   versions: many(ideaVersions),
   aiRuns: many(aiRuns),
   aiResults: many(ideaAiResults),
@@ -281,6 +294,11 @@ export const ideaCommentsRelations = relations(ideaComments, ({ one }) => ({
   author: one(users, { fields: [ideaComments.authorId], references: [users.id] }),
 }));
 
+export const ideaSupportsRelations = relations(ideaSupports, ({ one }) => ({
+  idea: one(ideas, { fields: [ideaSupports.ideaId], references: [ideas.id] }),
+  user: one(users, { fields: [ideaSupports.userId], references: [users.id] }),
+}));
+
 export const notificationsRelations = relations(notifications, ({ one }) => ({
   user: one(users, { fields: [notifications.userId], references: [users.id] }),
 }));
@@ -300,6 +318,7 @@ export const schema = {
   ideaEvents,
   ideaReviews,
   ideaComments,
+  ideaSupports,
   notifications,
   articles,
   quizzes,
@@ -319,3 +338,5 @@ export type NewAiRun = typeof aiRuns.$inferInsert;
 export type IdeaAiResult = typeof ideaAiResults.$inferSelect;
 export type IdeaEvent = typeof ideaEvents.$inferSelect;
 export type IdeaReview = typeof ideaReviews.$inferSelect;
+export type IdeaComment = typeof ideaComments.$inferSelect;
+export type IdeaSupport = typeof ideaSupports.$inferSelect;

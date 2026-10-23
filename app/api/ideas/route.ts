@@ -1,9 +1,9 @@
-import { desc, eq } from "drizzle-orm";
 import { createHash, randomBytes } from "node:crypto";
 import { auth } from "../../../auth";
 import { db } from "../../../src/db/connection";
 import { ideaEvents, ideaVersions, ideas } from "../../../src/db/schema";
-import { IdeaInputSchema } from "../../../src/lib/ideas/schemas";
+import { IdeaInputSchema, IdeaListQuerySchema } from "../../../src/lib/ideas/schemas";
+import { listIdeas } from "../../../src/lib/ideas/repository";
 import { apiError, handleApiError, ok, requestId } from "../../../src/lib/http/errors";
 
 function sessionUserId(session: { user?: { id?: string | null } } | null) {
@@ -17,10 +17,8 @@ export async function GET(request: Request) {
     const session = await auth();
     const userId = sessionUserId(session);
     if (!session?.user || !userId) return apiError("unauthorized", "Authentication required.", 401, id);
-    const rows = session.user.role === "admin"
-      ? await db.select().from(ideas).orderBy(desc(ideas.createdAt)).all()
-      : await db.select().from(ideas).where(eq(ideas.authorId, userId)).orderBy(desc(ideas.createdAt)).all();
-    return ok(rows, 200, id);
+    const query = IdeaListQuerySchema.parse(Object.fromEntries(new URL(request.url).searchParams.entries()));
+    return ok(await listIdeas({ kind: session.user.role, id: String(userId) }, query), 200, id);
   } catch (error) {
     return handleApiError(error, id);
   }

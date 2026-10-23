@@ -22,6 +22,47 @@ export const IdeaInputSchema = z.strictObject({
 
 export type IdeaInput = z.infer<typeof IdeaInputSchema>;
 
+const paginationNumber = (fallback: number, max?: number) => z.preprocess(
+  (value) => value === undefined || value === "" ? fallback : Number(value),
+  z.number().int().min(1).transform((value) => max ? Math.min(value, max) : value),
+);
+
+export const IdeaListQuerySchema = z.strictObject({
+  page: paginationNumber(1),
+  pageSize: paginationNumber(20, 50),
+  search: z.string().trim().max(120).optional(),
+  category: z.string().trim().min(1).max(120).optional(),
+  status: z.enum(["screening", "returned", "business_review", "control_review", "decision", "poc", "implementation", "implemented", "rejected", "deferred"]).optional(),
+  mine: z.preprocess((value) => value === true || value === "true", z.boolean().default(false)),
+});
+
+export type IdeaListQuery = z.infer<typeof IdeaListQuerySchema>;
+
+export const IdeaUpdateSchema = z.strictObject({
+  kind: z.enum(["idea", "problem"]).optional(),
+  title: z.string().trim().min(3).max(200).optional(),
+  summary: z.string().trim().min(10).max(2_000).optional(),
+  problem: z.string().trim().max(5_000).nullable().optional(),
+  solution: z.string().trim().max(5_000).nullable().optional(),
+  benefits: z.string().trim().max(5_000).nullable().optional(),
+  risks: z.string().trim().max(5_000).nullable().optional(),
+  category: z.string().trim().min(1).max(120).optional(),
+  dataClassification: z.enum(["public", "internal", "confidential", "restricted"]).optional(),
+});
+
+export type IdeaUpdate = z.infer<typeof IdeaUpdateSchema>;
+
+export const IdeaCommentSchema = z.strictObject({
+  body: z.string().trim().min(1).max(2_000),
+});
+
+export const CommentListQuerySchema = z.strictObject({
+  page: paginationNumber(1),
+  pageSize: paginationNumber(20, 50),
+});
+
+export type CommentListQuery = z.infer<typeof CommentListQuerySchema>;
+
 const boundedText = (max: number) => z.string().trim().min(1).max(max);
 const ideaStatusSchema = z.enum(["screening", "returned", "business_review", "control_review", "decision", "poc", "implementation", "implemented", "rejected", "deferred"]);
 
