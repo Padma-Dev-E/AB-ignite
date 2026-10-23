@@ -2,15 +2,15 @@
 
 Status audit for [`ab_ignite_user_stories.md`](./ab_ignite_user_stories.md).
 
-Audited against the local branch through employee workflow/admin controls commit `b111e03` on 2026-10-23. A story is marked **Complete** only when its acceptance criteria are implemented end-to-end. **Partial** means code or UI exists, but one or more acceptance criteria are still missing. **Not started** means there is no functional implementation for the acceptance criteria; a static mock does not count as complete.
+Audited against the local branch through admin queue/settings UI commit `f3b0171` on 2026-10-23. A story is marked **Complete** only when its acceptance criteria are implemented end-to-end. **Partial** means code or UI exists, but one or more acceptance criteria are still missing. **Not started** means there is no functional implementation for the acceptance criteria; a static mock does not count as complete.
 
 ## Summary
 
 | Status | Count |
 | :--- | ---: |
 | Complete | 0 |
-| Partial | 45 |
-| Not started | 1 |
+| Partial | 46 |
+| Not started | 0 |
 | Total | 46 |
 
 ## 1. Ideation journey
@@ -67,13 +67,13 @@ Audited against the local branch through employee workflow/admin controls commit
 
 | ID | Completed? | Status | Current evidence | Remaining gap |
 | :--- | :---: | :--- | :--- | :--- |
-| AD-01 | No | Partial | Secured, bounded screening queue and reasoned route/return/reject/defer decision APIs are implemented with audit and notifications. | Admin queue UI, due dates, and a distinct transformation-team role remain. |
-| AD-02 | No | Partial | Secured transformation queue and confirm-to-POC decision API are implemented with employee acceptance notification and audit. | Admin queue UI, durable assignment/due-date fields, and distinct transformation role remain. |
+| AD-01 | No | Partial | Secured, bounded screening queue and reasoned route/return/reject/defer decision APIs are implemented with audit and notifications; the admin workspace reads the live screening queue. | Due dates, durable assignment, decision controls, and a distinct transformation-team role remain. |
+| AD-02 | No | Partial | Secured transformation queue and confirm-to-POC decision API are implemented with employee acceptance notification and audit; the admin workspace reads the live queue. | Durable assignment/due-date fields, confirm controls, and a distinct transformation role remain. |
 | AD-03 | No | Partial | Routed evaluation reads are owner-scoped through event metadata and include stored answers, KPI metrics, AI assessment, and reasoned decision actions. | Distinct business-owner RBAC, durable assignments, and evaluation UI remain. |
 | AD-04 | No | Partial | Idea scoring fields and AI schemas exist in the backend. | Reviewer UI does not show each KPI answer, score, weight, and author explanation. |
-| AD-05 | No | Not started | No management dashboard or export implementation exists. | Pipeline analytics, department/points/learning metrics, and CSV exports are missing. |
+| AD-05 | No | Partial | Live user, rewards, learning, governance, and audit APIs exist, including bounded audit CSV export, and the admin control room consumes live operational data. | Pipeline/department/learning dashboards and full ideas/benefits/feedback CSV exports remain. |
 | AD-06 | No | Partial | Admin-only user directory, role changes, activation/deactivation, security reset, session revocation, and audit records are implemented; the UI lists users and lifecycle state. | The role model is still admin/user rather than the full profile set, and mutation forms/password reset UI remain. |
-| AD-07 | No | Partial | Admin settings APIs persist priority settings, point rules, and recommendation rules with reasoned, audited mutations; minimum-score configuration is live. | Full KPI/level/SLA/control/department/profile settings UI remains. |
+| AD-07 | No | Partial | Admin settings APIs persist priority settings, point rules, and recommendation rules with reasoned, audited mutations; the admin workspace reads the live settings summary. | Full editable KPI/level/SLA/control/department/profile settings UI remains. |
 | AD-08 | No | Partial | Admin learning APIs cover bounded quiz/article catalogues, unpublished quiz question edits, recommendation rules, and strict HTTPS external-link validation. | Learning-content management UI and complete quiz authoring workflow remain. |
 | AD-09 | No | Partial | Secured feedback campaign and administrator response APIs persist categorized feedback, notify employees, and audit responses. | Campaign/announcement/challenge management and admin feedback UI remain. |
 | AD-10 | No | Partial | Idea events and AI run records provide limited traceability. | Complete login/transition/settings/redemption audit coverage, IP detail, filtering, and CSV export are missing. |
