@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { actOnAdminRedemption, adminQueryKeys, decideAdminIdea, getAdminSettings, listAdminAudit, listAdminChallenges, listAdminFeedback, listAdminQuizCatalogue, listAdminRedemptions, listAdminRewards, listAdminScreening, listAdminTransformation, listAdminUsers, respondToAdminFeedback, type GovernanceAction, type RedemptionAction } from "./api";
+import { actOnAdminRedemption, adminQueryKeys, decideAdminEvaluation, decideAdminIdea, getAdminEvaluation, getAdminSettings, listAdminAudit, listAdminChallenges, listAdminFeedback, listAdminQuizCatalogue, listAdminRedemptions, listAdminRewards, listAdminRoutedEvaluations, listAdminScreening, listAdminTransformation, listAdminUsers, respondToAdminFeedback, type EvaluationAction, type GovernanceAction, type RedemptionAction } from "./api";
 
 export function useAdminGovernanceDecision() {
   const client = useQueryClient();
@@ -33,6 +33,12 @@ export function useAdminAudit(enabled = true) { return useQuery({ queryKey: admi
 export function useAdminScreening(enabled = true) { return useQuery({ queryKey: adminQueryKeys.screening, queryFn: listAdminScreening, enabled }); }
 export function useAdminTransformation(enabled = true) { return useQuery({ queryKey: adminQueryKeys.transformation, queryFn: listAdminTransformation, enabled }); }
 export function useAdminSettings(enabled = true) { return useQuery({ queryKey: adminQueryKeys.settings, queryFn: getAdminSettings, enabled }); }
+export function useAdminRoutedEvaluations(enabled = true) { return useQuery({ queryKey: adminQueryKeys.evaluations, queryFn: listAdminRoutedEvaluations, enabled }); }
+export function useAdminEvaluation(ideaId: number | null) { return useQuery({ queryKey: ideaId ? adminQueryKeys.evaluation(ideaId) : [...adminQueryKeys.evaluations, "none"], queryFn: () => getAdminEvaluation(ideaId!), enabled: ideaId !== null }); }
+export function useAdminEvaluationDecision() {
+  const client = useQueryClient();
+  return useMutation({ mutationFn: ({ ideaId, action, reason }: { ideaId: number; action: EvaluationAction; reason: string }) => decideAdminEvaluation(ideaId, action, reason), onSuccess: (_data, variables) => Promise.all([client.invalidateQueries({ queryKey: adminQueryKeys.evaluations }), client.invalidateQueries({ queryKey: adminQueryKeys.evaluation(variables.ideaId) })]) });
+}
 export function useAdminFeedback(enabled = true) { return useQuery({ queryKey: adminQueryKeys.feedback, queryFn: listAdminFeedback, enabled }); }
 export function useAdminFeedbackResponse() {
   const client = useQueryClient();

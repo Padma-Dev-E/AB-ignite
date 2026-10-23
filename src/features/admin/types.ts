@@ -83,6 +83,22 @@ export type AdminAuditEvent = {
 export type AdminIdea = { id: number; reference: string; title: string; summary: string; category: string; status: string; priorityBand: string | null; priorityScore: number | null; authorId: number; authorName: string; department: string; createdAt: string; updatedAt: string };
 export type AdminSettings = { priority: Record<string, string>; pointRules: Array<{ id: number; code: string; name: string; points: number; active: boolean }>; recommendationRules: Array<{ id: number; topic: string; thresholdPercent: number; reasonTemplate: string; active: boolean }> };
 
+export type AdminEvaluationDetail = {
+  idea: AdminIdea & { problem: string | null; solution: string | null; benefits: string | null; risks: string | null; kind: string };
+  submission: {
+    answers: Record<string, string> | null;
+    metrics: Record<string, string | number> | null;
+    breakdown: Array<{ key: string; score: string | number | null; weight: number; explanation: string | null }> | null;
+    score: number;
+    minimumScore: number;
+    validationPassed: boolean;
+    differentiation: string | null;
+    submittedAt: string;
+  } | null;
+  assessment: { jobKey: string; completedAt: string | null; result: unknown } | null;
+  route: (Record<string, unknown> & { createdAt: string }) | null;
+};
+
 export type AdminFeedbackResponse = {
   id: number;
   campaignId: number;

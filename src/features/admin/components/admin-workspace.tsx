@@ -6,6 +6,7 @@ import { useState, type FormEvent, type ReactNode } from "react";
 import { Card, IconBox, SectionHeading, StatTile } from "../../../components/ui";
 import { useAdminAudit, useAdminChallenges, useAdminGovernanceDecision, useAdminQuizCatalogue, useAdminRedemptionAction, useAdminRedemptions, useAdminRewards, useAdminScreening, useAdminTransformation, useAdminUsers } from "../hooks";
 import { AdminSettingsEditor } from "./admin-settings-editor";
+import { AdminEvaluation } from "./admin-evaluation";
 import type { GovernanceAction, RedemptionAction } from "../api";
 import type { AdminAuditEvent, AdminChallenge, AdminIdea, AdminQuiz, AdminRedemption, AdminReward, AdminUser } from "../types";
 
@@ -109,7 +110,7 @@ function GovernancePanel() {
   } as const;
   const [title, description, owner] = copy[active as keyof typeof copy];
   const query = active === "screening" ? screening : transformation;
-  return <div className="stack"><SectionHeading title="Idea governance" detail="Live queue reads · reasoned mutations" /><SectionTabs items={governanceItems} active={active} onChange={setActive} />{active === "evaluation" ? <UnconfiguredSection title={title} description={description} owner={owner} /> : <IdeaQueue query={query} title={title} detail={description} />}</div>;
+  return <div className="stack"><SectionHeading title="Idea governance" detail="Live queue reads · reasoned mutations" /><SectionTabs items={governanceItems} active={active} onChange={setActive} />{active === "evaluation" ? <AdminEvaluation /> : <IdeaQueue query={query} title={title} detail={description} />}</div>;
 }
 
 function IdeaQueue({ query, title, detail }: { query: ReturnType<typeof useAdminScreening> | ReturnType<typeof useAdminTransformation>; title: string; detail: string }) {
