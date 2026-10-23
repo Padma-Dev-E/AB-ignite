@@ -52,13 +52,13 @@ export async function listUserSessions(userId: number, page: Page) {
 }
 
 function assertActor(tx: Parameters<Parameters<typeof db.transaction>[0]>[0], actor: Actor, now: Date) {
-  const current = tx.select({ id: users.id, profile: users.profile, isActive: users.isActive, sessionVersion: users.sessionVersion })
+  const current = tx.select({ id: users.id, role: users.role, profile: users.profile, isActive: users.isActive, sessionVersion: users.sessionVersion })
     .from(users).where(eq(users.id, actor.userId)).limit(1).get();
   const session = tx.select({ userId: refreshTokens.userId, expiresAt: refreshTokens.expiresAt,
     revokedAt: refreshTokens.revokedAt, idleExpiresAt: refreshTokens.idleExpiresAt,
     absoluteExpiresAt: refreshTokens.absoluteExpiresAt, sessionVersion: refreshTokens.sessionVersion })
     .from(refreshTokens).where(eq(refreshTokens.id, actor.sessionId)).limit(1).get();
-  if (!current || current.profile !== "admin" || !current.isActive || !session || session.userId !== current.id || session.expiresAt <= now || !isSessionActive(session, current, now)) {
+  if (!current || (current.profile !== "admin" && current.role !== "admin") || !current.isActive || !session || session.userId !== current.id || session.expiresAt <= now || !isSessionActive(session, current, now)) {
     throw new AuthorizationError("Administrator session is no longer valid.");
   }
 }

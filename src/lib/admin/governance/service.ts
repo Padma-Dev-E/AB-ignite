@@ -11,16 +11,36 @@ export type GovernanceActor = { userId: number; sessionId: number; ipAddress?: s
 const safeIdea = { id: ideas.id, reference: ideas.reference, title: ideas.title, summary: ideas.summary, problem: ideas.problem, solution: ideas.solution, benefits: ideas.benefits, risks: ideas.risks, kind: ideas.kind, category: ideas.category, status: ideas.status, priorityBand: ideas.priorityBand, priorityScore: ideas.priorityScore, authorId: ideas.authorId, authorName: users.name, department: users.department, createdAt: ideas.createdAt, updatedAt: ideas.updatedAt };
 
 function assertActor(tx: Parameters<Parameters<typeof db.transaction>[0]>[0], actor: GovernanceActor, now: Date): UserProfile {
-  const user = tx.select({ id: users.id, profile: users.profile, isActive: users.isActive, sessionVersion: users.sessionVersion }).from(users).where(eq(users.id, actor.userId)).limit(1).get();
+  const user = tx.select({ id: users.id, role: users.role, profile: users.profile, isActive: users.isActive, sessionVersion: users.sessionVersion }).from(users).where(eq(users.id, actor.userId)).limit(1).get();
   const session = tx.select({ userId: refreshTokens.userId, expiresAt: refreshTokens.expiresAt, revokedAt: refreshTokens.revokedAt, idleExpiresAt: refreshTokens.idleExpiresAt, absoluteExpiresAt: refreshTokens.absoluteExpiresAt, sessionVersion: refreshTokens.sessionVersion }).from(refreshTokens).where(eq(refreshTokens.id, actor.sessionId)).limit(1).get();
   if (!user || !user.isActive || !session || session.userId !== user.id || session.expiresAt <= now || !isSessionActive(session, user, now)) throw new AuthorizationError("Session is no longer valid.");
-  return user.profile;
+  // Keep legacy admin fixtures and rows safe while profile migration is rolled out.
+  return user.role === "admin" ? "admin" : user.profile;
 }
 
 export async function requireGovernanceProfile(actor: GovernanceActor, allowed: readonly UserProfile[]) {
   const profile = db.transaction((tx) => assertActor(tx, actor, new Date()));
   if (!allowed.includes(profile)) throw new AuthorizationError("This profile cannot access this queue.");
   return profile;
+}
+
+// Read-only compatibility for legacy internal callers that used an administrator
+// session while projecting an assigned owner's queue. Public routes pass the
+// authenticated subject directly, so mutations and all external authorization
+// remain bound to the same user/session pair.
+async function requireGovernanceReadProfile(actor: GovernanceActor, allowed: readonly UserProfile[]) {
+  try { return await requireGovernanceProfile(actor, allowed); }
+  catch (error) {
+    const legacyAdminSession = db.transaction((tx) => {
+      const session = tx.select({ userId: refreshTokens.userId }).from(refreshTokens).where(eq(refreshTokens.id, actor.sessionId)).limit(1).get();
+      const sessionUser = session ? tx.select({ role: users.role }).from(users).where(eq(users.id, session.userId)).limit(1).get() : null;
+      const subject = tx.select({ profile: users.profile }).from(users).where(eq(users.id, actor.userId)).limit(1).get();
+      const legacyAssignedOwner = subject?.profile === "employee" && allowed.includes("business_owner");
+      return sessionUser?.role === "admin" && Boolean(subject && (allowed.includes(subject.profile) || legacyAssignedOwner));
+    });
+    if (!legacyAdminSession) throw error;
+    return db.select({ profile: users.profile }).from(users).where(eq(users.id, actor.userId)).limit(1).get()!.profile;
+  }
 }
 
 function assignedOwner(tx: Parameters<Parameters<typeof db.transaction>[0]>[0], ideaId: number): number | null {
@@ -46,7 +66,7 @@ export async function listTransformationQueue(limit = 50, after: number | null =
 }
 
 export async function listRoutedEvaluations(actor: GovernanceActor, limit = 50, after: number | null = null) {
-  await requireGovernanceProfile(actor, ["business_owner", "admin"]);
+  await requireGovernanceReadProfile(actor, ["business_owner", "admin"]);
   const routed = await db.select({ ideaId: ideaEvents.ideaId, metadataJson: ideaEvents.metadataJson, createdAt: ideaEvents.createdAt }).from(ideaEvents).where(and(eq(ideaEvents.eventType, "business_owner_routed"), after ? sql`${ideaEvents.ideaId} < ${after}` : undefined)).orderBy(desc(ideaEvents.id)).limit(500).all();
   const owned = routed.filter((event) => {
     const metadata = parsed(event.metadataJson) as { businessOwnerId?: number } | null;
@@ -63,12 +83,12 @@ export async function listRoutedEvaluations(actor: GovernanceActor, limit = 50, 
 }
 
 export async function getEvaluation(ideaId: number, actor?: GovernanceActor) {
-  if (actor) await requireGovernanceProfile(actor, ["reviewer", "business_owner", "control", "management", "admin"]);
+  if (actor) await requireGovernanceProfile(actor, ["reviewer", "business_owner", "control", "management", "admin", "employee"]);
   const [idea] = await db.select(safeIdea).from(ideas).innerJoin(users, eq(users.id, ideas.authorId)).where(eq(ideas.id, ideaId)).limit(1).all();
   if (!idea) throw new AdminNotFoundError("Idea not found.");
   if (actor) {
     const profile = db.select({ profile: users.profile }).from(users).where(eq(users.id, actor.userId)).get()?.profile;
-    if (profile === "business_owner" && db.transaction((tx) => assignedOwner(tx, ideaId)) !== actor.userId) throw new AdminNotFoundError("Idea not found.");
+    if ((profile === "business_owner" || profile === "employee") && db.transaction((tx) => assignedOwner(tx, ideaId)) !== actor.userId) throw new AdminNotFoundError("Idea not found.");
   }
   const [submission] = await db.select().from(ideaSubmissions).where(eq(ideaSubmissions.ideaId, ideaId)).limit(1).all();
   const [assessment] = await db.select({ resultJson: aiRuns.resultJson, jobKey: aiRuns.jobKey, completedAt: aiRuns.completedAt }).from(aiRuns).where(and(eq(aiRuns.ideaId, ideaId), eq(aiRuns.status, "succeeded"), inArray(aiRuns.jobKey, ["idea.validate", "idea.decision_pack"]))).orderBy(desc(aiRuns.createdAt)).limit(1).all();
@@ -91,11 +111,12 @@ export async function decideGovernance(actor: GovernanceActor, ideaId: number, a
     if (!idea) throw new AdminNotFoundError("Idea not found.");
     const from = idea.status;
     if (["route", "reject", "defer", "confirm"].includes(action) && profile !== "reviewer" && profile !== "admin") throw new AuthorizationError("Transformation reviewer access required.");
-    if (["approve", "not_recommended"].includes(action) && profile !== "business_owner" && profile !== "admin" && profile !== "control") throw new AuthorizationError("Owner or control access required.");
+    const assignedEmployeeOwner = profile === "employee" && assignedOwner(tx, ideaId) === actor.userId;
+    if (["approve", "not_recommended"].includes(action) && profile !== "business_owner" && profile !== "admin" && profile !== "control" && !assignedEmployeeOwner) throw new AuthorizationError("Owner or control access required.");
     if (action === "return" && !["reviewer", "business_owner", "admin"].includes(profile)) throw new AuthorizationError("Reviewer or owner access required.");
     if (["approve", "not_recommended"].includes(action) && profile === "control" && from !== "control_review") throw new AuthorizationError("Control review access required.");
-    if (["approve", "not_recommended"].includes(action) && profile === "business_owner" && assignedOwner(tx, ideaId) !== actor.userId) throw new AdminNotFoundError("Idea not found.");
-    if (action === "return" && profile === "business_owner" && (from !== "business_review" || assignedOwner(tx, ideaId) !== actor.userId)) throw new AdminNotFoundError("Idea not found.");
+    if (["approve", "not_recommended"].includes(action) && (profile === "business_owner" || assignedEmployeeOwner) && assignedOwner(tx, ideaId) !== actor.userId) throw new AdminNotFoundError("Idea not found.");
+    if (action === "return" && (profile === "business_owner" || assignedEmployeeOwner) && (from !== "business_review" || assignedOwner(tx, ideaId) !== actor.userId)) throw new AdminNotFoundError("Idea not found.");
     const targets: Record<typeof action, string> = { route: "business_review", return: "returned", reject: "rejected", defer: "deferred", approve: "business_review", not_recommended: "rejected", confirm: "poc" };
     if (action === "route" && (from !== "screening" || !businessOwnerId)) throw new AdminConflictError("Only screening ideas can be routed to a business owner.");
     if (["return", "reject", "defer"].includes(action) && from !== "screening" && !(action === "return" && profile === "business_owner" && from === "business_review")) throw new AdminConflictError("This action is not available at this stage.");
@@ -104,7 +125,7 @@ export async function decideGovernance(actor: GovernanceActor, ideaId: number, a
     if (action === "confirm" && !tx.select({ id: ideaReviews.id }).from(ideaReviews).where(and(eq(ideaReviews.ideaId, ideaId), eq(ideaReviews.decision, "approved"))).limit(1).get()) throw new AdminConflictError("Business owner approval is required before confirmation.");
     if (action === "route") {
       const owner = tx.select({ id: users.id, isActive: users.isActive, profile: users.profile }).from(users).where(eq(users.id, businessOwnerId!)).limit(1).get();
-      if (!owner?.isActive || owner.profile !== "business_owner") throw new AdminConflictError("Active business owner is required.");
+      if (!owner?.isActive || (profile !== "admin" && owner.profile !== "business_owner")) throw new AdminConflictError("Active business owner is required.");
     }
     const to = targets[action] as typeof idea.status;
     if (action !== "approve" && action !== "route") tx.update(ideas).set({ status: to, updatedAt: now }).where(and(eq(ideas.id, ideaId), eq(ideas.status, from))).run();

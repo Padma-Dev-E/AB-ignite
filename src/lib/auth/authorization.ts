@@ -47,11 +47,12 @@ export async function loadAuthorizationContext(
     }
   }
 
+  const profile = user.role === "admin" ? "admin" : user.profile;
   return {
     userId: user.id,
     role: user.role,
-    profile: user.profile,
-    capabilities: capabilitiesForProfile(user.profile),
+    profile,
+    capabilities: capabilitiesForProfile(profile),
     sessionId,
   };
 }

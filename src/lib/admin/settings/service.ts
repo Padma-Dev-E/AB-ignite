@@ -22,7 +22,7 @@ export async function getAdminSettings() {
 function assertActor(tx: Parameters<Parameters<typeof db.transaction>[0]>[0], actor: Actor, now: Date) {
   const user = tx.select().from(users).where(eq(users.id, actor.userId)).limit(1).get();
   const session = tx.select().from(refreshTokens).where(eq(refreshTokens.id, actor.sessionId)).limit(1).get();
-  if (!user || user.role !== "admin" || !user.isActive || !session || session.userId !== user.id || !isSessionActive(session, user, now)) throw new AuthorizationError("Administrator session is no longer valid.");
+  if (!user || (user.role !== "admin" && user.profile !== "admin") || !user.isActive || !session || session.userId !== user.id || !isSessionActive(session, user, now)) throw new AuthorizationError("Administrator session is no longer valid.");
 }
 
 export async function updateAdminSettings(actor: Actor, input: { priority?: Partial<Record<typeof settingKeys[number], string>>; pointRules?: Array<{ code: string; points: number; active: boolean }>; recommendationRules?: Array<{ topic: string; thresholdPercent: number; reasonTemplate: string; active: boolean }> }) {

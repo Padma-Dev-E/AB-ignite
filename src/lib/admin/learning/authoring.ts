@@ -25,7 +25,7 @@ type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 function authorized(tx: Tx, actor: Actor, now: Date) {
   const user = tx.select().from(users).where(eq(users.id, actor.userId)).get();
   const session = tx.select().from(refreshTokens).where(eq(refreshTokens.id, actor.sessionId)).get();
-  if (!user || user.role !== "admin" || !user.isActive || !session || session.userId !== user.id || !isSessionActive(session, user, now)) throw new AuthorizationError("Administrator session is no longer valid.");
+  if (!user || (user.role !== "admin" && user.profile !== "admin") || !user.isActive || !session || session.userId !== user.id || !isSessionActive(session, user, now)) throw new AuthorizationError("Administrator session is no longer valid.");
 }
 function fingerprint(input: unknown) { return createHash("sha256").update(JSON.stringify(input)).digest("hex"); }
 function requestTarget(actor: Actor, key: string) {

@@ -14,7 +14,7 @@ function page<T extends { id: number }>(rows: T[], limit: number) { const items 
 function assertActor(tx: Parameters<Parameters<typeof db.transaction>[0]>[0], actor: Actor, now: Date) {
   const user = tx.select().from(users).where(eq(users.id, actor.userId)).limit(1).get();
   const session = tx.select().from(refreshTokens).where(eq(refreshTokens.id, actor.sessionId)).limit(1).get();
-  if (!user || user.role !== "admin" || !user.isActive || !session || session.userId !== user.id || !isSessionActive(session, user, now)) throw new AuthorizationError("Administrator session is no longer valid.");
+  if (!user || (user.role !== "admin" && user.profile !== "admin") || !user.isActive || !session || session.userId !== user.id || !isSessionActive(session, user, now)) throw new AuthorizationError("Administrator session is no longer valid.");
 }
 function writeAudit(tx: Parameters<Parameters<typeof db.transaction>[0]>[0], actor: Actor, reason: string, action: string, type: string, id: number, now: Date) {
   tx.insert(auditEvents).values(buildAuditRecord({ actorUserId: actor.userId, sessionId: actor.sessionId, action, targetType: type, targetId: id, reason, metadata: { status: "updated" }, ipAddress: actor.ipAddress, userAgent: actor.userAgent }, now)).run();
