@@ -113,12 +113,11 @@ export async function decideGovernance(actor: GovernanceActor, ideaId: number, a
     if (!idea) throw new AdminNotFoundError("Idea not found.");
     const from = idea.status;
     if (["route", "reject", "defer", "confirm", "start_implementation", "mark_implemented"].includes(action) && profile !== "reviewer" && profile !== "admin") throw new AuthorizationError("Transformation reviewer access required.");
-    const assignedEmployeeOwner = profile === "employee" && assignedOwner(tx, ideaId) === actor.userId;
-    if (["approve", "not_recommended"].includes(action) && profile !== "business_owner" && profile !== "admin" && profile !== "control" && !assignedEmployeeOwner) throw new AuthorizationError("Owner or control access required.");
+    if (["approve", "not_recommended"].includes(action) && profile !== "business_owner" && profile !== "admin" && profile !== "control") throw new AuthorizationError("Owner or control access required.");
     if (action === "return" && !["reviewer", "business_owner", "admin"].includes(profile)) throw new AuthorizationError("Reviewer or owner access required.");
     if (["approve", "not_recommended"].includes(action) && profile === "control" && from !== "control_review") throw new AuthorizationError("Control review access required.");
-    if (["approve", "not_recommended"].includes(action) && (profile === "business_owner" || assignedEmployeeOwner) && assignedOwner(tx, ideaId) !== actor.userId) throw new AdminNotFoundError("Idea not found.");
-    if (action === "return" && (profile === "business_owner" || assignedEmployeeOwner) && (from !== "business_review" || assignedOwner(tx, ideaId) !== actor.userId)) throw new AdminNotFoundError("Idea not found.");
+    if (["approve", "not_recommended"].includes(action) && profile === "business_owner" && assignedOwner(tx, ideaId) !== actor.userId) throw new AdminNotFoundError("Idea not found.");
+    if (action === "return" && profile === "business_owner" && (from !== "business_review" || assignedOwner(tx, ideaId) !== actor.userId)) throw new AdminNotFoundError("Idea not found.");
     if (idempotencyKey && (!/^[\x21-\x7e]{8,200}$/.test(idempotencyKey))) throw new AdminConflictError("A valid idempotency key is required.");
     if (idempotencyKey) {
       const prior = tx.select().from(ideaEvents).where(and(eq(ideaEvents.ideaId, ideaId), eq(ideaEvents.correlationId, idempotencyKey))).limit(1).get();

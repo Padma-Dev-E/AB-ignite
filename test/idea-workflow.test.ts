@@ -185,16 +185,18 @@ test("workflow stages require the matching assigned governance profile", async (
 });
 
 test("every accepted lifecycle transition notifies the idea author with the destination", async () => {
+  const [lifecycleIdea] = await db.insert(ideas).values({ authorId: userId, title: "Lifecycle stages idea", summary: "A separate record for lifecycle notification assertions.", category: "Operations", reference: `LIFECYCLE-STAGES-${Date.now()}` }).returning().all();
   const stages = ["business_review", "control_review", "decision", "poc", "implementation", "implemented"] as const;
   for (const status of stages) {
     const from = status === "business_review" ? "screening" : status === "control_review" ? "business_review" : status === "decision" ? "control_review" : status === "poc" ? "decision" : status === "implementation" ? "poc" : "implementation";
-    await db.update(ideas).set({ status: from }).where(eq(ideas.id, ideaId)).run();
+    await db.update(ideas).set({ status: from }).where(eq(ideas.id, lifecycleIdea.id)).run();
     const beforeCount = (await db.select().from(notifications).where(eq(notifications.userId, userId)).all()).length;
-    await transitionIdeaStatus({ kind: "admin", id: String(userId) }, ideaId, status, "Lifecycle transition test reason.");
+    await transitionIdeaStatus({ kind: "admin", id: String(userId) }, lifecycleIdea.id, status, "Lifecycle transition test reason.");
     const rows = await db.select().from(notifications).where(eq(notifications.userId, userId)).all();
     assert.equal(rows.length, beforeCount + 1);
     assert.match(rows.at(-1)!.body ?? "", new RegExp(status.replaceAll("_", " "), "i"));
   }
+  await db.delete(ideas).where(eq(ideas.id, lifecycleIdea.id));
 });
 
 test("screening workflow queues a preflight run and worker processes it once", async () => {

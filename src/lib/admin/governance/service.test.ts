@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { eq } from "drizzle-orm";
 import { db } from "../../../db/connection";
-import { ideaReviews, ideas, refreshTokens, users } from "../../../db/schema";
+import { ideaEvents, ideaReviews, ideas, refreshTokens, users } from "../../../db/schema";
 import { decideGovernance, getEvaluation, listRoutedEvaluations, requireGovernanceProfile } from "./service";
 
 test("transformation and owner decisions enforce profiles and current assignment", async () => {
@@ -28,4 +29,21 @@ test("transformation and owner decisions enforce profiles and current assignment
   await decideGovernance(owner, idea.id, "approve", "business case approved");
   assert.ok(db.select().from(ideaReviews).all().some((review) => review.ideaId === idea.id && review.reviewerId === owner.userId));
   await decideGovernance(reviewer, idea.id, "confirm", "accepted for proof of concept");
+});
+
+test("business owner approval and transformation confirmation require distinct workspace roles", async () => {
+  const stamp = `${Date.now()}-${Math.random()}`;
+  const make = (profile: "employee" | "reviewer" | "business_owner") => {
+    const user = db.insert(users).values({ name: profile, email: `${profile}-roles-${stamp}@example.test`, role: "user", profile, passwordHash: "test" }).returning({ id: users.id }).get();
+    const session = db.insert(refreshTokens).values({ userId: user.id, tokenHash: `${profile}-roles-${stamp}`, expiresAt: new Date(Date.now() + 60_000), sessionVersion: 0 }).returning({ id: refreshTokens.id }).get();
+    return { userId: user.id, sessionId: session.id };
+  };
+  const employee = make("employee");
+  const reviewer = make("reviewer");
+  const owner = make("business_owner");
+  const idea = db.insert(ideas).values({ authorId: employee.userId, title: "Role boundary", summary: "Distinct owner and transformation authority.", category: "Technology", reference: `ABI-ROLE-${stamp}` }).returning({ id: ideas.id }).get();
+  await decideGovernance(reviewer, idea.id, "route", "Route to owner", owner.userId);
+  db.update(ideas).set({ status: "business_review", assignedUserId: employee.userId }).where(eq(ideas.id, idea.id)).run();
+  db.insert(ideaEvents).values({ ideaId: idea.id, actorType: "admin", actorId: reviewer.userId, eventType: "business_owner_routed", toStatus: "business_review", metadataJson: JSON.stringify({ businessOwnerId: employee.userId }) }).run();
+  await assert.rejects(decideGovernance(employee, idea.id, "approve", "Employee cannot approve"));
 });
