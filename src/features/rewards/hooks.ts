@@ -10,7 +10,7 @@ export const rewardsQueryKeys = {
   adminCatalogue: () => ["rewards", "admin", "catalogue"] as const,
 };
 
-export function useRewards() { return useQuery({ queryKey: rewardsQueryKeys.summary(), queryFn: getRewards }); }
+export function useRewards(enabled = true) { return useQuery({ queryKey: rewardsQueryKeys.summary(), queryFn: getRewards, enabled }); }
 export function useRedemptions(params: { page?: number; pageSize?: number } = {}) { return useQuery({ queryKey: rewardsQueryKeys.redemptions(params), queryFn: () => getRedemptions(params) }); }
 function newRedemptionKey(rewardId: number) {
   const random = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;

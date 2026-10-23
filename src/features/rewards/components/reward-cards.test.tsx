@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { RedemptionHistory, RewardsState, RewardCard } from "./reward-cards";
+import { BadgeProgressList, RedemptionHistory, RewardsState, RewardCard } from "./reward-cards";
 
 test("rewards state communicates loading and retryable failures accessibly", () => {
   assert.match(renderToStaticMarkup(createElement(RewardsState, { state: "loading" })), /role="status"/);
@@ -14,4 +14,14 @@ test("reward cards prevent unaffordable redemption and history has an empty stat
   assert.match(card, /Coffee voucher/);
   assert.match(card, /disabled/);
   assert.match(renderToStaticMarkup(createElement(RedemptionHistory, { redemptions: [] })), /No redemptions yet/);
+});
+
+test("badge progress distinguishes unlocked and locked recognition", () => {
+  const html = renderToStaticMarkup(createElement(BadgeProgressList, { badges: [
+    { id: 1, name: "First idea", description: "Share your first idea.", awarded: { awardedAt: "2026-10-23" } },
+    { id: 2, name: "Impact builder", description: "Validate benefits.", awarded: null },
+  ] }));
+  assert.match(html, /Unlocked/);
+  assert.match(html, /In progress/);
+  assert.match(html, /Your badges/);
 });

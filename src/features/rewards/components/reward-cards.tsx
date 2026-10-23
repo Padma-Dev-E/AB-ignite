@@ -2,7 +2,7 @@
 
 import { Dialog, DialogPanel, DialogTitle, Disclosure, DisclosureButton, DisclosurePanel } from "@headlessui/react";
 import React from "react";
-import type { Redemption, Reward, RewardsBalance } from "../types";
+import type { BadgeProgress, Redemption, Reward, RewardsBalance } from "../types";
 
 const cardClass = "rounded-xl border border-slate-200 bg-white p-5 shadow-sm";
 const actionClass = "inline-flex min-h-10 items-center justify-center rounded-lg bg-indigo-700 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-700 disabled:cursor-not-allowed disabled:opacity-50";
@@ -44,4 +44,12 @@ export function RewardCatalogue({ rewards, balance, onRedeem, pendingRewardId }:
 export function RedemptionHistory({ redemptions }: { redemptions: Redemption[] }) {
   if (!redemptions.length) return <p className={cardClass} role="status">No redemptions yet.</p>;
   return <ul className="divide-y divide-slate-200 rounded-xl border border-slate-200 bg-white" aria-label="Your redemptions">{redemptions.map((redemption) => <li key={redemption.id} className="flex flex-wrap items-center justify-between gap-2 p-4"><span className="font-medium text-slate-950">{redemption.rewardName}</span><span className="text-sm capitalize text-slate-700">{redemption.status} · {redemption.cost} points</span></li>)}</ul>;
+}
+
+export function BadgeProgressList({ badges }: { badges: BadgeProgress[] }) {
+  if (!badges.length) return <p className={cardClass} role="status">No badges are configured yet.</p>;
+  return <ul className="grid gap-3 sm:grid-cols-2" aria-label="Your badges">{badges.map((badge) => {
+    const awarded = Boolean(badge.awarded);
+    return <li key={badge.id} className={`${cardClass} ${awarded ? "border-amber-300 bg-amber-50" : "opacity-70"}`}><div className="flex items-start gap-3"><span className="grid size-10 shrink-0 place-items-center rounded-full bg-white text-xl" aria-hidden="true">{awarded ? "🏅" : "🔒"}</span><div><div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold text-slate-950">{badge.name}</h3><span className="text-xs font-medium uppercase tracking-wide text-slate-600">{awarded ? "Unlocked" : "In progress"}</span></div>{badge.description && <p className="mt-1 text-sm text-slate-700">{badge.description}</p>}{awarded && <p className="mt-2 text-xs text-amber-900">Milestone unlocked and recorded in your recognition history.</p>}</div></div></li>;
+  })}</ul>;
 }
