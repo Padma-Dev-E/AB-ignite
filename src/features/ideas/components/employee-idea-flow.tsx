@@ -114,8 +114,8 @@ export function EmployeeIdeaSubmissionPage({ onOpenIdea }: { onOpenIdea: (id: nu
     try {
       const input: IdeaCreateInput = { kind, title: title.trim(), summary: summary.trim(), category: "Customer", problem: details.problem.trim() || undefined, solution: details.solution.trim() || undefined, benefits: details.benefits.trim() || undefined, risks: details.risks.trim() || undefined, dataClassification: "internal" };
       const result = await createMutation.mutateAsync(input);
-      setCreated(result);
       await submitMutation.mutateAsync({ id: result.idea.id, versionId: result.versionId });
+      setCreated(result);
     } catch { /* the mutation error is rendered below */ }
   };
   if (created) return <div className="stack"><section className="app-card py-14 text-center"><div className="icon-box mx-auto mb-3" style={{ color: "var(--teal)", background: "rgba(14,159,122,.12)" }}><Icon name="check" /></div><h1 className="text-2xl font-medium">Idea submitted</h1><p className="mx-auto mt-2 max-w-[52ch] text-muted">Your idea is registered as <b>{created.idea.reference}</b>. An innovation reviewer screens it first, and you are notified at every step.</p><div className="mt-5 flex flex-wrap justify-center gap-2"><button className="btn" onClick={() => onOpenIdea(created.idea.id)}>View idea</button><button className="btn-primary" onClick={() => { setCreated(null); setRaw(""); setTitle(""); setSummary(""); dispatch(resetIdeaWizard()); }}>Share another idea</button></div></section></div>;
