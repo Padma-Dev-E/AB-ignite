@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { completeArticle, getArticle, getArticleInsight, getQuizAttempt, joinChallenge, listArticles, listChallenges, listJourney, listQuizzes, listRankings, redeemableRecommendations, startQuizAttempt, submitQuizAttempt } from "./api";
 import type { QuizAnswer } from "./types";
+import { refreshEmployeeRewards } from "../rewards/hooks";
 
 export const learningQueryKeys = {
   all: ["learning"] as const,
@@ -40,13 +41,13 @@ export function useStartQuizAttempt() {
 }
 export function useSubmitQuizAttempt() {
   const client = useQueryClient();
-  return useMutation({ mutationFn: ({ attemptId, answers }: { attemptId: number; answers: QuizAnswer[] }) => submitQuizAttempt(attemptId, answers), onSuccess: (_data, variables) => { void client.invalidateQueries({ queryKey: learningQueryKeys.attempt(variables.attemptId) }); void client.invalidateQueries({ queryKey: learningQueryKeys.journey() }); void client.invalidateQueries({ queryKey: ["rewards"] }); } });
+  return useMutation({ mutationFn: ({ attemptId, answers }: { attemptId: number; answers: QuizAnswer[] }) => submitQuizAttempt(attemptId, answers), onSuccess: (_data, variables) => { void client.invalidateQueries({ queryKey: learningQueryKeys.attempt(variables.attemptId) }); void client.invalidateQueries({ queryKey: learningQueryKeys.journey() }); void refreshEmployeeRewards(client); } });
 }
 export function useCompleteArticle() {
   const client = useQueryClient();
   return useMutation({
     mutationFn: ({ articleId, idempotencyKey = createIdempotencyKey("article-read", articleId) }: { articleId: number; idempotencyKey?: string }) => completeArticle(articleId, idempotencyKey),
-    onSuccess: (_data, variables) => { void client.invalidateQueries({ queryKey: learningQueryKeys.article(variables.articleId) }); void client.invalidateQueries({ queryKey: learningQueryKeys.recommendations() }); void client.invalidateQueries({ queryKey: learningQueryKeys.journey() }); void client.invalidateQueries({ queryKey: ["rewards"] }); },
+    onSuccess: (_data, variables) => { void client.invalidateQueries({ queryKey: learningQueryKeys.article(variables.articleId) }); void client.invalidateQueries({ queryKey: learningQueryKeys.recommendations() }); void client.invalidateQueries({ queryKey: learningQueryKeys.journey() }); void refreshEmployeeRewards(client); },
   });
 }
 export function useJoinChallenge() {

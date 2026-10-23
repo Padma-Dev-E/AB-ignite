@@ -16,6 +16,19 @@ test("reward cards prevent unaffordable redemption and history has an empty stat
   assert.match(renderToStaticMarkup(createElement(RedemptionHistory, { redemptions: [] })), /No redemptions yet/);
 });
 
+test("redemption history visibly includes request date, reward, cost, and status", () => {
+  const html = renderToStaticMarkup(createElement(RedemptionHistory, { redemptions: [{
+    id: 12, userId: 1, rewardId: 4, rewardVersionId: 2, rewardName: "Learning day",
+    rewardDescription: null, cost: 250, status: "requested", idempotencyKey: "key",
+    requestedAt: "2026-10-22T10:30:00.000Z", fulfilledAt: null, cancelledAt: null,
+    createdAt: "2026-10-22T10:30:00.000Z", updatedAt: "2026-10-22T10:30:00.000Z",
+  }] }));
+  assert.match(html, /Learning day/);
+  assert.match(html, /requested/i);
+  assert.match(html, /250 points/);
+  assert.match(html, /Oct 22, 2026/);
+});
+
 test("badge progress distinguishes unlocked and locked recognition", () => {
   const html = renderToStaticMarkup(createElement(BadgeProgressList, { badges: [
     { id: 1, name: "First idea", description: "Share your first idea.", awarded: { awardedAt: "2026-10-23" } },

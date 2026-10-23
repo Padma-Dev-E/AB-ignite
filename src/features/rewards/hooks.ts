@@ -1,6 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { QueryClient } from "@tanstack/react-query";
 import { createAdminReward, getAdminRewardCatalogue, getRedemptions, getRewards, requestRedemption, updateAdminReward, type AdminRewardInput } from "./api";
 
 export const rewardsQueryKeys = {
@@ -9,6 +10,13 @@ export const rewardsQueryKeys = {
   redemptions: (params: { page?: number; pageSize?: number } = {}) => ["rewards", "redemptions", params] as const,
   adminCatalogue: () => ["rewards", "admin", "catalogue"] as const,
 };
+
+export function refreshEmployeeRewards(client: QueryClient) {
+  return Promise.all([
+    client.invalidateQueries({ queryKey: rewardsQueryKeys.summary() }),
+    client.invalidateQueries({ queryKey: rewardsQueryKeys.redemptions() }),
+  ]);
+}
 
 export function useRewards(enabled = true) { return useQuery({ queryKey: rewardsQueryKeys.summary(), queryFn: getRewards, enabled }); }
 export function useRedemptions(params: { page?: number; pageSize?: number } = {}) { return useQuery({ queryKey: rewardsQueryKeys.redemptions(params), queryFn: () => getRedemptions(params) }); }
@@ -20,7 +28,7 @@ export function useRequestRedemption() {
   const client = useQueryClient();
   return useMutation({
     mutationFn: ({ rewardId, idempotencyKey = newRedemptionKey(rewardId) }: { rewardId: number; idempotencyKey?: string }) => requestRedemption(rewardId, idempotencyKey),
-    onSuccess: () => { void client.invalidateQueries({ queryKey: rewardsQueryKeys.all }); },
+    onSuccess: () => refreshEmployeeRewards(client),
   });
 }
 

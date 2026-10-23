@@ -43,7 +43,7 @@ export function RewardCatalogue({ rewards, balance, onRedeem, pendingRewardId }:
 
 export function RedemptionHistory({ redemptions }: { redemptions: Redemption[] }) {
   if (!redemptions.length) return <p className={cardClass} role="status">No redemptions yet.</p>;
-  return <ul className="divide-y divide-slate-200 rounded-xl border border-slate-200 bg-white" aria-label="Your redemptions">{redemptions.map((redemption) => <li key={redemption.id} className="flex flex-wrap items-center justify-between gap-2 p-4"><span className="font-medium text-slate-950">{redemption.rewardName}</span><span className="text-sm capitalize text-slate-700">{redemption.status} · {redemption.cost} points</span></li>)}</ul>;
+  return <ul className="divide-y divide-slate-200 rounded-xl border border-slate-200 bg-white" aria-label="Your redemptions">{redemptions.map((redemption) => <li key={redemption.id} className="flex flex-wrap items-center justify-between gap-2 p-4"><div><span className="font-medium text-slate-950">{redemption.rewardName}</span><time className="mt-1 block text-xs text-slate-600" dateTime={redemption.requestedAt}>{new Intl.DateTimeFormat("en", { dateStyle: "medium", timeZone: "UTC" }).format(new Date(redemption.requestedAt))}</time></div><span className="text-sm capitalize text-slate-700">{redemption.status} · {redemption.cost} points</span></li>)}</ul>;
 }
 
 export function BadgeProgressList({ badges }: { badges: BadgeProgress[] }) {
