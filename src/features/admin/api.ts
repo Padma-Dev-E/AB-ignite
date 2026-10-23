@@ -25,6 +25,15 @@ export function listAdminScreening() { return apiFetch<{ items: AdminIdea[]; nex
 export function listAdminTransformation() { return apiFetch<{ items: AdminIdea[]; nextAfter: number | null }>("/api/admin/governance/queues/transformation?limit=50"); }
 export function getAdminSettings() { return apiFetch<AdminSettings>("/api/admin/settings"); }
 
+export type GovernanceAction = "route" | "return" | "reject" | "defer" | "approve" | "not_recommended" | "confirm";
+export function decideAdminIdea(ideaId: number, action: GovernanceAction, reason: string) {
+  return apiFetch(`/api/admin/governance/ideas/${ideaId}/decision`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action, reason }) });
+}
+export type RedemptionAction = "fulfill" | "cancel";
+export function actOnAdminRedemption(id: number, action: RedemptionAction, reason: string) {
+  return apiFetch(`/api/admin/rewards/redemptions/${id}/${action}`, { method: "POST", headers: { "content-type": "application/json", "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ reason }) });
+}
+
 export const adminQueryKeys = {
   all: ["admin"] as const,
   quizzes: ["admin", "quizzes"] as const,

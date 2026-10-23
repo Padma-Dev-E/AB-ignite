@@ -1,7 +1,17 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import { adminQueryKeys, getAdminSettings, listAdminAudit, listAdminChallenges, listAdminQuizCatalogue, listAdminRedemptions, listAdminRewards, listAdminScreening, listAdminTransformation, listAdminUsers } from "./api";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { actOnAdminRedemption, adminQueryKeys, decideAdminIdea, getAdminSettings, listAdminAudit, listAdminChallenges, listAdminQuizCatalogue, listAdminRedemptions, listAdminRewards, listAdminScreening, listAdminTransformation, listAdminUsers, type GovernanceAction, type RedemptionAction } from "./api";
+
+export function useAdminGovernanceDecision() {
+  const client = useQueryClient();
+  return useMutation({ mutationFn: ({ ideaId, action, reason }: { ideaId: number; action: GovernanceAction; reason: string }) => decideAdminIdea(ideaId, action, reason), onSuccess: () => Promise.all([client.invalidateQueries({ queryKey: adminQueryKeys.screening }), client.invalidateQueries({ queryKey: adminQueryKeys.transformation })]) });
+}
+
+export function useAdminRedemptionAction() {
+  const client = useQueryClient();
+  return useMutation({ mutationFn: ({ id, action, reason }: { id: number; action: RedemptionAction; reason: string }) => actOnAdminRedemption(id, action, reason), onSuccess: () => client.invalidateQueries({ queryKey: adminQueryKeys.redemptions }) });
+}
 
 export function useAdminQuizCatalogue(enabled = true) {
   return useQuery({ queryKey: adminQueryKeys.quizzes, queryFn: listAdminQuizCatalogue, enabled });
