@@ -12,7 +12,7 @@ test("AI foundation declares server-side SDK dependencies and scripts", async ()
   const packageJson = JSON.parse(await source("package.json"));
   assert.ok(packageJson.dependencies["@google/genai"]);
   assert.ok(packageJson.dependencies.zod);
-  assert.equal(packageJson.scripts["test:ai"], "tsx --test test/*.test.ts");
+  assert.equal(packageJson.scripts["test:ai"], "tsx --test --test-concurrency=1 test/*.test.ts");
   assert.equal(packageJson.scripts["ai:worker"], "tsx scripts/run-ai-worker.ts");
 });
 

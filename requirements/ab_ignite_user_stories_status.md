@@ -2,15 +2,15 @@
 
 Status audit for [`ab_ignite_user_stories.md`](./ab_ignite_user_stories.md).
 
-Audited against the local branch at commit `a5de524` on 2026-10-23. A story is marked **Complete** only when its acceptance criteria are implemented end-to-end. **Partial** means code or UI exists, but one or more acceptance criteria are still missing. **Not started** means there is no functional implementation for the acceptance criteria; a static mock does not count as complete.
+Audited against the local branch through quiz backend commit `461222c` and rewards hardening commit `5297258` on 2026-10-23. A story is marked **Complete** only when its acceptance criteria are implemented end-to-end. **Partial** means code or UI exists, but one or more acceptance criteria are still missing. **Not started** means there is no functional implementation for the acceptance criteria; a static mock does not count as complete.
 
 ## Summary
 
 | Status | Count |
 | :--- | ---: |
 | Complete | 0 |
-| Partial | 23 |
-| Not started | 23 |
+| Partial | 33 |
+| Not started | 13 |
 | Total | 46 |
 
 ## 1. Ideation journey
@@ -56,12 +56,12 @@ Audited against the local branch at commit `a5de524` on 2026-10-23. A story is m
 
 | ID | Completed? | Status | Current evidence | Remaining gap |
 | :--- | :---: | :--- | :--- | :--- |
-| RW-01 | No | Partial | Prototype account/rewards surfaces display a points/rewards concept. | No live balance source, catalogue API, earned-only recognition separation, or ledger-backed balance. |
-| RW-02 | No | Not started | No redemption API or transactional reward flow exists. | Confirmation, immediate deduction, idempotency, and requested redemption creation are missing. |
-| RW-03 | No | Not started | No server redemption balance check exists. | Insufficient-balance rejection and non-negative balance guarantee are missing. |
-| RW-04 | No | Not started | No redemption history API exists. | Employee redemption list and requested/fulfilled/cancelled statuses are missing. |
-| RW-05 | No | Not started | No back-office redemption workflow exists. | Requested-only handling, cancellation refunds, and audit logging are missing. |
-| RW-06 | No | Not started | No rewards catalogue management API or admin UI exists. | Create/edit name, description, cost, kind, and active state are missing. |
+| RW-01 | No | Partial | Ledger-backed balance projection, level/badge progress, active catalogue, and earned/redeem separation are available through secured rewards APIs. | Account/rewards frontend is not connected to the live balance and catalogue yet. |
+| RW-02 | No | Partial | Transactional redemption API snapshots the reward version/cost, deducts points once, and requires idempotency. | Confirmation UI and frontend mutation/query states remain. |
+| RW-03 | No | Partial | Server rejects insufficient balances and enforces a non-negative projection inside the transaction. | End-to-end frontend error presentation and concurrency smoke coverage remain. |
+| RW-04 | No | Partial | Employee redemption history API returns bounded requested/fulfilled/cancelled records with ownership enforcement. | Frontend redemption history remains. |
+| RW-05 | No | Partial | Admin fulfil/cancel APIs enforce requested-only transitions, refund cancellation once, require privileged reasons, and write audit events. | Admin workflow UI and runtime authorization smoke coverage remain. |
+| RW-06 | No | Partial | Admin catalogue APIs create versioned rewards and edit active state, kind, name, description, and cost with audited reasons. | Admin catalogue UI and full settings integration remain. |
 
 ## 5. Admin portal journey
 
@@ -85,8 +85,8 @@ Audited against the local branch at commit `a5de524` on 2026-10-23. A story is m
 | CC-01 | No | Partial | Auth.js and the existing demo UI support a demo-style employee entry concept. | Name/department profile persistence and 30-day same-name demo-session behavior are not implemented end-to-end. |
 | CC-02 | No | Partial | Auth.js, Argon2 password hashing, refresh-token hashing, role claims, and configurable token TTLs exist. | Five-attempt lockout, 15-minute lock duration, idle timeout enforcement, and complete session policy verification are missing. |
 | CC-03 | No | Partial | Notification persistence and read APIs exist in [`app/api/notifications`](../app/api/notifications). | The employee UI still uses static notifications and SMTP email delivery is not implemented. |
-| CC-04 | No | Partial | User points and prototype level displays exist. | Immutable points ledger, all event awards, level thresholds, idempotency, and audited balance calculation are missing. |
-| CC-05 | No | Partial | Prototype badge surfaces and user-related schema foundations exist. | Automatic milestone evaluation and persisted badge-award rules are missing. |
+| CC-04 | No | Partial | Append-only points ledger, balance projection, configured point rules, level thresholds, idempotent awards, and audited balance changes are implemented. | All idea/quiz/article event integrations and live frontend display remain. |
+| CC-05 | No | Partial | Persisted badge rules, automatic milestone evaluation, user-badge awards, and badge audit events are implemented. | Full badge UI and admin rule management remain. |
 | CC-06 | No | Not started | No functional feedback campaign/back-office response workflow exists. | Pinned campaign, categorized feedback, response, notification, and audit behavior are missing. |
 
 ## Completion rule
