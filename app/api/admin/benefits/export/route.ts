@@ -1,6 +1,14 @@
 import { auth } from "../../../../../auth";
-import { adminAccess, adminApiError, CAPABILITIES } from "../../../../../src/lib/admin/http";
-import { csvForRecords, parsePage } from "../../../../../src/lib/admin/query";
+import {
+  adminAccess,
+  adminApiError,
+  CAPABILITIES,
+} from "../../../../../src/lib/admin/http";
+import { parsePage } from "../../../../../src/lib/admin/query";
+import {
+  exportCsvResponse,
+  BENEFITS_EXPORT_HEADERS,
+} from "../../../../../src/lib/admin/export";
 import { listIdeaExportRows } from "../../../../../src/lib/admin/service";
 import { requestId } from "../../../../../src/lib/http/errors";
 
@@ -9,7 +17,23 @@ export async function GET(request: Request) {
   try {
     await adminAccess(await auth(), CAPABILITIES.AUDIT_EXPORT);
     const page = listIdeaExportRows(parsePage(new URL(request.url), 1000));
-    const csv = csvForRecords(["id", "reference", "priorityScore", "priorityBand", "department", "benefits", "status", "updatedAt"], page.items.map((row) => [row.id, row.reference, row.priorityScore, row.priorityBand, row.department, row.benefits, row.status, row.updatedAt.toISOString()]));
-    return new Response(csv, { headers: { "content-type": "text/csv; charset=utf-8", "content-disposition": 'attachment; filename="admin-benefits.csv"', "cache-control": "no-store", "x-request-id": id, ...(page.nextAfter ? { "x-next-after": String(page.nextAfter) } : {}) } });
-  } catch (error) { return adminApiError(error, id); }
+    return exportCsvResponse({
+      filename: "admin-benefits.csv",
+      headers: BENEFITS_EXPORT_HEADERS,
+      rows: page.items.map((row) => [
+        row.id,
+        row.reference,
+        row.priorityScore,
+        row.priorityBand,
+        row.department,
+        row.benefits,
+        row.status,
+        row.updatedAt.toISOString(),
+      ]),
+      requestId: id,
+      nextAfter: page.nextAfter,
+    });
+  } catch (error) {
+    return adminApiError(error, id);
+  }
 }

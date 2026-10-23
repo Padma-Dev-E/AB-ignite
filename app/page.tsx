@@ -2112,7 +2112,12 @@ function LiveRewardsPage() {
             onRetry={() => void redemptions.refetch()}
           />
         ) : (
-          <RedemptionHistory redemptions={redemptions.data.items} />
+          <RedemptionHistory
+            redemptions={redemptions.data?.items ?? []}
+            hasNextPage={Boolean(redemptions.hasNextPage)}
+            isLoadingMore={redemptions.isFetchingNextPage}
+            onLoadMore={() => void redemptions.fetchNextPage()}
+          />
         )}
       </section>
     </div>

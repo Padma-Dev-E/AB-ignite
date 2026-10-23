@@ -59,21 +59,24 @@ test("admin people, settings, audit, and analytics controls cover the acceptance
 });
 
 test("admin exports expose the requested datasets with bounded no-store CSV handling", async () => {
-  const [ideas, benefits, feedback, audit] = await Promise.all([
+  const [ideas, benefits, feedback, audit, sharedExport] = await Promise.all([
     source("app/api/admin/ideas/export/route.ts"),
     source("app/api/admin/benefits/export/route.ts"),
     source("app/api/admin/feedback/export/route.ts"),
     source("app/api/admin/audit/export/route.ts"),
+    source("src/lib/admin/export.ts"),
   ]);
   for (const handler of [ideas, benefits, feedback, audit]) {
     assert.match(handler, /CAPABILITIES\.AUDIT_EXPORT/);
     assert.match(handler, /(?:parsePage\(new URL\(request\.url\), 1000\)|auditFilters\(url, 1000\))/);
-    assert.match(handler, /text\/csv/);
-    assert.match(handler, /cache-control.*no-store/);
+    assert.match(handler, /(?:exportCsvResponse|new Response)/);
   }
-  for (const field of ["reference", "status", "priorityBand", "priorityScore", "benefits", "summary"]) assert.ok(ideas.includes(`"${field}"`));
-  for (const field of ["reference", "benefits", "priorityScore", "department"]) assert.ok(benefits.includes(`"${field}"`));
-  for (const field of ["campaignId", "category", "message", "response", "respondedAt"]) assert.ok(feedback.includes(`"${field}"`));
+  assert.match(sharedExport, /text\/csv/);
+  assert.match(sharedExport, /cache-control/);
+  assert.match(sharedExport, /no-store/);
+  for (const field of ["reference", "status", "priorityBand", "priorityScore", "benefits", "summary"]) assert.ok(sharedExport.includes(`"${field}"`));
+  for (const field of ["reference", "benefits", "priorityScore", "department"]) assert.ok(sharedExport.includes(`"${field}"`));
+  for (const field of ["campaignId", "category", "message", "response", "respondedAt"]) assert.ok(sharedExport.includes(`"${field}"`));
   assert.match(audit, /auditFilters/);
   assert.match(audit, /auditFilters/);
   assert.match((await source("src/lib/admin/query.ts")), /metadata,ipHash/);

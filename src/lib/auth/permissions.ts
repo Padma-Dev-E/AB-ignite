@@ -9,6 +9,7 @@ export const CAPABILITIES = {
   SESSIONS_READ: "sessions.read",
   SESSIONS_REVOKE: "sessions.revoke",
   SETTINGS_MANAGE: "settings.manage",
+  REWARDS_MANAGE: "rewards.manage",
   AI_RUNS_READ: "ai.runs.read",
   AI_RUNS_MANAGE: "ai.runs.manage",
   GOVERNANCE_READ: "governance.read",
@@ -17,10 +18,20 @@ export const CAPABILITIES = {
 
 export type Capability = (typeof CAPABILITIES)[keyof typeof CAPABILITIES];
 export type UserRole = "admin" | "user";
-export type UserProfile = "employee" | "reviewer" | "business_owner" | "control" | "management" | "admin";
+export type UserProfile =
+  | "employee"
+  | "reviewer"
+  | "business_owner"
+  | "control"
+  | "management"
+  | "admin";
 
 const roleCapabilities: Record<UserRole, readonly Capability[]> = {
-  user: [CAPABILITIES.IDEAS_READ, CAPABILITIES.IDEAS_WRITE, CAPABILITIES.PROFILE_READ],
+  user: [
+    CAPABILITIES.IDEAS_READ,
+    CAPABILITIES.IDEAS_WRITE,
+    CAPABILITIES.PROFILE_READ,
+  ],
   admin: Object.values(CAPABILITIES),
 };
 
@@ -32,21 +43,39 @@ export function hasCapability(role: UserRole, capability: Capability): boolean {
   return roleCapabilities[role].includes(capability);
 }
 
-const employeeCapabilities = [CAPABILITIES.IDEAS_READ, CAPABILITIES.IDEAS_WRITE, CAPABILITIES.PROFILE_READ];
-const reviewCapabilities = [CAPABILITIES.GOVERNANCE_READ, CAPABILITIES.GOVERNANCE_MANAGE];
+const employeeCapabilities = [
+  CAPABILITIES.IDEAS_READ,
+  CAPABILITIES.IDEAS_WRITE,
+  CAPABILITIES.PROFILE_READ,
+];
+const reviewCapabilities = [
+  CAPABILITIES.GOVERNANCE_READ,
+  CAPABILITIES.GOVERNANCE_MANAGE,
+];
 const profileCapabilities: Record<UserProfile, readonly Capability[]> = {
   employee: employeeCapabilities,
   reviewer: [...employeeCapabilities, ...reviewCapabilities],
   business_owner: [...employeeCapabilities, ...reviewCapabilities],
   control: [...employeeCapabilities, ...reviewCapabilities],
-  management: [...employeeCapabilities, CAPABILITIES.GOVERNANCE_READ, CAPABILITIES.AUDIT_READ],
+  management: [
+    ...employeeCapabilities,
+    CAPABILITIES.GOVERNANCE_READ,
+    CAPABILITIES.AUDIT_READ,
+    CAPABILITIES.AUDIT_EXPORT,
+    CAPABILITIES.REWARDS_MANAGE,
+  ],
   admin: Object.values(CAPABILITIES),
 };
 
-export function capabilitiesForProfile(profile: UserProfile): readonly Capability[] {
+export function capabilitiesForProfile(
+  profile: UserProfile,
+): readonly Capability[] {
   return [...profileCapabilities[profile]];
 }
 
-export function profileHasCapability(profile: UserProfile, capability: Capability): boolean {
+export function profileHasCapability(
+  profile: UserProfile,
+  capability: Capability,
+): boolean {
   return profileCapabilities[profile].includes(capability);
 }

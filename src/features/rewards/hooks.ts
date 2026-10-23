@@ -1,13 +1,27 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import type { QueryClient } from "@tanstack/react-query";
-import { createAdminReward, getAdminRewardCatalogue, getRedemptions, getRewards, requestRedemption, updateAdminReward, type AdminRewardInput } from "./api";
+import {
+  createAdminReward,
+  getAdminRewardCatalogue,
+  getRedemptions,
+  getRewards,
+  requestRedemption,
+  updateAdminReward,
+  type AdminRewardInput,
+} from "./api";
 
 export const rewardsQueryKeys = {
   all: ["rewards"] as const,
   summary: () => ["rewards", "summary"] as const,
-  redemptions: (params: { page?: number; pageSize?: number } = {}) => ["rewards", "redemptions", params] as const,
+  redemptions: (params: { page?: number; pageSize?: number } = {}) =>
+    ["rewards", "redemptions", params] as const,
   adminCatalogue: () => ["rewards", "admin", "catalogue"] as const,
 };
 
@@ -18,31 +32,75 @@ export function refreshEmployeeRewards(client: QueryClient) {
   ]);
 }
 
-export function useRewards(enabled = true) { return useQuery({ queryKey: rewardsQueryKeys.summary(), queryFn: getRewards, enabled }); }
-export function useRedemptions(params: { page?: number; pageSize?: number } = {}) { return useQuery({ queryKey: rewardsQueryKeys.redemptions(params), queryFn: () => getRedemptions(params) }); }
+export function useRewards(enabled = true) {
+  return useQuery({
+    queryKey: rewardsQueryKeys.summary(),
+    queryFn: getRewards,
+    enabled,
+  });
+}
+export function useRedemptions(params: { pageSize?: number } = {}) {
+  const pageSize = params.pageSize ?? 20;
+  const query = useInfiniteQuery({
+    queryKey: rewardsQueryKeys.redemptions({ pageSize }),
+    queryFn: ({ pageParam }) => getRedemptions({ page: pageParam, pageSize }),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) =>
+      lastPage.page < lastPage.totalPages ? lastPage.page + 1 : undefined,
+  });
+  const pages = query.data?.pages ?? [];
+  const lastPage = pages.at(-1);
+  return {
+    ...query,
+    data: lastPage
+      ? {
+          ...lastPage,
+          items: pages.flatMap((page) => page.items),
+        }
+      : undefined,
+  };
+}
 function newRedemptionKey(rewardId: number) {
-  const random = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const random =
+    globalThis.crypto?.randomUUID?.() ??
+    `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   return `reward-redemption:${rewardId}:${random}`;
 }
 export function useRequestRedemption() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: ({ rewardId, idempotencyKey = newRedemptionKey(rewardId) }: { rewardId: number; idempotencyKey?: string }) => requestRedemption(rewardId, idempotencyKey),
+    mutationFn: ({
+      rewardId,
+      idempotencyKey = newRedemptionKey(rewardId),
+    }: {
+      rewardId: number;
+      idempotencyKey?: string;
+    }) => requestRedemption(rewardId, idempotencyKey),
     onSuccess: () => refreshEmployeeRewards(client),
   });
 }
 
 export function useAdminRewardCatalogue(enabled = true) {
-  return useQuery({ queryKey: rewardsQueryKeys.adminCatalogue(), queryFn: getAdminRewardCatalogue, enabled });
+  return useQuery({
+    queryKey: rewardsQueryKeys.adminCatalogue(),
+    queryFn: getAdminRewardCatalogue,
+    enabled,
+  });
 }
 
 export function useSaveAdminReward() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, input }: { id?: number; input: AdminRewardInput }) => id === undefined ? createAdminReward(input) : updateAdminReward(id, input),
-    onSuccess: () => Promise.all([
-      client.invalidateQueries({ queryKey: rewardsQueryKeys.adminCatalogue() }),
-      client.invalidateQueries({ queryKey: rewardsQueryKeys.all }),
-    ]),
+    mutationFn: ({ id, input }: { id?: number; input: AdminRewardInput }) =>
+      id === undefined
+        ? createAdminReward(input)
+        : updateAdminReward(id, input),
+    onSuccess: () =>
+      Promise.all([
+        client.invalidateQueries({
+          queryKey: rewardsQueryKeys.adminCatalogue(),
+        }),
+        client.invalidateQueries({ queryKey: rewardsQueryKeys.all }),
+      ]),
   });
 }
