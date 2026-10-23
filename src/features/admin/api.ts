@@ -15,6 +15,13 @@ export async function listAdminRewards() {
   const response = await apiFetch<AdminReward[] | ListResponse<AdminReward>>("/api/admin/rewards");
   return Array.isArray(response) ? response : response.items;
 }
+export type AdminRewardInput = Pick<AdminReward, "name" | "description" | "kind" | "cost" | "emoji" | "active"> & { reason: string };
+export function createAdminReward(input: AdminRewardInput) {
+  return apiFetch<{ reward: AdminReward; version: unknown }>("/api/admin/rewards", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(input) });
+}
+export function updateAdminReward(id: number, input: AdminRewardInput) {
+  return apiFetch<{ reward: AdminReward; version: unknown }>(`/api/admin/rewards/${id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(input) });
+}
 
 export function listAdminRedemptions() {
   return apiFetch<Paginated<AdminRedemption>>("/api/admin/rewards/redemptions");

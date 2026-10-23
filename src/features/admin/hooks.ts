@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { actOnAdminRedemption, adminQueryKeys, decideAdminEvaluation, decideAdminIdea, getAdminEvaluation, getAdminSettings, listAdminAudit, listAdminChallenges, listAdminFeedback, listAdminQuizCatalogue, listAdminRedemptions, listAdminRewards, listAdminRoutedEvaluations, listAdminScreening, listAdminTransformation, listAdminUsers, respondToAdminFeedback, type EvaluationAction, type GovernanceAction, type RedemptionAction } from "./api";
+import { actOnAdminRedemption, adminQueryKeys, createAdminReward, decideAdminEvaluation, decideAdminIdea, getAdminEvaluation, getAdminSettings, listAdminAudit, listAdminChallenges, listAdminFeedback, listAdminQuizCatalogue, listAdminRedemptions, listAdminRewards, listAdminRoutedEvaluations, listAdminScreening, listAdminTransformation, listAdminUsers, respondToAdminFeedback, updateAdminReward, type AdminRewardInput, type EvaluationAction, type GovernanceAction, type RedemptionAction } from "./api";
 
 export function useAdminGovernanceDecision() {
   const client = useQueryClient();
@@ -23,6 +23,16 @@ export function useAdminChallenges(enabled = true) {
 
 export function useAdminRewards(enabled = true) {
   return useQuery({ queryKey: adminQueryKeys.rewards, queryFn: listAdminRewards, enabled });
+}
+
+export function useCreateAdminReward() {
+  const client = useQueryClient();
+  return useMutation({ mutationFn: (input: AdminRewardInput) => createAdminReward(input), onSuccess: () => client.invalidateQueries({ queryKey: adminQueryKeys.rewards }) });
+}
+
+export function useUpdateAdminReward() {
+  const client = useQueryClient();
+  return useMutation({ mutationFn: ({ id, input }: { id: number; input: AdminRewardInput }) => updateAdminReward(id, input), onSuccess: () => client.invalidateQueries({ queryKey: adminQueryKeys.rewards }) });
 }
 
 export function useAdminRedemptions(enabled = true) {
