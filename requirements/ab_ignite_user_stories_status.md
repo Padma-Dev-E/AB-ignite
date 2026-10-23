@@ -8,8 +8,8 @@ Audited against the local branch through admin evaluation, feedback, people, rew
 
 | Status | Count |
 | :--- | ---: |
-| Complete | 8 |
-| Partial | 38 |
+| Complete | 9 |
+| Partial | 37 |
 | Not started | 0 |
 | Total | 46 |
 
@@ -27,7 +27,7 @@ Audited against the local branch through admin evaluation, feedback, people, rew
 | ID-08 | No | Partial | Successful submission now waits for server confirmation, returns the generated reference and awards 50 points idempotently. | Confirmation still needs the final category, priority band, and per-KPI breakdown displayed together. |
 | ID-09 | No | Partial | Idea status, versions, events, detail, comments, and support APIs exist. | Complete lifecycle transitions and notifications at every step are not implemented. |
 | ID-10 | No | Partial | Workflow transitions now create accepted/status-change notifications, including the proof-of-concept acceptance message. | Business-owner and transformation-team decision workspaces and their server-enforced role paths remain. |
-| ID-11 | No | Partial | Comment and support APIs/hooks and detail UI exist. | Own-idea support enforcement and the 5-point commenter / 2-point author reward rules are missing. |
+| ID-11 | Yes | Complete | Community detail UI and secured support/comment services enforce authors cannot support their own idea, count both interactions idempotently, notify the author, and award 2 points to the idea author per support plus 5 points to a commenting colleague; focused domain tests pass. | — |
 
 ## 2. Quizzes journey
 
@@ -47,7 +47,7 @@ Audited against the local branch through admin evaluation, feedback, people, rew
 | ID | Completed? | Status | Current evidence | Remaining gap |
 | :--- | :---: | :--- | :--- | :--- |
 | AR-01 | No | Partial | Live employee library reads the secured catalogue, provides category filters, and has loading/error/empty states. | Seeded category coverage and full publisher/source presentation need broader content and browser verification. |
-| AR-02 | No | Partial | Live Recommended view reads open recommendations with reasons and a clear empty state. | Recommendation insight action and full lifecycle presentation remain. |
+| AR-02 | No | Partial | Live Recommended view reads open recommendations with reasons and a clear empty state; each recommended card now exposes the secured insight action. | Full browser lifecycle coverage remains. |
 | AR-03 | No | Partial | Live article detail renders internal body content and keeps external HTTPS links in a new tab. | Article source/read UX needs final browser smoke coverage. |
 | AR-04 | No | Partial | Article completion is server-idempotent and the live detail action shows pending/success/error, including points awarded. | Second-completion UI and badge unlock presentation remain. |
 | AR-05 | Yes | Complete | Secured article insight endpoint validates recommendation ownership, uses the generic Gemini adapter when configured, audits the source, and falls back to the persisted rule message; `ArticleCard` exposes the insight action with loading/error/Gemini-or-rule states and focused tests. | — |
@@ -67,14 +67,14 @@ Audited against the local branch through admin evaluation, feedback, people, rew
 
 | ID | Completed? | Status | Current evidence | Remaining gap |
 | :--- | :---: | :--- | :--- | :--- |
-| AD-01 | No | Partial | Secured, bounded screening queue and reasoned decision APIs are implemented with audit/notifications; the admin workspace reads the queue and exposes reason dialogs. | Send-to-owner assignment, due dates, durable assignment, and a distinct transformation-team role remain. |
+| AD-01 | No | Partial | Secured, bounded screening queue and reasoned decision APIs are implemented with audit/notifications; the admin workspace now exposes active business-owner selection for Send to business owner. | Due dates, richer durable assignment management, and a distinct transformation-team role remain. |
 | AD-02 | No | Partial | Secured transformation queue and confirm-to-POC API are implemented with employee notification/audit; the admin workspace now exposes confirmation controls. | Durable assignment/due-date fields and a distinct transformation role remain. |
 | AD-03 | No | Partial | Routed evaluation reads are owner-scoped through event metadata and include stored answers, KPI metrics, AI assessment, and reasoned decision actions. | Distinct business-owner RBAC, durable assignments, and evaluation UI remain. |
 | AD-04 | Yes | Complete | Routed evaluation detail renders all five answers, each KPI metric, score, weight, weighted contribution, author explanation, minimum, validation state, and AI assessment; decisions require a reason. | — |
-| AD-05 | No | Partial | Admin control room consumes live users, rewards, learning, governance, and audit data with bounded audit CSV export. | Pipeline/department/learning dashboards and ideas/benefits/feedback CSV exports remain. |
+| AD-05 | No | Partial | Admin control room consumes live users, rewards, learning, governance, and audit data; Operations evidence adds bounded aggregate cards and summary CSV plus the secured audit CSV export. | Pipeline/department/learning analytics and dedicated ideas/benefits/feedback CSV exports remain. |
 | AD-06 | No | Partial | Admin-only user directory, role changes, activation/deactivation, sign-in security reset, per-user session inspection, and audit records are implemented; the live People & access manager exposes reason-required controls and safe session metadata. | The role model is still admin/user rather than the full profile set; password reset and individual session revocation endpoints/UI remain. |
 | AD-07 | No | Partial | Admin settings editor now loads and edits the minimum score, point rules, and recommendation rules with a privileged reason and audited PATCH mutation. | Full KPI hints/weights/bands, levels, SLA, controls, departments, demo access, and profiles settings UI remain. |
-| AD-08 | No | Partial | Admin learning APIs cover bounded quiz/article catalogues, unpublished quiz question edits, recommendation rules, and strict HTTPS external-link validation. | Learning-content management UI and complete quiz authoring workflow remain. |
+| AD-08 | No | Partial | Admin learning APIs and the protected Learning Content manager cover unpublished quiz question/answer editing, article create/edit/publish controls, recommendation rules, and strict HTTPS external-link validation with audited reasons. | Quiz/version creation, publishing workflow, and adding new questions are not exposed by the current backend endpoints. |
 | AD-09 | No | Partial | Employee feedback campaign form, live notifications, secured administrator response APIs, and the protected admin Campaign feedback response UI persist, notify, and audit. | Campaign/announcement/challenge authoring and lifecycle management remain. |
 | AD-10 | No | Partial | Idea events and AI run records provide limited traceability. | Complete login/transition/settings/redemption audit coverage, IP detail, filtering, and CSV export are missing. |
 
