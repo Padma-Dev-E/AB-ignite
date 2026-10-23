@@ -4,7 +4,8 @@ import Link from "next/link";
 import { Dialog, DialogPanel, DialogTitle, Tab, TabGroup, TabList, TabPanel, TabPanels } from "@headlessui/react";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { Card, IconBox, SectionHeading, StatTile } from "../../../components/ui";
-import { useAdminAudit, useAdminChallenges, useAdminGovernanceDecision, useAdminQuizCatalogue, useAdminRedemptionAction, useAdminRedemptions, useAdminRewards, useAdminScreening, useAdminSettings, useAdminTransformation, useAdminUsers } from "../hooks";
+import { useAdminAudit, useAdminChallenges, useAdminGovernanceDecision, useAdminQuizCatalogue, useAdminRedemptionAction, useAdminRedemptions, useAdminRewards, useAdminScreening, useAdminTransformation, useAdminUsers } from "../hooks";
+import { AdminSettingsEditor } from "./admin-settings-editor";
 import type { GovernanceAction, RedemptionAction } from "../api";
 import type { AdminAuditEvent, AdminChallenge, AdminIdea, AdminQuiz, AdminRedemption, AdminReward, AdminUser } from "../types";
 
@@ -208,12 +209,7 @@ function AuditTable({ query }: { query: ReturnType<typeof useAdminAudit> }) {
 }
 
 function SettingsPanel() {
-  const settings = useAdminSettings();
-  if (settings.isPending) return <div className="stack"><SectionHeading title="Platform settings" detail="Change control protected" /><LoadingRows label="Loading settings" /></div>;
-  if (settings.isError) return <div className="stack"><SectionHeading title="Platform settings" detail="Change control protected" /><StatePanel title="Settings unavailable" detail={queryMessage(settings.error, "Settings could not be loaded.")} tone="error" /></div>;
-  const data = settings.data;
-  if (!data) return <StatePanel title="Settings unavailable" detail="No configuration data was returned." tone="error" />;
-  return <div className="stack"><SectionHeading title="Platform settings" detail="Live read-only configuration" /><Card><h2 className="text-xl font-medium">Priority and recognition rules</h2><p className="mt-1 text-sm text-muted">Configuration is read from the audited admin settings endpoint. Mutations require a privileged reason.</p><div className="mt-5 grid gap-3 sm:grid-cols-2">{Object.entries(data.priority).map(([key, value]) => <div className="tile" key={key}><span className="block text-xs text-muted">{key}</span><b className="font-medium">{String(value)}</b></div>)}<div className="tile"><span className="block text-xs text-muted">Point rules</span><b className="font-medium">{data.pointRules.length} configured</b></div><div className="tile"><span className="block text-xs text-muted">Recommendation rules</span><b className="font-medium">{data.recommendationRules.length} configured</b></div></div></Card></div>;
+  return <div className="stack"><SectionHeading title="Platform settings" detail="Change control protected" /><AdminSettingsEditor /></div>;
 }
 
 export function AdminWorkspace({ email }: AdminWorkspaceProps) {

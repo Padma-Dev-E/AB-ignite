@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { Button } from "@headlessui/react";
 import { useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "../../../lib/api/client";
+import { Button } from "../../../components/ui";
 import { useAdminSettings } from "../hooks";
 import { adminQueryKeys } from "../api";
 
@@ -29,8 +29,8 @@ export function AdminSettingsEditor({ className = "" }: AdminSettingsEditorProps
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  if (settings.isPending) return <section className={`card ${className}`} aria-busy="true"><p className="text-sm text-muted" role="status">Loading admin settings…</p></section>;
-  if (settings.isError || !settings.data) return <section className={`card ${className}`}><p className="text-sm text-[#d6336c]" role="alert">{settings.error instanceof Error ? settings.error.message : "Admin settings could not be loaded."}</p><button type="button" className="btn mt-3" onClick={() => void settings.refetch()}>Try again</button></section>;
+  if (settings.isPending) return <section className={`app-card ${className}`} aria-busy="true"><p className="text-sm text-muted" role="status">Loading admin settings…</p></section>;
+  if (settings.isError || !settings.data) return <section className={`app-card ${className}`}><p className="text-sm text-[#d6336c]" role="alert">{settings.error instanceof Error ? settings.error.message : "Admin settings could not be loaded."}</p><button type="button" className="btn mt-3" onClick={() => void settings.refetch()}>Try again</button></section>;
 
   const priorityValue = minimum ?? settings.data.priority.minimum_priority_score ?? "0";
   const points = pointRules ?? settings.data.pointRules.map(({ code, points: value, active }) => ({ code, points: value, active }));
@@ -50,7 +50,7 @@ export function AdminSettingsEditor({ className = "" }: AdminSettingsEditorProps
     finally { setSaving(false); }
   }
 
-  return <section className={`card ${className}`}>
+  return <section className={`app-card ${className}`}>
     <h2 className="text-xl font-medium">Priority settings</h2>
     <p className="mt-1 text-sm text-muted">Changes are recorded in the admin audit log.</p>
     {success && <p className="mt-4 rounded-xl border border-teal/40 bg-teal/5 p-3 text-sm" role="status">{success}</p>}

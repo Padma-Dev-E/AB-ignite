@@ -15,6 +15,7 @@ import { useRedemptions, useRequestRedemption, useRewards } from "../src/feature
 import { RedemptionHistory, RewardCatalogue, RewardsBalanceCard, RewardsState } from "../src/features/rewards/components/reward-cards";
 import { useEmployeeNotifications, useSetEmployeeNotificationRead } from "../src/features/employee/engagement-hooks";
 import type { Notification } from "../src/features/employee/engagement-api";
+import { EmployeeProfileCard } from "../src/features/employee/employee-profile";
 
 type Page = "community" | "new" | "learn" | "library" | "rewards" | "me" | "article" | "idea" | "quiz";
 type IconName = keyof typeof iconPaths;
@@ -202,6 +203,10 @@ function RewardsPage() {
 }
 
 function AccountPage({ onNavigate }: { onNavigate: (page: Page) => void }) {
+  return <div className="stack"><Hero art="arena" title="My account" subtitle="Your profile, idea history and Ignite journey." /><EmployeeProfileCard /><section className="app-card"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-xl font-medium">My ideas</h2><p className="mt-1 text-sm text-muted">Your submitted ideas and workflow updates appear in Community.</p></div><button className="btn-primary" onClick={() => onNavigate("new")}>Share an idea</button></div></section></div>;
+}
+
+function LegacyAccountPage({ onNavigate }: { onNavigate: (page: Page) => void }) {
   return <div className="stack"><Hero art="arena" title="My account" subtitle="Your profile, idea history and Ignite journey." /><div className="grid gap-[18px] xl:grid-cols-2"><section className="app-card"><div className="flex items-center gap-3"><Avatar name="padmadev" size="lg" /><div><h2 className="text-xl font-medium">padmadev</h2><p className="text-sm text-muted">demo-padmadev-609b99@demo.abignite</p><p className="text-sm text-muted">Technology · Demo profile</p></div></div><div className="mt-5 grid grid-cols-3 gap-2"><div className="tile text-center"><b className="block text-xl font-semibold">0</b><span className="text-xs text-muted">Ideas</span></div><div className="tile text-center"><b className="block text-xl font-semibold">0</b><span className="text-xs text-muted">Points</span></div><div className="tile text-center"><b className="block text-xl font-semibold">12th</b><span className="text-xs text-muted">Ranking</span></div></div></section><section className="app-card"><h2 className="text-xl font-medium">Account</h2><p className="mt-1 text-sm text-muted">This is a demo profile created for the presentation. Its history is kept for this session on this device and is separate from real employee records.</p><details className="mt-4"><summary className="cursor-pointer font-medium text-blue">Change password</summary><div className="mt-3 space-y-3"><input className="input" type="password" placeholder="Current password" /><input className="input" type="password" placeholder="New password" /><button className="btn-primary">Save password</button></div></details><button className="btn mt-5" onClick={() => onNavigate("community")}>Back to community</button></section></div><section className="app-card"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-xl font-medium">My ideas</h2><p className="mt-1 text-sm text-muted">No ideas yet. Share your first idea to see where it stands.</p></div><button className="btn-primary" onClick={() => onNavigate("new")}>Share your first</button></div></section></div>;
 }
 
