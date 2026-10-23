@@ -100,3 +100,13 @@ No story should be changed to **Complete** until its acceptance criteria have:
 5. Audit/idempotency behavior for points, rewards, workflow decisions, and other bank-sensitive mutations.
 
 This document is the implementation checklist for the remaining work. The source requirements file remains unchanged.
+
+## Latest verification evidence
+
+- `npx tsc --noEmit --incremental false` passed.
+- `npm run test:ai` passed 76/76 after applying the current migration chain.
+- `npm run test:client` passed 11/11; `npm test` passed 16/16.
+- `npm run build` completed successfully with 40 static pages.
+- HTTP smoke passed for login, protected redirects, unauthenticated API boundaries, structured demo validation, and a valid `padmadev` demo session reaching `/private` and `/api/ideas`.
+- Chromium fallback screenshots passed at 1280×720 and 390×844. Chrome DevTools was unavailable because its executable is not installed in the environment.
+- The supplied Gemini key was tested without persistence: model discovery returned HTTP 200, and the project adapter returned structured JSON using `gemini-3.1-flash-lite` and `gemini-3.8-flash`. No credential was written to the repository.
