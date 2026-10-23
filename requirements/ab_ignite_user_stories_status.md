@@ -2,7 +2,7 @@
 
 Status audit for [`ab_ignite_user_stories.md`](./ab_ignite_user_stories.md).
 
-Audited against the local branch through admin evaluation, feedback, people, reward, learning, profile/settings, engagement, quiz, idea, and reward-control commits `5de7bad`, `ffb9cb9`, `54b3e98`, `96202c5`, `3d6fc8c`, `f783bf1`, `e3e7fd3`, `bce7802`, `34de060`, `71e5f33`, `1e3b28e`, `70ff50a`, `790b536`, `03cfec8`, and `2020d41` on 2026-10-23. A story is marked **Complete** only when its acceptance criteria are implemented end-to-end. **Partial** means code or UI exists, but one or more acceptance criteria are still missing. **Not started** means there is no functional implementation for the acceptance criteria; a static mock does not count as complete.
+Audited against the local branch through admin evaluation, feedback, people, reward, learning, profile/settings, engagement, quiz, idea, and reward-control commits `9350514`, `f9c7872`, `2c1751d`, `7a57756`, `5de7bad`, `ffb9cb9`, `54b3e98`, `96202c5`, `3d6fc8c`, `f783bf1`, `e3e7fd3`, `bce7802`, `34de060`, `71e5f33`, `1e3b28e`, `70ff50a`, `790b536`, `03cfec8`, and `2020d41` on 2026-10-23. A story is marked **Complete** only when its acceptance criteria are implemented end-to-end. **Partial** means code or UI exists, but one or more acceptance criteria are still missing. **Not started** means there is no functional implementation for the acceptance criteria; a static mock does not count as complete.
 
 ## Summary
 
