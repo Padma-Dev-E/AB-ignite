@@ -1,6 +1,6 @@
 "use client";
 
-import { Disclosure, DisclosureButton, DisclosurePanel } from "@headlessui/react";
+import { Dialog, DialogPanel, DialogTitle, Disclosure, DisclosureButton, DisclosurePanel } from "@headlessui/react";
 import React from "react";
 import type { Redemption, Reward, RewardsBalance } from "../types";
 
@@ -16,10 +16,15 @@ export function RewardsState({ state, onRetry, label }: { state: "loading" | "er
 
 export function RewardCard({ reward, balance, onRedeem, pending = false, successMessage, errorMessage }: { reward: Reward; balance: number; onRedeem?: () => void; pending?: boolean; successMessage?: string; errorMessage?: string }) {
   const canAfford = balance >= reward.cost;
+  const [confirmOpen, setConfirmOpen] = React.useState(false);
+  const confirm = () => {
+    setConfirmOpen(false);
+    onRedeem?.();
+  };
   return <article className={cardClass} aria-labelledby={`reward-${reward.id}-title`}>
     <div className="flex items-start gap-3"><span className="text-2xl" aria-hidden="true">{reward.emoji ?? "★"}</span><div className="min-w-0 flex-1"><h3 id={`reward-${reward.id}-title`} className="font-semibold text-slate-950">{reward.name}</h3>{reward.description && <p className="mt-1 text-sm text-slate-700">{reward.description}</p>}</div></div>
     <Disclosure><DisclosureButton className="mt-3 rounded-md text-sm font-medium text-indigo-800 underline underline-offset-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-700">Point details</DisclosureButton><DisclosurePanel className="mt-2 text-sm text-slate-700">Costs {reward.cost} points. Your available balance is {balance} points.</DisclosurePanel></Disclosure>
-    {onRedeem && <><button type="button" className={`${actionClass} mt-4`} onClick={onRedeem} disabled={!canAfford || pending}>{pending ? "Requesting…" : canAfford ? `Redeem for ${reward.cost} points` : `Need ${reward.cost - balance} more points`}</button>{successMessage && <p className="mt-3 text-sm text-emerald-800" role="status">{successMessage}</p>}{errorMessage && <p className="mt-3 text-sm text-red-800" role="alert">{errorMessage}</p>}</>}
+    {onRedeem && <><button type="button" className={`${actionClass} mt-4`} onClick={() => setConfirmOpen(true)} disabled={!canAfford || pending}>{pending ? "Requesting…" : canAfford ? `Redeem for ${reward.cost} points` : `Need ${reward.cost - balance} more points`}</button>{successMessage && <p className="mt-3 text-sm text-emerald-800" role="status">{successMessage}</p>}{errorMessage && <p className="mt-3 text-sm text-red-800" role="alert">{errorMessage}</p>}<Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)} className="relative z-50"><div className="fixed inset-0 bg-slate-950/30" aria-hidden="true" /><div className="fixed inset-0 grid place-items-center p-4"><DialogPanel className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl"><DialogTitle className="text-lg font-semibold text-slate-950">Confirm redemption</DialogTitle><p className="mt-2 text-sm text-slate-700">Redeem <b>{reward.name}</b> for <b>{reward.cost.toLocaleString()} points</b>? The points will be deducted immediately and the request will be sent to the innovation team.</p><p className="mt-2 text-sm text-slate-600">Available after redemption: {(balance - reward.cost).toLocaleString()} points.</p><div className="mt-5 flex justify-end gap-2"><button type="button" className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-800" onClick={() => setConfirmOpen(false)}>Cancel</button><button type="button" className={actionClass} onClick={confirm} disabled={pending}>{pending ? "Requesting…" : "Confirm redemption"}</button></div></DialogPanel></div></Dialog></>}
   </article>;
 }
 

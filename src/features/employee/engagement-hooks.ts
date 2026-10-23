@@ -16,8 +16,8 @@ export function useSubmitEmployeeFeedback() {
   });
 }
 
-export function useEmployeeNotifications() {
-  return useQuery({ queryKey: engagementQueryKeys.notifications, queryFn: getNotifications, refetchInterval: 30_000 });
+export function useEmployeeNotifications(enabled = true) {
+  return useQuery({ queryKey: engagementQueryKeys.notifications, queryFn: getNotifications, enabled, refetchInterval: enabled ? 30_000 : false });
 }
 
 export function useSetEmployeeNotificationRead() {

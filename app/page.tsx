@@ -13,6 +13,8 @@ import { useArticles, useCompleteArticle, useLearningArticle, useLearningJourney
 import { ArticleCard } from "../src/features/learning/components/learning-cards";
 import { useRedemptions, useRequestRedemption, useRewards } from "../src/features/rewards/hooks";
 import { RedemptionHistory, RewardCatalogue, RewardsBalanceCard, RewardsState } from "../src/features/rewards/components/reward-cards";
+import { useEmployeeNotifications, useSetEmployeeNotificationRead } from "../src/features/employee/engagement-hooks";
+import type { Notification } from "../src/features/employee/engagement-api";
 
 type Page = "community" | "new" | "learn" | "library" | "rewards" | "me" | "article" | "idea" | "quiz";
 type IconName = keyof typeof iconPaths;
@@ -90,13 +92,13 @@ function SideNav({ page, open, onClose, onNavigate, onSignOut }: { page: Page; o
   </aside>;
 }
 
-function TopBar({ page, points, onMenu, onNavigate, onNotifications }: { page: Page; points: number; onMenu: () => void; onNavigate: (page: Page) => void; onNotifications: () => void }) {
+function TopBar({ page, points, unreadCount, onMenu, onNavigate, onNotifications }: { page: Page; points: number; unreadCount: number; onMenu: () => void; onNavigate: (page: Page) => void; onNotifications: () => void }) {
   return <header className="sticky top-0 z-30 flex items-center gap-2 border-b bg-white/75 px-3 py-2.5 backdrop-blur-md sm:px-7" style={{ borderColor: "var(--line)" }}>
     <button className="icon-button lg:hidden" onClick={onMenu} aria-label="Open menu"><Icon name="menu" /></button>
     <h2 className="mr-auto min-w-0 truncate text-[15px] font-medium before:mr-2.5 before:inline-block before:h-2.5 before:w-2.5 before:rounded-full before:bg-blue sm:text-base">{pageTitle(page)}</h2>
     <button className="btn-primary btn-small hidden sm:inline-flex" onClick={() => onNavigate("new")}><Icon name="spark" /> I have an idea</button>
     <button className="hidden items-center gap-1.5 rounded-[11px] border px-3 py-2 text-[13.5px] font-medium sm:flex" style={{ borderColor: "var(--line)" }} onClick={() => onNavigate("me")}><span>💡</span>{points.toLocaleString("en-US")}</button>
-    <button className="icon-button relative" onClick={onNotifications} aria-label="Notifications"><Icon name="bell" /><span className="absolute -right-1 -top-1 grid h-[18px] min-w-[18px] place-items-center rounded-full bg-[#e5484d] px-1 text-[11px] font-bold text-white">4</span></button>
+    <button className="icon-button relative" onClick={onNotifications} aria-label={`Notifications${unreadCount ? `, ${unreadCount} unread` : ""}`}><Icon name="bell" />{unreadCount > 0 && <span className="absolute -right-1 -top-1 grid h-[18px] min-w-[18px] place-items-center rounded-full bg-[#e5484d] px-1 text-[11px] font-bold text-white">{unreadCount > 99 ? "99+" : unreadCount}</span>}</button>
     <button onClick={() => onNavigate("me")} className="hidden sm:block"><Avatar name="padmadev" /></button>
   </header>;
 }
@@ -108,11 +110,10 @@ function MobileNav({ page, onNavigate }: { page: Page; onNavigate: (page: Page) 
   </nav>;
 }
 
-function Notifications({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const notifications = [{ icon: "bulb" as IconName, title: "New challenge launched", body: "Zero Manual Work is open for ideas.", date: "Today" }, { icon: "book" as IconName, title: "Learning opportunity", body: "Cards 101 with Card Operations, Tuesday at 2 pm.", date: "13 Oct" }, { icon: "trophy" as IconName, title: "Welcome to AB Ignite", body: "Share an idea, support a colleague, take a quiz.", date: "13 Oct" }, { icon: "flag" as IconName, title: "Your demo profile is ready", body: "Start by sharing your first idea.", date: "13 Oct" }];
+function Notifications({ open, onClose, items, unreadCount, onMarkAllRead }: { open: boolean; onClose: () => void; items: Notification[]; unreadCount: number; onMarkAllRead: () => void }) {
   return <Transition show={open} as={Fragment}><Dialog onClose={onClose} className="relative z-[70]">
     <TransitionChild as={Fragment} enter="transition-opacity duration-150" enterFrom="opacity-0" enterTo="opacity-100" leave="transition-opacity duration-150" leaveFrom="opacity-100" leaveTo="opacity-0"><div className="fixed inset-0 bg-navy/10 lg:bg-transparent" /></TransitionChild>
-    <TransitionChild as={Fragment} enter="transition duration-150" enterFrom="opacity-0 translate-y-2" enterTo="opacity-100 translate-y-0" leave="transition duration-100" leaveFrom="opacity-100" leaveTo="opacity-0 translate-y-2"><DialogPanel className="fixed right-3 top-[62px] w-[370px] max-w-[calc(100vw-24px)] rounded-2xl border bg-white p-2 shadow-[0_24px_60px_-14px_rgba(3,10,30,.5)] sm:right-6"><div className="flex items-center justify-between px-3 py-2"><h3 className="font-medium">Notifications</h3><button className="btn btn-small" onClick={onClose}>Mark all read</button></div>{notifications.map((item) => <div key={item.title} className="flex gap-3 rounded-[10px] bg-blue/[.06] p-3 text-sm"><Icon name={item.icon} className="mt-0.5 h-[19px] w-[19px] shrink-0 text-blue" /><div className="min-w-0 flex-1"><b className="font-medium">{item.title}</b><div className="text-[13px] text-muted">{item.body}</div></div><span className="whitespace-nowrap text-xs text-muted">{item.date}</span></div>)}</DialogPanel></TransitionChild>
+    <TransitionChild as={Fragment} enter="transition duration-150" enterFrom="opacity-0 translate-y-2" enterTo="opacity-100 translate-y-0" leave="transition duration-100" leaveFrom="opacity-100" leaveTo="opacity-0 translate-y-2"><DialogPanel className="fixed right-3 top-[62px] w-[370px] max-w-[calc(100vw-24px)] rounded-2xl border bg-white p-2 shadow-[0_24px_60px_-14px_rgba(3,10,30,.5)] sm:right-6"><div className="flex items-center justify-between px-3 py-2"><div><h3 className="font-medium">Notifications</h3><p className="text-xs text-muted">{unreadCount} unread</p></div><button className="btn btn-small" onClick={onMarkAllRead} disabled={!unreadCount}>Mark all read</button></div>{items.length === 0 ? <p className="px-3 py-8 text-center text-sm text-muted">You’re all caught up.</p> : items.map((item) => <div key={item.id} className={`flex gap-3 rounded-[10px] p-3 text-sm ${item.isRead ? "" : "bg-blue/[.06]"}`}><Icon name="bell" className="mt-0.5 h-[19px] w-[19px] shrink-0 text-blue" /><div className="min-w-0 flex-1"><b className="font-medium">{item.title}</b><div className="text-[13px] text-muted">{item.body}</div></div><time className="whitespace-nowrap text-xs text-muted" dateTime={item.createdAt}>{new Date(item.createdAt).toLocaleDateString()}</time></div>)}</DialogPanel></TransitionChild>
   </Dialog></Transition>;
 }
 
@@ -216,13 +217,14 @@ function LiveLearnPage() {
 
 function LiveLibraryPage({ onArticle }: { onArticle: (id: number) => void }) {
   const [tab, setTab] = useState("All");
-  const category = tab === "All" || tab === "Recommended" ? undefined : tab;
+  const categoryMap: Record<string, string | undefined> = { All: undefined, Recommended: undefined, Banking: "banking", Transformation: "transformation", Technology: "technology" };
+  const category = categoryMap[tab];
   const articlesQuery = useArticles(category);
   const recommendations = useLearningRecommendations();
   const isRecommended = tab === "Recommended";
   const query = isRecommended ? recommendations : articlesQuery;
   const items = isRecommended ? recommendations.data?.items ?? [] : articlesQuery.data?.items ?? [];
-  return <div className="stack"><Hero art="library" title="Library" subtitle="Practical reading for better ideas, sharper decisions and stronger outcomes." /><Tabs items={["All", "Recommended", "Banking Excellence", "Innovation & Business Transformation", "Technology & AI"]} active={tab} onChange={setTab} />{query.isPending ? <LearningState state="loading" label="Loading the library…" /> : query.isError ? <LearningState state="error" label="The library could not be loaded." onRetry={() => void query.refetch()} /> : <ArticleList articles={items} onComplete={(article) => onArticle(article.id)} />}</div>;
+  return <div className="stack"><Hero art="library" title="Library" subtitle="Practical reading for better ideas, sharper decisions and stronger outcomes." /><Tabs items={["All", "Recommended", "Banking", "Transformation", "Technology"]} active={tab} onChange={setTab} />{query.isPending ? <LearningState state="loading" label="Loading the library…" /> : query.isError ? <LearningState state="error" label="The library could not be loaded." onRetry={() => void query.refetch()} /> : <ArticleList articles={items} onOpen={(article) => onArticle(article.id)} />}</div>;
 }
 
 function LiveArticlePage({ articleId, onBack }: { articleId: number | null; onBack: () => void }) {
@@ -260,6 +262,8 @@ export default function Home(props: unknown) {
   const [selectedArticleId, setSelectedArticleId] = useState<number | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const notificationsQuery = useEmployeeNotifications(signedIn);
+  const setNotificationRead = useSetEmployeeNotificationRead();
 
   useEffect(() => { if (protectedView || window.sessionStorage.getItem("ab-ignite-signed-in") === "true") setSignedIn(true); }, [protectedView]);
   const enter = (name: string) => { window.sessionStorage.setItem("ab-ignite-signed-in", "true"); setSignedIn(true); setPage("community"); };
@@ -268,5 +272,5 @@ export default function Home(props: unknown) {
   const openIdea = (id: number) => { setSelectedIdeaId(id); navigate("idea"); };
   if (!signedIn) return <AuthLoginScreen onEnter={enter} />;
   const pageContent = page === "community" ? <EmployeeCommunityPage onNavigate={navigate} onOpenIdea={openIdea} /> : page === "new" ? <EmployeeIdeaSubmissionPage onOpenIdea={openIdea} /> : page === "learn" ? <LiveLearnPage /> : page === "library" ? <LiveLibraryPage onArticle={(id) => { setSelectedArticleId(id); navigate("article"); }} /> : page === "article" ? <LiveArticlePage articleId={selectedArticleId} onBack={() => navigate("library")} /> : page === "idea" && selectedIdeaId ? <EmployeeIdeaDetailPage ideaId={selectedIdeaId} onBack={() => navigate("community")} /> : page === "rewards" ? <LiveRewardsPage /> : page === "me" ? <AccountPage onNavigate={navigate} /> : page === "quiz" ? <LiveLearnPage /> : <EmployeeCommunityPage onNavigate={navigate} onOpenIdea={openIdea} />;
-  return <div className="app-background min-h-screen"><div className="grid min-h-screen lg:grid-cols-[240px_1fr]"><SideNav page={page} open={menuOpen} onClose={() => setMenuOpen(false)} onNavigate={navigate} onSignOut={signOut} /><div className="min-w-0"><TopBar page={page} points={0} onMenu={() => setMenuOpen(true)} onNavigate={navigate} onNotifications={() => setNotificationsOpen(true)} /><main className="mx-auto w-full max-w-[1040px] px-3.5 pb-28 pt-[18px] sm:px-7 sm:pb-[70px] sm:pt-7">{pageContent}</main></div></div><MobileNav page={page} onNavigate={navigate} /><Notifications open={notificationsOpen} onClose={() => setNotificationsOpen(false)} /><div className="fixed inset-0 z-40 bg-navy/50 lg:hidden" onClick={() => setMenuOpen(false)} style={{ display: menuOpen ? "block" : "none" }} /></div>;
+  return <div className="app-background min-h-screen"><div className="grid min-h-screen lg:grid-cols-[240px_1fr]"><SideNav page={page} open={menuOpen} onClose={() => setMenuOpen(false)} onNavigate={navigate} onSignOut={signOut} /><div className="min-w-0"><TopBar page={page} points={0} unreadCount={notificationsQuery.data?.unreadCount ?? 0} onMenu={() => setMenuOpen(true)} onNavigate={navigate} onNotifications={() => setNotificationsOpen(true)} /><main className="mx-auto w-full max-w-[1040px] px-3.5 pb-28 pt-[18px] sm:px-7 sm:pb-[70px] sm:pt-7">{pageContent}</main></div></div><MobileNav page={page} onNavigate={navigate} /><Notifications open={notificationsOpen} onClose={() => setNotificationsOpen(false)} items={notificationsQuery.data?.items ?? []} unreadCount={notificationsQuery.data?.unreadCount ?? 0} onMarkAllRead={() => setNotificationRead.mutate({ all: true, read: true })} /><div className="fixed inset-0 z-40 bg-navy/50 lg:hidden" onClick={() => setMenuOpen(false)} style={{ display: menuOpen ? "block" : "none" }} /></div>;
 }

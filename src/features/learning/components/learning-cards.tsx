@@ -42,7 +42,7 @@ export function JourneyCard({ journey }: { journey: LearningJourney }) {
   </section>;
 }
 
-export function ArticleCard({ article, onComplete, pending = false, completed = false, successMessage, errorMessage }: { article: LearningArticle; onComplete?: () => void; pending?: boolean; completed?: boolean; successMessage?: string; errorMessage?: string }) {
+export function ArticleCard({ article, onOpen, onComplete, pending = false, completed = false, successMessage, errorMessage }: { article: LearningArticle; onOpen?: () => void; onComplete?: () => void; pending?: boolean; completed?: boolean; successMessage?: string; errorMessage?: string }) {
   return <article className={panelClass} aria-labelledby={`article-${article.id}-title`}>
     <p className="text-xs font-semibold uppercase tracking-wide text-indigo-800">{article.publisher} · {article.readingMinutes} min read</p>
     <h3 id={`article-${article.id}-title`} className="mt-2 text-lg font-semibold text-slate-950">{article.title}</h3>
@@ -52,12 +52,12 @@ export function ArticleCard({ article, onComplete, pending = false, completed = 
       <DisclosureButton className="mt-4 rounded-md text-sm font-medium text-indigo-800 underline decoration-indigo-300 underline-offset-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-700">Read article details</DisclosureButton>
       <DisclosurePanel className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-700">{article.body ?? (article.sourceUrl ? <a className="underline" href={article.sourceUrl} target="_blank" rel="noreferrer">Read at {article.publisher} (opens in a new tab)</a> : article.summary)}</DisclosurePanel>
     </Disclosure>
-    {onComplete && <button className={`${buttonClass} mt-4`} type="button" onClick={onComplete} disabled={pending || completed}>{pending ? "Saving…" : completed ? "Completed" : "Mark as read"}</button>}
+    <div className="mt-4 flex flex-wrap gap-2">{onOpen && <button className="inline-flex min-h-10 items-center justify-center rounded-lg border border-indigo-300 px-4 py-2 text-sm font-semibold text-indigo-800 hover:bg-indigo-50" type="button" onClick={onOpen}>Open article</button>}{onComplete && <button className={buttonClass} type="button" onClick={onComplete} disabled={pending || completed}>{pending ? "Saving…" : completed ? "Completed" : "Mark as read"}</button>}</div>
     {successMessage && <p className="mt-3 text-sm text-emerald-800" role="status">{successMessage}</p>}{errorMessage && <p className="mt-3 text-sm text-red-800" role="alert">{errorMessage}</p>}
   </article>;
 }
 
-export function ArticleList({ articles, onComplete, pendingArticleId, completedArticleIds = [] }: { articles: LearningArticle[]; onComplete?: (article: LearningArticle) => void; pendingArticleId?: number; completedArticleIds?: number[] }) {
+export function ArticleList({ articles, onOpen, onComplete, pendingArticleId, completedArticleIds = [] }: { articles: LearningArticle[]; onOpen?: (article: LearningArticle) => void; onComplete?: (article: LearningArticle) => void; pendingArticleId?: number; completedArticleIds?: number[] }) {
   if (!articles.length) return <LearningState state="empty" label="No articles to show right now." />;
-  return <ul className="grid gap-4 md:grid-cols-2">{articles.map((article) => <li key={article.id}><ArticleCard article={article} onComplete={onComplete ? () => onComplete(article) : undefined} pending={pendingArticleId === article.id} completed={completedArticleIds.includes(article.id)} /></li>)}</ul>;
+  return <ul className="grid gap-4 md:grid-cols-2">{articles.map((article) => <li key={article.id}><ArticleCard article={article} onOpen={onOpen ? () => onOpen(article) : undefined} onComplete={onComplete ? () => onComplete(article) : undefined} pending={pendingArticleId === article.id} completed={completedArticleIds.includes(article.id)} /></li>)}</ul>;
 }
