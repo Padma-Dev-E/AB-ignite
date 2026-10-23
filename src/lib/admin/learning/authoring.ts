@@ -113,7 +113,7 @@ function authorized(tx: Tx, actor: Actor, now: Date) {
     .get();
   if (
     !user ||
-    (user.role !== "admin" && user.profile !== "admin") ||
+    user.role !== "back_office" ||
     !user.isActive ||
     !session ||
     session.userId !== user.id ||
@@ -414,10 +414,19 @@ export function addQuestion(
         .from(quizQuestions)
         .where(eq(quizQuestions.quizVersionId, versionId))
         .all().length;
-      if (count >= quiz.questionCount)
-        throw new AdminConflictError(
-          "Quiz already has its planned number of questions.",
-        );
+      if (count >= quiz.questionCount) {
+        if (count >= 100)
+          throw new AdminConflictError(
+            "A quiz cannot contain more than 100 questions.",
+          );
+        // Adding a question is an explicit, audited action. If the author has
+        // reached the current plan, grow it with the question so the drawer
+        // never strands a draft at its initial (often one-question) default.
+        tx.update(quizzes)
+          .set({ questionCount: count + 1, updatedAt: now })
+          .where(eq(quizzes.id, quiz.id))
+          .run();
+      }
       const question = tx
         .insert(quizQuestions)
         .values({

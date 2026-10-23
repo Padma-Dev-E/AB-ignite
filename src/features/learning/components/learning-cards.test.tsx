@@ -30,7 +30,23 @@ test("journey visualizes topic trend and category performance accessibly", () =>
   assert.match(html, /Privacy/);
   assert.match(html, /65%/);
   assert.match(html, /progressbar/);
-  assert.match(html, /Attempt trend/);
+  assert.match(html, /Your Personal Learning Journey/);
+  assert.match(html, /Where you stand by topic/);
+  assert.match(html, /Improvement over time/);
+  assert.match(html, /Recent quizzes/);
+});
+
+test("journey Read it and reading cards target the backend-selected article ID", () => {
+  const targets: number[] = [];
+  const html = renderToStaticMarkup(createElement(JourneyCard, { journey: {
+    topics: [], categories: [], recommendations: [], nextRecommendedStep: { id: 12, topic: "Risk controls", categoryCode: "banking", scorePercent: 0, thresholdPercent: 70, reason: "Strengthen the foundations." },
+    nextRecommendedArticle: { id: 44, title: "Control design" },
+    recommendedArticles: [{ id: 44, title: "Control design", summary: "A practical guide", category: "banking", topic: "Risk controls", difficulty: "foundation", readingMinutes: 5, contentType: "internal", sourceUrl: null, recommendation: { id: 12, topic: "Risk controls", categoryCode: "banking", scorePercent: 0, thresholdPercent: 70, reason: "Strengthen the foundations." } }],
+  }, onReadArticle: (id) => targets.push(id) }));
+  assert.match(html, /Read it/);
+  assert.match(html, /Control design/);
+  assert.match(html, />Read</);
+  assert.equal(targets.length, 0);
 });
 
 test("recommended article exposes the insight action and its persisted reason", () => {
@@ -41,5 +57,22 @@ test("recommended article exposes the insight action and its persisted reason", 
   } })));
   assert.match(html, /Why this was recommended/);
   assert.match(html, /Build confidence in privacy controls/);
+  assert.match(html, /Topic: privacy/);
+  assert.match(html, /Quiz score: 55%/);
   assert.match(html, /Why this was recommended/);
+});
+
+test("external articles open only safe HTTPS sources in a new tab", () => {
+  const article = { id: 8, publisher: "AB Ignite Learning", title: "Open banking", summary: "External reading", category: "banking", topic: "banking-fundamentals", difficulty: "intermediate", readingMinutes: 5, contentType: "external", body: null, sourceUrl: "https://example.org/reading" };
+  const html = renderToStaticMarkup(createElement(ArticleCard, { article, onOpen: () => undefined }));
+  assert.match(html, /Source: example.org/);
+  assert.match(html, /Banking Excellence/);
+  assert.match(html, /href="https:\/\/example.org\/reading"/);
+  assert.match(html, /target="_blank"/);
+  assert.match(html, /rel="noopener noreferrer"/);
+  assert.doesNotMatch(html, /<button[^>]*>Read<\/button>/);
+
+  const unsafe = renderToStaticMarkup(createElement(ArticleCard, { article: { ...article, sourceUrl: "https://user:pass@example.org/reading" }, onOpen: () => undefined }));
+  assert.match(unsafe, /Source unavailable/);
+  assert.doesNotMatch(unsafe, /href=/);
 });

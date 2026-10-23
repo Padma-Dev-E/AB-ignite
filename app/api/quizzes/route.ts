@@ -6,8 +6,8 @@ import { listQuizCatalogue } from "../../../src/lib/quizzes/service";
 export async function GET(request: Request) {
   const id = requestId(request);
   try {
-    await quizContext(await auth());
-    return ok({ items: await listQuizCatalogue() }, 200, id);
+    const context = await quizContext(await auth());
+    return ok({ items: await listQuizCatalogue(context.userId) }, 200, id);
   } catch (error) {
     return quizApiError(error, id);
   }

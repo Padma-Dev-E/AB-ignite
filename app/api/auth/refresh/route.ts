@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { auth } from "../../../../auth";
 import { db } from "../../../../src/db";
-import { users } from "../../../../src/db/schema";
+import { refreshTokens, users } from "../../../../src/db/schema";
 import {
   accessTokenTtlSeconds,
   authSecret,
@@ -12,7 +12,8 @@ import {
   secureCookies,
   SESSION_COOKIE_NAME,
 } from "../../../../src/auth/config";
-import { issueRefreshToken, revokeRefreshToken, rotateRefreshToken } from "../../../../src/auth/refresh";
+import { hashRefreshToken, issueRefreshToken, revokeRefreshToken, rotateRefreshToken } from "../../../../src/auth/refresh";
+import { createSessionTokenPayload } from "../../../../src/auth/session-token";
 
 const cookieOptions = {
   httpOnly: true,
@@ -37,16 +38,7 @@ async function sessionToken(userId: number, sessionId: number, sessionVersion: n
     secret: authSecret,
     salt: SESSION_COOKIE_NAME,
     maxAge: refreshTokenTtlSeconds,
-    token: {
-      sub: String(user.id),
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      profile: user.profile,
-      sessionId: String(sessionId),
-      sessionVersion,
-      accessTokenExpires: Date.now() + accessTokenTtlSeconds * 1000,
-    },
+    token: createSessionTokenPayload(user, sessionId, sessionVersion, Date.now() + accessTokenTtlSeconds * 1000),
   });
 }
 
@@ -54,11 +46,18 @@ export async function POST(request: Request) {
   const session = await auth();
   const rawToken = request.headers.get("cookie")?.split(";").map((part) => part.trim()).find((part) => part.startsWith(`${REFRESH_COOKIE_NAME}=`))?.slice(REFRESH_COOKIE_NAME.length + 1);
   const userId = session?.user?.id ? Number(session.user.id) : NaN;
+  const sessionId = session?.user?.sessionId ? Number(session.user.sessionId) : NaN;
+  const authenticated = Number.isSafeInteger(userId) && session?.isValid !== false && !session?.user?.email?.endsWith("@demo.abignite.invalid");
   const metadata = requestMetadata(request);
-
-  const result = rawToken
-    ? await rotateRefreshToken(decodeURIComponent(rawToken), metadata)
-    : Number.isInteger(userId) && session?.isValid !== false && !session?.user?.email?.endsWith("@demo.abignite.invalid") ? await issueRefreshToken(userId, metadata) : null;
+  const decodedToken = rawToken ? decodeURIComponent(rawToken) : null;
+  const cookieSession = decodedToken && authenticated && Number.isSafeInteger(sessionId)
+    ? db.select({ id: refreshTokens.id, userId: refreshTokens.userId }).from(refreshTokens).where(eq(refreshTokens.tokenHash, hashRefreshToken(decodedToken))).limit(1).get()
+    : null;
+  const matchesAuthenticatedSession = cookieSession?.id === sessionId && cookieSession.userId === userId;
+  if (decodedToken && authenticated && !matchesAuthenticatedSession) await revokeRefreshToken(decodedToken, "replaced_on_login");
+  const result = decodedToken && (!authenticated || matchesAuthenticatedSession)
+    ? await rotateRefreshToken(decodedToken, metadata)
+    : authenticated ? await issueRefreshToken(userId, metadata) : null;
 
   if (!result) return NextResponse.json({ ok: false, error: "Refresh token is invalid or expired." }, { status: 401 });
 

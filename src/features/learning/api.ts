@@ -16,7 +16,7 @@ export function listQuizzes() { return apiFetch<{ items: QuizSummary[] }>("/api/
 export function getQuiz(id: number) { return apiFetch<{ id: number; title: string; category: string; difficulty: string; objective: string; versions: Array<{ id: number; version: number; categoryCode: string; level: string; passMark: number; timeLimitSeconds: number | null; questions: QuizQuestion[] }> }>(`/api/quizzes/${id}`); }
 export function listJourney() { return apiFetch<LearningJourney>("/api/quizzes/journey"); }
 export function listArticles(params: { category?: string } = {}) { return apiFetch<ArticleListResponse>(`/api/articles${queryString(params)}`); }
-export function redeemableRecommendations() { return apiFetch<ArticleListResponse>("/api/articles?view=recommended"); }
+export function recommendedArticles() { return apiFetch<ArticleListResponse>("/api/articles?view=recommended"); }
 export function listRankings(scope: "bank" | "department") { return apiFetch<{ scope: "bank" | "department"; items: RankingItem[] }>(`/api/quizzes/rankings?scope=${scope}`); }
 export function listChallenges() { return apiFetch<{ items: ChallengeSummary[] }>("/api/challenges"); }
 export function getArticle(id: number) { return apiFetch<LearningArticle>(`/api/articles/${id}`); }

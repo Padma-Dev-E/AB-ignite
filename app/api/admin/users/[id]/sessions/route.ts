@@ -8,6 +8,6 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const id = requestId(request);
   try {
     await adminAccess(await auth(), CAPABILITIES.SESSIONS_READ);
-    return ok(await listUserSessions(positiveId((await params).id), parsePage(new URL(request.url), 100)), 200, id);
+    return ok(await listUserSessions(positiveId((await params).id), parsePage(new URL(request.url), 10)), 200, id);
   } catch (error) { return adminApiError(error, id); }
 }

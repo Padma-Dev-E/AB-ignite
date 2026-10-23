@@ -10,7 +10,7 @@ test("engagement commands match secured route contracts and preserve retry keys"
     return new Response(JSON.stringify({ data: { id: 1 }, error: null, requestId: "engagement-test" }));
   }) as typeof fetch;
   try {
-    await listAdminAnnouncements(); await listAdminCampaigns(); await listManagedChallenges();
+    await listAdminAnnouncements(2); await listAdminCampaigns(3); await listManagedChallenges(34);
     const commands: EngagementCommand[] = [
       { kind: "announcement-create", title: "News", body: "Update" },
       { kind: "announcement-pin", id: 4, pinned: true },
@@ -21,7 +21,7 @@ test("engagement commands match secured route contracts and preserve retry keys"
     ];
     for (const command of commands) await executeEngagementCommand({ command, reason: "Approved review", idempotencyKey: "stable-retry-key" });
     await executeEngagementCommand({ command: commands[0], reason: "Approved review", idempotencyKey: "stable-retry-key" });
-    assert.deepEqual(requests.slice(0, 3).map(r => r.url), ["/api/admin/engagement/announcements?limit=100", "/api/admin/engagement/campaigns?limit=100", "/api/admin/learning/challenges"]);
+    assert.deepEqual(requests.slice(0, 3).map(r => r.url), ["/api/admin/engagement/announcements?page=2&pageSize=10", "/api/admin/engagement/campaigns?page=3&pageSize=10", "/api/admin/learning/challenges?limit=10&after=34"]);
     const mutations = requests.slice(3);
     assert.deepEqual(mutations.map(r => [r.url, r.init.method]), [
       ["/api/admin/engagement/announcements", "POST"], ["/api/admin/engagement/announcements/4", "PATCH"],

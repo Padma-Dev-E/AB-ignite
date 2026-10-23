@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 
 test("database setup defines the core AB Ignite persistence tables", async () => {
   const schema = await readFile(new URL("../src/db/schema.ts", import.meta.url), "utf8");
-  for (const table of ["users", "ideas", "idea_comments", "notifications", "articles", "quizzes", "rewards", "user_rewards"]) {
+  for (const table of ["users", "ideas", "idea_comments", "notifications", "articles", "quizzes", "rewards"]) {
     assert.match(schema, new RegExp(`sqliteTable\\(\\"${table}\\"`));
   }
 });

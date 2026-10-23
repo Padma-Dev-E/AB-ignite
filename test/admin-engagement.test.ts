@@ -12,8 +12,8 @@ let userSessionId = 0;
 
 before(() => {
   const stamp = Date.now();
-  const admin = db.insert(users).values({ name: "Engagement admin", email: `eng-admin-${stamp}@example.test`, role: "admin", passwordHash: "test" }).returning({ id: users.id }).get();
-  const user = db.insert(users).values({ name: "Engagement employee", email: `eng-user-${stamp}@example.test`, role: "user", passwordHash: "test" }).returning({ id: users.id }).get();
+  const admin = db.insert(users).values({ name: "Engagement admin", email: `eng-admin-${stamp}@example.test`, role: "back_office", passwordHash: "test" }).returning({ id: users.id }).get();
+  const user = db.insert(users).values({ name: "Engagement employee", email: `eng-user-${stamp}@example.test`, role: "employee", passwordHash: "test" }).returning({ id: users.id }).get();
   adminId = admin.id;
   userId = user.id;
   const adminSession = db.insert(refreshTokens).values({ userId: adminId, tokenHash: `eng-admin-${stamp}`, expiresAt: new Date(Date.now() + 60_000), idleExpiresAt: new Date(Date.now() + 60_000), absoluteExpiresAt: new Date(Date.now() + 60_000), sessionVersion: 0 }).returning({ id: refreshTokens.id }).get();

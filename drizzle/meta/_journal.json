@@ -106,6 +106,55 @@
       "when": 1792734946411,
       "tag": "0014_panoramic_whirlwind",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "6",
+      "when": 1792738736603,
+      "tag": "0015_private_idea_drafts",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "6",
+      "when": 1792740000000,
+      "tag": "0016_badge_admin_operations",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1792741000000,
+      "tag": "0017_priority_quality_band",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1792754329736,
+      "tag": "0018_require_first_password_change",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1792756702877,
+      "tag": "0019_three_account_roles",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1792762143479,
+      "tag": "0020_remove_redemption_catalogue",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "6",
+      "when": 1792764128660,
+      "tag": "0021_idea_human_review_override",
+      "breakpoints": true
     }
   ]
 }

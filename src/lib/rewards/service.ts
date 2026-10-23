@@ -1,31 +1,25 @@
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import {
   auditEvents,
   badges,
-  redemptions,
-  rewardEvents,
+  pointsLedger,
   rewardVersions,
   rewards,
-  pointsLedger,
   userBadges,
 } from "../../db/schema";
 import { buildRewardsAuditRecord } from "./audit";
 import { db } from "../../db/connection";
 import {
-  addRewardEvent,
   appendLedgerEntry,
   ensureBalanceProjection,
   getBalance as getBalanceRecord,
-  getCurrentRewardVersion,
   getActivePointRule,
+  getCurrentRewardVersion,
   getLevelForPoints as getLevelRecord,
-  getRedemptionByIdempotency,
-  listAdminRedemptions,
   listAllRewards,
+  listRewardCatalogue,
   listBadgeProgress,
   listPointHistory,
-  listRewardCatalogue,
-  listRewardRedemptions,
   withRewardsTransaction,
   type RewardsTx,
 } from "./repository";
@@ -65,7 +59,7 @@ function positiveInteger(value: number, label: string) {
   return value;
 }
 
-function evaluateBadgeAwards(tx: RewardsTx, userId: number, actorUserId = userId, now = new Date()) {
+export function evaluateBadgeAwards(tx: RewardsTx, userId: number, actorUserId = userId, now = new Date()) {
   const definitions = tx.select().from(badges).where(eq(badges.active, true)).orderBy(asc(badges.id)).all();
   const existing = new Set(tx.select({ badgeId: userBadges.badgeId }).from(userBadges).where(eq(userBadges.userId, userId)).all().map((row) => row.badgeId));
   const awarded = [];
@@ -133,11 +127,8 @@ export async function getBadgeProgress(userId: number) {
   return listBadgeProgress(userId);
 }
 
-export type RewardInput = {
+export type RewardInput = PointsActor & {
   actorUserId: number;
-  sessionId?: number | null;
-  ipAddress?: string | null;
-  userAgent?: string | null;
   name: string;
   description?: string | null;
   kind: RewardKind;
@@ -188,109 +179,17 @@ export async function updateReward(input: RewardUpdateInput) {
   });
 }
 
-export async function getCatalogue() {
-  return listRewardCatalogue();
-}
+export async function getCatalogue() { return listRewardCatalogue(); }
+export async function getAdminCatalogue() { return listAllRewards(); }
 
-export async function getAdminCatalogue() {
-  return listAllRewards();
+export async function getEmployeePointsSummary(userId: number) {
+  const [balance, badges] = await Promise.all([getBalance(userId), getBadgeProgress(userId)]);
+  const level = await getLevelForPoints(balance.balance);
+  return { balance, level, badges };
 }
 
 export async function getEmployeeRewards(userId: number) {
   const [balance, catalogue, badges] = await Promise.all([getBalance(userId), getCatalogue(), getBadgeProgress(userId)]);
   const level = await getLevelForPoints(balance.balance);
-  return { balance, level, redeemable: catalogue.filter((reward) => reward.kind === "redeem"), earned: catalogue.filter((reward) => reward.kind === "earned"), badges };
-}
-
-export type RedemptionInput = PointsActor & { userId: number; rewardId: number; idempotencyKey: string };
-
-export async function requestRedemption(input: RedemptionInput) {
-  validId(input.userId, "user ID");
-  validId(input.rewardId, "reward ID");
-  const idempotencyKey = requiredText(input.idempotencyKey, "Idempotency key", 200);
-  return withRewardsTransaction((tx) => {
-    const existing = getRedemptionByIdempotency(tx, idempotencyKey);
-    if (existing) {
-      if (existing.userId !== input.userId || existing.rewardId !== input.rewardId) throw new RewardsError("The idempotency key is already used for a different redemption.", "IDEMPOTENCY_CONFLICT");
-      const [event] = tx.select().from(rewardEvents).where(eq(rewardEvents.redemptionId, existing.id)).orderBy(desc(rewardEvents.createdAt), desc(rewardEvents.id)).limit(1).all();
-      return { redemption: existing, event: event ?? null, balance: ensureBalanceProjection(tx, input.userId) };
-    }
-    const [reward] = tx.select().from(rewards).where(eq(rewards.id, input.rewardId)).limit(1).all();
-    const version = reward ? getCurrentRewardVersion(tx, reward.id) : null;
-    if (!reward || !version) throw new RewardsError("Reward not found.", "REWARD_NOT_FOUND", 404);
-    if (!reward.active || !version.active) throw new RewardsError("Reward is not active.", "REWARD_NOT_ACTIVE");
-    if (reward.kind !== "redeem" || version.kind !== "redeem") throw new RewardsError("This recognition is earned-only.", "REWARD_NOT_REDEEMABLE");
-    const current = ensureBalanceProjection(tx, input.userId);
-    if (current.balance < version.cost) throw new RewardsError("Insufficient points balance.", "INSUFFICIENT_BALANCE");
-    const now = new Date();
-    const [redemption] = tx.insert(redemptions).values({ userId: input.userId, rewardId: reward.id, rewardVersionId: version.id, rewardName: version.name, rewardDescription: version.description, cost: version.cost, status: "requested", idempotencyKey, requestedAt: now, createdAt: now, updatedAt: now }).returning().all();
-    if (!redemption) throw new RewardsError("Redemption was not created.", "REDEMPTION_WRITE_FAILED", 500);
-    appendLedgerEntry(tx, { userId: input.userId, amount: -version.cost, eventType: "reward_redemption", sourceType: "redemption", sourceId: String(redemption.id), idempotencyKey: `redemption:${redemption.id}:debit`, actorUserId: input.actorUserId ?? input.userId, sessionId: input.sessionId, ipAddress: input.ipAddress, userAgent: input.userAgent });
-    const event = addRewardEvent(tx, { redemptionId: redemption.id, actorUserId: input.actorUserId ?? input.userId, eventType: "requested", fromStatus: null, toStatus: "requested", idempotencyKey: `redemption:${redemption.id}:requested`, createdAt: now });
-    tx.insert(auditEvents).values(buildRewardsAuditRecord({ actorUserId: input.actorUserId ?? input.userId, sessionId: input.sessionId, ipAddress: input.ipAddress, userAgent: input.userAgent, action: "rewards.redemption.requested", targetType: "redemption", targetId: redemption.id, metadata: { status: "requested", resourceType: "redemption" } }, now)).run();
-    const [, balance] = [redemption, ensureBalanceProjection(tx, input.userId)];
-    return { redemption, event, balance };
-  });
-}
-
-export async function getRedemptions(userId: number, page = 1, pageSize = 20) {
-  validId(userId, "user ID");
-  return listRewardRedemptions(userId, page, pageSize);
-}
-
-export async function getAdminRedemptions(page = 1, pageSize = 20, status?: "requested" | "fulfilled" | "cancelled") {
-  return listAdminRedemptions(page, pageSize, status);
-}
-
-export type RedemptionActionInput = { actorUserId: number; sessionId?: number | null; ipAddress?: string | null; userAgent?: string | null; redemptionId: number; reason: string; idempotencyKey: string };
-
-function validateAction(input: RedemptionActionInput) {
-  validId(input.actorUserId, "actor user ID");
-  validId(input.redemptionId, "redemption ID");
-  return { reason: requiredText(input.reason, "Reason", 500), idempotencyKey: requiredText(input.idempotencyKey, "Idempotency key", 200) };
-}
-
-export async function fulfillRedemption(input: RedemptionActionInput) {
-  const { reason, idempotencyKey } = validateAction(input);
-  return withRewardsTransaction((tx) => {
-    const [eventReplay] = tx.select().from(rewardEvents).where(eq(rewardEvents.idempotencyKey, idempotencyKey)).limit(1).all();
-    if (eventReplay) {
-      if (eventReplay.redemptionId !== input.redemptionId || eventReplay.eventType !== "fulfilled") throw new RewardsError("The idempotency key is already used for a different reward event.", "IDEMPOTENCY_CONFLICT");
-      const [redemption] = tx.select().from(redemptions).where(eq(redemptions.id, input.redemptionId)).limit(1).all();
-      if (!redemption) throw new RewardsError("Redemption not found.", "REDEMPTION_NOT_FOUND", 404);
-      return { redemption, event: eventReplay };
-    }
-    const [current] = tx.select().from(redemptions).where(eq(redemptions.id, input.redemptionId)).limit(1).all();
-    if (!current) throw new RewardsError("Redemption not found.", "REDEMPTION_NOT_FOUND", 404);
-    if (current.status !== "requested") throw new RewardsError("Only requested redemptions can be fulfilled.", "INVALID_REDEMPTION_STATE");
-    const now = new Date();
-    const [redemption] = tx.update(redemptions).set({ status: "fulfilled", fulfilledAt: now, handledBy: input.actorUserId, updatedAt: now }).where(and(eq(redemptions.id, current.id), eq(redemptions.status, "requested"))).returning().all();
-    if (!redemption) throw new RewardsError("Redemption state changed; retry the request.", "REDEMPTION_CONFLICT");
-    const event = addRewardEvent(tx, { redemptionId: redemption.id, actorUserId: input.actorUserId, eventType: "fulfilled", fromStatus: "requested", toStatus: "fulfilled", idempotencyKey, metadataJson: JSON.stringify({ status: "fulfilled" }), createdAt: now });
-    tx.insert(auditEvents).values(buildRewardsAuditRecord({ actorUserId: input.actorUserId, sessionId: input.sessionId, ipAddress: input.ipAddress, userAgent: input.userAgent, action: "rewards.redemption.fulfilled", targetType: "redemption", targetId: redemption.id, reason, metadata: { status: "fulfilled", resourceType: "redemption" }, requiresReason: true }, now)).run();
-    return { redemption, event };
-  });
-}
-
-export async function cancelRedemption(input: RedemptionActionInput) {
-  const { reason, idempotencyKey } = validateAction(input);
-  return withRewardsTransaction((tx) => {
-    const [eventReplay] = tx.select().from(rewardEvents).where(eq(rewardEvents.idempotencyKey, idempotencyKey)).limit(1).all();
-    if (eventReplay) {
-      if (eventReplay.redemptionId !== input.redemptionId || eventReplay.eventType !== "cancelled") throw new RewardsError("The idempotency key is already used for a different reward event.", "IDEMPOTENCY_CONFLICT");
-      const [redemption] = tx.select().from(redemptions).where(eq(redemptions.id, input.redemptionId)).limit(1).all();
-      if (!redemption) throw new RewardsError("Redemption not found.", "REDEMPTION_NOT_FOUND", 404);
-      return { redemption, event: eventReplay };
-    }
-    const [current] = tx.select().from(redemptions).where(eq(redemptions.id, input.redemptionId)).limit(1).all();
-    if (!current) throw new RewardsError("Redemption not found.", "REDEMPTION_NOT_FOUND", 404);
-    if (current.status !== "requested") throw new RewardsError("Only requested redemptions can be cancelled.", "INVALID_REDEMPTION_STATE");
-    const now = new Date();
-    appendLedgerEntry(tx, { userId: current.userId, amount: current.cost, eventType: "reward_refund", sourceType: "redemption", sourceId: String(current.id), idempotencyKey: `redemption:${current.id}:refund`, actorUserId: input.actorUserId, sessionId: input.sessionId, ipAddress: input.ipAddress, userAgent: input.userAgent });
-    const [redemption] = tx.update(redemptions).set({ status: "cancelled", cancelledAt: now, handledBy: input.actorUserId, cancellationReason: reason, updatedAt: now }).where(and(eq(redemptions.id, current.id), eq(redemptions.status, "requested"))).returning().all();
-    if (!redemption) throw new RewardsError("Redemption state changed; retry the request.", "REDEMPTION_CONFLICT");
-    const event = addRewardEvent(tx, { redemptionId: redemption.id, actorUserId: input.actorUserId, eventType: "cancelled", fromStatus: "requested", toStatus: "cancelled", idempotencyKey, metadataJson: JSON.stringify({ status: "cancelled" }), createdAt: now });
-    tx.insert(auditEvents).values(buildRewardsAuditRecord({ actorUserId: input.actorUserId, sessionId: input.sessionId, ipAddress: input.ipAddress, userAgent: input.userAgent, action: "rewards.redemption.cancelled", targetType: "redemption", targetId: redemption.id, reason, metadata: { status: "cancelled", resourceType: "redemption" }, requiresReason: true }, now)).run();
-    return { redemption, event, balance: ensureBalanceProjection(tx, current.userId) };
-  });
+  return { balance, level, catalogue: catalogue.filter((reward) => reward.kind !== "earned"), earned: catalogue.filter((reward) => reward.kind === "earned"), badges };
 }

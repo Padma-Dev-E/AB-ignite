@@ -1,7 +1,9 @@
-import { and, asc, desc, eq, gt, inArray, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, lte, notExists, or, sql } from "drizzle-orm";
 import { db } from "../../db/connection";
 import {
   auditEvents,
+  articleCompletions,
+  articles,
   notifications,
   pointRules,
   pointsLedger,
@@ -131,7 +133,7 @@ export async function getQuizDetails(quizId: number) {
   validId(quizId, "quiz ID");
   const [quiz] = await db.select().from(quizzes).where(eq(quizzes.id, quizId)).limit(1).all();
   if (!quiz) return null;
-  const versions = await db.select().from(quizVersions).where(and(eq(quizVersions.quizId, quizId), eq(quizVersions.published, true))).orderBy(desc(quizVersions.version)).all();
+  const versions = await db.select().from(quizVersions).where(and(eq(quizVersions.quizId, quizId), eq(quizVersions.published, true))).orderBy(desc(quizVersions.version)).limit(1).all();
   return {
     id: quiz.id,
     title: quiz.title,
@@ -142,7 +144,7 @@ export async function getQuizDetails(quizId: number) {
   };
 }
 
-export async function listQuizCatalogue() {
+export async function listQuizCatalogue(userId?: number) {
   const rows = await db.select({ quiz: quizzes, version: quizVersions })
     .from(quizzes)
     .innerJoin(quizVersions, eq(quizVersions.quizId, quizzes.id))
@@ -151,7 +153,20 @@ export async function listQuizCatalogue() {
     .all();
   const latest = new Map<number, typeof rows[number]>();
   for (const row of rows) if (!latest.has(row.quiz.id)) latest.set(row.quiz.id, row);
-  return Array.from(latest.values()).map(({ quiz, version }) => ({
+  const preferred = ["banking", "transformation", "technology"].flatMap((category) => ["beginner", "intermediate", "advanced", "expert"].flatMap((level) => {
+    const match = Array.from(latest.values()).find(({ version }) => version.categoryCode === category && version.level === level);
+    return match ? [match] : [];
+  }));
+  // Keep the standard category/level sequence first, then append every other
+  // published quiz. The employee catalogue paginates this complete list; a
+  // fixed limit here silently hid newly created quizzes once all 12 standard
+  // category/level slots had been filled.
+  const preferredIds = new Set(preferred.map(({ quiz }) => quiz.id));
+  const selected = preferred.concat(Array.from(latest.values()).filter(({ quiz }) => !preferredIds.has(quiz.id)));
+  const attempted = userId && selected.length ? await db.select({ quizId: quizAttempts.quizId }).from(quizAttempts)
+    .where(and(eq(quizAttempts.userId, userId), inArray(quizAttempts.quizId, selected.map(({ quiz }) => quiz.id)), inArray(quizAttempts.status, ["submitted", "expired"]))).all() : [];
+  const attemptedQuizIds = new Set(attempted.map((row) => row.quizId));
+  return selected.map(({ quiz, version }) => ({
     id: quiz.id,
     title: quiz.title,
     category: version.categoryCode,
@@ -161,12 +176,34 @@ export async function listQuizCatalogue() {
     timeLimitSeconds: version.timeLimitSeconds,
     version: version.version,
     questionCount: quizQuestionsCount(version.id),
+    hasAttempted: attemptedQuizIds.has(quiz.id),
   }));
 }
 
 function quizQuestionsCount(versionId: number) {
   const [row] = db.select({ count: sql<number>`count(*)` }).from(quizQuestions).where(eq(quizQuestions.quizVersionId, versionId)).all();
   return Number(row?.count ?? 0);
+}
+
+export async function relatedQuizIdsForArticles(items: Array<{ id: number; categoryCode: string; topic: string | null; preferredQuizId?: number | null }>): Promise<Map<number, number | null>> {
+  const result = new Map<number, number | null>();
+  if (!items.length) return result;
+  const visible = (await listQuizCatalogue()).filter((quiz) => quiz.questionCount > 0);
+  if (!visible.length) return new Map(items.map((item) => [item.id, null]));
+  const versions = await db.select({ id: quizVersions.id, quizId: quizVersions.quizId, version: quizVersions.version }).from(quizVersions)
+    .where(and(eq(quizVersions.published, true), inArray(quizVersions.quizId, visible.map((quiz) => quiz.id)))).all();
+  const visibleVersions = versions.filter((version) => visible.some((quiz) => quiz.id === version.quizId && quiz.version === version.version));
+  const articleTopics = Array.from(new Set(items.map((item) => item.topic).filter((topic): topic is string => Boolean(topic))));
+  const topicRows = visibleVersions.length && articleTopics.length ? await db.select({ quizVersionId: quizQuestions.quizVersionId, topic: quizQuestions.topic }).from(quizQuestions)
+    .where(and(inArray(quizQuestions.quizVersionId, visibleVersions.map((version) => version.id)), inArray(quizQuestions.topic, articleTopics))).all() : [];
+  const topicsByVersion = new Map<number, Set<string>>();
+  for (const row of topicRows) topicsByVersion.set(row.quizVersionId, (topicsByVersion.get(row.quizVersionId) ?? new Set()).add(row.topic));
+  for (const item of items) {
+    const preferred = item.preferredQuizId ? visible.find((quiz) => quiz.id === item.preferredQuizId && (quiz.category === item.categoryCode || (item.topic && visibleVersions.some((version) => version.quizId === quiz.id && topicsByVersion.get(version.id)?.has(item.topic!))))) : null;
+    const exact = item.topic ? visible.find((quiz) => visibleVersions.some((version) => version.quizId === quiz.id && topicsByVersion.get(version.id)?.has(item.topic!))) : null;
+    result.set(item.id, preferred?.id ?? exact?.id ?? visible.find((quiz) => quiz.category === item.categoryCode)?.id ?? null);
+  }
+  return result;
 }
 
 export async function startQuizAttempt(userId: number, quizId: number, idempotencyKey: string, now: QuizClock = new Date(), auditContext?: QuizAuditContext) {
@@ -219,6 +256,11 @@ export async function getQuizAttempt(userId: number, attemptId: number) {
   validId(attemptId, "attempt ID");
   const [attempt] = await db.select().from(quizAttempts).where(and(eq(quizAttempts.id, attemptId), eq(quizAttempts.userId, userId))).limit(1).all();
   if (!attempt) throw new QuizError("Quiz attempt not found.", "ATTEMPT_NOT_FOUND", 404);
+  if (attempt.status === "in_progress" && attempt.expiresAt && attempt.expiresAt.getTime() <= Date.now()) {
+    await submitQuizAttempt(userId, attemptId, [], new Date());
+    const [expired] = await db.select().from(quizAttempts).where(eq(quizAttempts.id, attemptId)).limit(1).all();
+    if (expired) return { attempt: publicAttempt(expired), result: resultFromAttempt(expired) };
+  }
   return {
     attempt: publicAttempt(attempt),
     result: attempt.status === "in_progress" ? null : resultFromAttempt(attempt),
@@ -331,18 +373,131 @@ export async function submitQuizAttempt(userId: number, attemptId: number, answe
 
 export async function getJourney(userId: number) {
   validId(userId, "user ID");
-  const rows = await db.select().from(quizTopicResults).where(eq(quizTopicResults.userId, userId)).orderBy(asc(quizTopicResults.topic), desc(quizTopicResults.createdAt), desc(quizTopicResults.id)).all();
-  const topics = Array.from(new Map(rows.map((row) => [row.topic, row])).values()).map((row) => ({ topic: row.topic, categoryCode: row.categoryCode, scorePercent: row.scorePercent, trend: rows.filter((item) => item.topic === row.topic).slice(0, 5).map((item) => item.scorePercent) }));
-  const categoryStats = new Map<string, { correct: number; total: number }>();
+  const results = await db.select().from(quizTopicResults).where(eq(quizTopicResults.userId, userId)).orderBy(desc(quizTopicResults.createdAt), desc(quizTopicResults.id)).limit(1000).all();
+  const latestByAttemptTopic = new Map<string, typeof results[number]>();
+  for (const row of results) {
+    const key = `${row.attemptId}:${row.topic}`;
+    if (!latestByAttemptTopic.has(key)) latestByAttemptTopic.set(key, row);
+  }
+  const rows = Array.from(latestByAttemptTopic.values());
+  const resultAttemptIds = Array.from(new Set(rows.map((row) => row.attemptId)));
+  const attempts = await db.select({ attempt: quizAttempts, quiz: quizzes, version: quizVersions })
+    .from(quizAttempts).innerJoin(quizzes, eq(quizzes.id, quizAttempts.quizId)).innerJoin(quizVersions, eq(quizVersions.id, quizAttempts.quizVersionId))
+    .where(and(eq(quizAttempts.userId, userId), inArray(quizAttempts.status, ["submitted", "expired"])))
+    .orderBy(desc(quizAttempts.submittedAt), desc(quizAttempts.id)).limit(400).all();
+  const metadataIds = Array.from(new Set(resultAttemptIds.concat(attempts.map(({ attempt }) => attempt.id))));
+  const metadataRows = [] as Array<{ attempt: typeof quizAttempts.$inferSelect; quiz: typeof quizzes.$inferSelect; version: typeof quizVersions.$inferSelect }>;
+  for (let offset = 0; offset < metadataIds.length; offset += 800) {
+    metadataRows.push(...await db.select({ attempt: quizAttempts, quiz: quizzes, version: quizVersions })
+      .from(quizAttempts).innerJoin(quizzes, eq(quizzes.id, quizAttempts.quizId)).innerJoin(quizVersions, eq(quizVersions.id, quizAttempts.quizVersionId))
+      .where(and(eq(quizAttempts.userId, userId), inArray(quizAttempts.id, metadataIds.slice(offset, offset + 800)))).all());
+  }
+  const metadataByAttemptId = new Map(metadataRows.map((row) => [row.attempt.id, row]));
+  const topicGroups = new Map<string, typeof rows>();
+  for (const row of rows) topicGroups.set(row.topic, [...(topicGroups.get(row.topic) ?? []), row]);
+  const topics = Array.from(topicGroups.entries()).map(([topic, history]) => {
+    const latest = history[0];
+    const chronologicalResults = history.slice().sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id - b.id);
+    const latestByQuiz = new Map<number, typeof history[number]>();
+    const quizMetadata = new Map<number, { level: string | null; quizTitle: string | null }>();
+    for (const item of history) {
+      const metadata = metadataByAttemptId.get(item.attemptId);
+      if (metadata && !latestByQuiz.has(metadata.attempt.quizId)) latestByQuiz.set(metadata.attempt.quizId, item);
+      if (metadata && !quizMetadata.has(metadata.attempt.quizId)) quizMetadata.set(metadata.attempt.quizId, { level: metadata.version.level, quizTitle: metadata.quiz.title });
+    }
+    const currentEvidence = Array.from(latestByQuiz.values());
+    const weightedCorrect = currentEvidence.reduce((sum, item) => sum + item.correctCount, 0);
+    const weightedTotal = currentEvidence.reduce((sum, item) => sum + item.totalQuestions, 0);
+    const evidence = Array.from(quizMetadata.values());
+    return {
+      topic,
+      categoryCode: latest.categoryCode,
+      scorePercent: percentage(weightedCorrect, weightedTotal),
+      correctCount: weightedCorrect,
+      totalQuestions: weightedTotal,
+      quizCount: currentEvidence.length,
+      levels: Array.from(new Set(evidence.map((item) => item.level).filter((value): value is string => Boolean(value)))),
+      quizTitles: Array.from(new Set(evidence.map((item) => item.quizTitle).filter((value): value is string => Boolean(value)))),
+      limitedEvidence: weightedTotal < 3,
+      trend: history.slice(0, 5).map((item) => item.scorePercent),
+      improvement: chronologicalResults.length > 1 ? { firstScorePercent: chronologicalResults[0].scorePercent, latestScorePercent: chronologicalResults.at(-1)!.scorePercent, attempts: chronologicalResults.length } : null,
+    };
+  }).sort((a, b) => a.scorePercent - b.scorePercent || a.topic.localeCompare(b.topic));
+  const latestByQuizTopic = new Map<string, typeof rows[number]>();
   for (const row of rows) {
-    const stats = categoryStats.get(row.categoryCode) ?? { correct: 0, total: 0 };
+    const metadata = metadataByAttemptId.get(row.attemptId);
+    if (metadata) {
+      const key = `${metadata.attempt.quizId}:${row.topic}`;
+      if (!latestByQuizTopic.has(key)) latestByQuizTopic.set(key, row);
+    }
+  }
+  const categoryStats = new Map<string, { correct: number; total: number; quizzes: Set<number> }>();
+  for (const row of Array.from(latestByQuizTopic.values())) {
+    const stats = categoryStats.get(row.categoryCode) ?? { correct: 0, total: 0, quizzes: new Set<number>() };
     stats.correct += row.correctCount;
     stats.total += row.totalQuestions;
+    stats.quizzes.add(row.attemptId);
     categoryStats.set(row.categoryCode, stats);
   }
-  const categories = Array.from(categoryStats.entries()).map(([categoryCode, stats]) => ({ categoryCode, scorePercent: percentage(stats.correct, stats.total), correctCount: stats.correct, totalQuestions: stats.total }));
+  const categories = Array.from(categoryStats.entries()).map(([categoryCode, stats]) => ({ categoryCode, scorePercent: percentage(stats.correct, stats.total), correctCount: stats.correct, totalQuestions: stats.total, quizCount: stats.quizzes.size }));
   const recommendations = await db.select().from(quizRecommendations).where(and(eq(quizRecommendations.userId, userId), eq(quizRecommendations.status, "open"))).orderBy(desc(quizRecommendations.createdAt), desc(quizRecommendations.id)).all();
-  return { topics, categories, recommendations, nextRecommendedStep: recommendations[0] ?? null };
+  const openRecommendations = recommendations.slice(0, 10);
+  const articleCards = new Map<number, { id: number; title: string; summary: string; category: string; topic: string | null; difficulty: string; readingMinutes: number; contentType: string; sourceUrl: string | null; recommendation: typeof recommendations[number] }>();
+  for (const recommendation of openRecommendations) {
+    const candidates = await db.select({
+      id: articles.id, title: articles.title, summary: articles.summary, categoryCode: articles.categoryCode,
+      topic: articles.topic, difficulty: articles.difficulty, readingMinutes: articles.readingMinutes,
+      contentType: articles.contentType, url: articles.url, updatedAt: articles.updatedAt,
+    }).from(articles).where(and(
+      eq(articles.published, true),
+      or(eq(articles.topic, recommendation.topic), eq(articles.categoryCode, recommendation.categoryCode)),
+      notExists(db.select({ id: articleCompletions.id }).from(articleCompletions).where(and(eq(articleCompletions.userId, userId), eq(articleCompletions.articleId, articles.id)))),
+    )).orderBy(desc(articles.updatedAt), desc(articles.id)).limit(12).all();
+    for (const article of candidates) {
+      if (article.contentType === "external" && !safeArticleUrl(article.url)) continue;
+      if (!articleCards.has(article.id)) articleCards.set(article.id, {
+        id: article.id, title: article.title, summary: article.summary, category: article.categoryCode, topic: article.topic,
+        difficulty: article.difficulty, readingMinutes: article.readingMinutes, contentType: article.contentType,
+        sourceUrl: article.contentType === "external" ? safeArticleUrl(article.url) : null,
+        recommendation,
+      });
+      if (articleCards.size >= 20) break;
+    }
+    if (articleCards.size >= 20) break;
+  }
+  const articleRows = Array.from(articleCards.values());
+  const sourceAttemptIds = Array.from(new Set(articleRows.map((article) => article.recommendation.sourceAttemptId)));
+  const sourceAttempts = sourceAttemptIds.length ? await db.select({ id: quizAttempts.id, quizId: quizAttempts.quizId }).from(quizAttempts)
+    .where(and(eq(quizAttempts.userId, userId), inArray(quizAttempts.id, sourceAttemptIds))).all() : [];
+  const sourceQuizIds = new Map(sourceAttempts.map((attempt) => [attempt.id, attempt.quizId]));
+  const relatedQuizIds = await relatedQuizIdsForArticles(articleRows.map((article) => ({ id: article.id, categoryCode: article.category, topic: article.topic, preferredQuizId: sourceQuizIds.get(article.recommendation.sourceAttemptId) })));
+  const recommendedArticles = articleRows.map((article) => ({ ...article, relatedQuizId: relatedQuizIds.get(article.id) ?? null }));
+  const nextRecommendedStep = recommendations[0] ?? null;
+  const nextArticle = nextRecommendedStep ? recommendedArticles.find((item) => item.recommendation.id === nextRecommendedStep.id) ?? recommendedArticles[0] ?? null : recommendedArticles[0] ?? null;
+  const recentQuizzes = attempts.slice(0, 10).map(({ attempt, quiz, version }) => ({
+    attemptId: attempt.id, quizId: quiz.id, title: quiz.title, categoryCode: version.categoryCode, level: version.level,
+    scorePercent: attempt.scorePercent ?? 0, passed: attempt.passed ?? false, status: attempt.status,
+    submittedAt: attempt.submittedAt, correctCount: attempt.correctCount ?? 0, totalQuestions: attempt.totalQuestions,
+  }));
+  const activityDays = new Set(attempts.map(({ attempt }) => attempt.submittedAt?.toISOString().slice(0, 10)).filter((day): day is string => Boolean(day)));
+  let streakDays = 0;
+  const cursor = new Date(); cursor.setUTCHours(0, 0, 0, 0);
+  if (!activityDays.has(cursor.toISOString().slice(0, 10))) cursor.setUTCDate(cursor.getUTCDate() - 1);
+  while (activityDays.has(cursor.toISOString().slice(0, 10)) && streakDays < 365) { streakDays += 1; cursor.setUTCDate(cursor.getUTCDate() - 1); }
+  return {
+    topics, categories, recommendations: openRecommendations, nextRecommendedStep,
+    nextRecommendedArticle: nextArticle ? { id: nextArticle.id, title: nextArticle.title, relatedQuizId: nextArticle.relatedQuizId } : null,
+    recommendedArticles,
+    improvement: topics.flatMap((topic) => topic.improvement ? [{ topic: topic.topic, ...topic.improvement }] : []).slice(0, 10),
+    recentQuizzes,
+    streakDays,
+  };
+}
+
+function safeArticleUrl(url: string | null) {
+  if (!url) return null;
+  try { const parsed = new URL(url); return parsed.protocol === "https:" && Boolean(parsed.hostname) && !parsed.username && !parsed.password ? parsed.toString() : null; }
+  catch { return null; }
 }
 
 export async function getRankings(userId: number, scope: "bank" | "department" = "bank") {

@@ -24,7 +24,7 @@ before(async () => {
   const [owner] = await db.insert(users).values({
     name: "Task 2 Owner",
     email: `task-2-owner-${Date.now()}@example.test`,
-    role: "user",
+    role: "employee",
     passwordHash: "test-hash",
   }).returning({ id: users.id }).all();
   ownerId = owner.id;
@@ -32,7 +32,7 @@ before(async () => {
   const [other] = await db.insert(users).values({
     name: "Task 2 Other",
     email: `task-2-other-${Date.now()}@example.test`,
-    role: "user",
+    role: "employee",
     passwordHash: "test-hash",
   }).returning({ id: users.id }).all();
   otherUserId = other.id;
@@ -132,7 +132,7 @@ test("impact priority uses the required 30/30/40 weights and exposes its breakdo
   const result = calculateIdeaPriority({ turnaround: 3, volume: 2, value: 1 });
   assert.equal(result.score, 1.9);
   assert.deepEqual(result.breakdown.map((item) => item.weight), [0.3, 0.3, 0.4]);
-  assert.equal(result.band, "Qualify");
+  assert.equal(result.band, "Quality");
 });
 
 test("idea input validates and stores all five reviewer answers and required metric values", async () => {

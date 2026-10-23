@@ -9,7 +9,9 @@ import {
   useSetEmployeeNotificationRead,
   useSubmitEmployeeFeedback,
 } from "./engagement-hooks";
-import type { FeedbackCategory } from "./engagement-api";
+import type { FeedbackCategory, Notification } from "./engagement-api";
+import { notificationDestination } from "./notification-navigation";
+import { useNotificationNavigation } from "./notification-navigation-context";
 
 const categories: Array<{ value: FeedbackCategory; label: string }> = [
   { value: "experience", label: "Overall experience" },
@@ -163,9 +165,11 @@ export function EmployeeFeedbackCampaignForm() {
   );
 }
 
-export function EmployeeNotificationsPanel() {
+export function EmployeeNotificationsPanel({ onOpenNotification }: { onOpenNotification?: (notification: Notification) => void } = {}) {
   const query = useEmployeeNotifications();
   const setRead = useSetEmployeeNotificationRead();
+  const navigate = useNotificationNavigation();
+  const openNotification = onOpenNotification ?? navigate;
   const notifications = query.data?.items ?? [];
   return (
     <Card>
@@ -216,10 +220,14 @@ export function EmployeeNotificationsPanel() {
                   aria-label={notification.isRead ? "Read" : "Unread"}
                 />
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium">{notification.title}</p>
-                  <p className="mt-0.5 text-sm text-muted">
-                    {notification.body}
-                  </p>
+                  {openNotification && notificationDestination(notification.target).kind !== "none" ? (
+                    <button type="button" className="block w-full rounded text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue" onClick={() => openNotification(notification)}>
+                      <span className="block text-sm font-medium text-blue">{notification.title}</span>
+                      <span className="mt-0.5 block text-sm text-muted">{notification.body}</span>
+                    </button>
+                  ) : (
+                    <><p className="text-sm font-medium">{notification.title}</p><p className="mt-0.5 text-sm text-muted">{notification.body}</p>{notification.target.type !== "none" && !notification.target.available && <p className="mt-1 text-xs text-muted">This item is no longer available.</p>}</>
+                  )}
                   <time
                     className="mt-1 block text-xs text-muted"
                     dateTime={notification.createdAt}

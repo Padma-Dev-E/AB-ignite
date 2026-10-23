@@ -1,9 +1,3 @@
-export const REWARD_KINDS = ["redeem", "earned"] as const;
-export type RewardKind = (typeof REWARD_KINDS)[number];
-
-export const REDEMPTION_STATUSES = ["requested", "fulfilled", "cancelled"] as const;
-export type RedemptionStatus = (typeof REDEMPTION_STATUSES)[number];
-
 export const DEFAULT_LEVELS = [
   { name: "Ignite Starter", minimumPoints: 0, sortOrder: 0 },
   { name: "Idea Spark", minimumPoints: 500, sortOrder: 1 },
@@ -40,3 +34,5 @@ export function parseBadgeRule(value: string): BadgeRule {
     throw new Error("Stored badge rule is invalid.");
   }
 }
+export const REWARD_KINDS = ["catalogue", "earned"] as const;
+export type RewardKind = (typeof REWARD_KINDS)[number];

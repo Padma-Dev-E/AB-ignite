@@ -14,7 +14,11 @@ import {
   submitFeedback,
   updateNotificationRead,
 } from "./engagement-api";
-import type { FeedbackCategory } from "./engagement-api";
+import type { FeedbackCategory, NotificationListResponse } from "./engagement-api";
+
+export function nextNotificationPage(lastPage: NotificationListResponse): { page: number; cursor: string } | undefined {
+  return lastPage.nextCursor ? { page: lastPage.page + 1, cursor: lastPage.nextCursor } : undefined;
+}
 
 export function useFeedbackCampaign() {
   return useQuery({
@@ -42,10 +46,9 @@ export function useEmployeeNotifications(enabled = true) {
   const userId = session.data?.user?.id ?? null;
   const query = useInfiniteQuery({
     queryKey: [...engagementQueryKeys.notifications, userId ?? "anonymous"],
-    queryFn: ({ pageParam }) => getNotifications(pageParam, 20),
-    initialPageParam: 1,
-    getNextPageParam: (lastPage) =>
-      lastPage.page < lastPage.totalPages ? lastPage.page + 1 : undefined,
+    queryFn: ({ pageParam }) => getNotifications(pageParam.page, 20, pageParam.cursor),
+    initialPageParam: { page: 1, cursor: undefined as string | undefined },
+    getNextPageParam: nextNotificationPage,
     enabled: enabled && session.status !== "loading" && Boolean(userId),
     refetchInterval: enabled ? 30_000 : false,
   });

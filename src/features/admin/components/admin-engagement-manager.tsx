@@ -1,105 +1,83 @@
 "use client";
 
-import { useRef, useState, type FormEvent, type ReactNode } from "react";
-import { Dialog, DialogPanel, DialogTitle } from "@headlessui/react";
-import { Button, Card } from "../../../components/ui";
+import React, { useRef, useState, type FormEvent, type ReactNode } from "react";
+import { Button } from "../../../components/ui";
+import { AdminDrawer, AdminPagination } from "./admin-data-ui";
 import { useAdminAnnouncements, useAdminCampaigns, useAdminEngagementCommand, useManagedChallenges } from "../engagement-hooks";
-import type { EngagementCommand } from "../engagement-api";
+import type { AdminAnnouncement, AdminCampaign, EngagementCommand, ManagedChallenge } from "../engagement-api";
 
+const SIZE = 10;
 function errorMessage(error: unknown) { return error instanceof Error ? error.message : "The request could not be completed."; }
-function QueryState({ query, empty, children }: { query: { isPending: boolean; isError: boolean; error: unknown; refetch: () => unknown }; empty: boolean; children: ReactNode }) {
+function QueryState({ query, children }: { query: { isPending: boolean; isError: boolean; error: unknown; refetch: () => unknown }; children: ReactNode }) {
   if (query.isPending) return <p className="text-sm text-muted" role="status" aria-busy="true">Loading…</p>;
   if (query.isError) return <div role="alert"><p className="text-sm text-[#d6336c]">{errorMessage(query.error)}</p><button type="button" className="btn mt-2" onClick={() => void query.refetch()}>Try again</button></div>;
-  return empty ? <p className="text-sm text-muted">No items configured yet.</p> : children;
+  return children;
 }
-
-function PagedItems<T extends { id: number }>({ items, label, render }: { items: T[]; label: string; render: (item: T) => ReactNode }) {
-  const [requestedPage, setRequestedPage] = useState(1);
-  const pageSize = 10;
-  const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
-  const page = Math.min(requestedPage, totalPages);
-  return <><ul className="space-y-3">{items.slice((page - 1) * pageSize, page * pageSize).map(item => <li key={item.id}>{render(item)}</li>)}</ul>{totalPages > 1 && <nav aria-label={`${label} pages`} className="mt-4 flex items-center justify-between gap-3 text-sm"><button type="button" className="btn btn-small" disabled={page === 1} onClick={() => setRequestedPage(page - 1)}>Previous</button><span>Page {page} of {totalPages}</span><button type="button" className="btn btn-small" disabled={page >= totalPages} onClick={() => setRequestedPage(page + 1)}>Next</button></nav>}</>;
-}
-
 type PendingAction = { command: EngagementCommand; label: string; idempotencyKey: string };
+type Area = "announcement" | "campaign" | "challenge";
+type Filters = { search: string; status: string; from: string; to: string };
+const blankFilters: Filters = { search: "", status: "all", from: "", to: "" };
+function filterItems<T>(items: T[], filters: Filters, title: (item: T) => string, status: (item: T) => string, date: (item: T) => string | null) {
+  const query = filters.search.trim().toLocaleLowerCase();
+  return items.filter(item => {
+    const text = title(item).toLocaleLowerCase(); const state = status(item); const timestamp = date(item);
+    const day = timestamp ? new Date(timestamp).toISOString().slice(0, 10) : "";
+    return (!query || text.includes(query)) && (filters.status === "all" || state === filters.status) && (!filters.from || !!day && day >= filters.from) && (!filters.to || !!day && day <= filters.to);
+  });
+}
+function Table<T extends { id: number }>({ items, columns, onSelect, empty }: { items: T[]; columns: { heading: string; cell: (item: T) => ReactNode }[]; onSelect: (item: T) => void; empty: string }) {
+  return <div className="overflow-x-auto rounded-xl border border-[var(--line)]"><table className="w-full min-w-[620px] text-left text-sm"><thead className="bg-[#f5f7fa] text-xs uppercase tracking-wide text-muted"><tr>{columns.map(c => <th key={c.heading} className="px-4 py-3 font-medium">{c.heading}</th>)}<th className="px-4 py-3">Details</th></tr></thead><tbody className="divide-y divide-[var(--line)]">{items.length ? items.map(item => <tr key={item.id} className="hover:bg-[#f8fafc]">{columns.map(c => <td key={c.heading} className="px-4 py-3 align-top">{c.cell(item)}</td>)}<td className="px-4 py-3"><button type="button" className="btn btn-small" onClick={() => onSelect(item)}>View</button></td></tr>) : <tr><td colSpan={columns.length + 1} className="px-4 py-8 text-center text-muted">{empty}</td></tr>}</tbody></table></div>;
+}
+function FilterBar({ filters, setFilters, statuses }: { filters: Filters; setFilters: (value: Filters) => void; statuses: string[] }) {
+  return <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><label className="text-xs text-muted">Search<input className="input mt-1 w-full" placeholder="Search title…" value={filters.search} onChange={e => setFilters({ ...filters, search: e.target.value })} /></label><label className="text-xs text-muted">Status<select className="input mt-1 w-full" value={filters.status} onChange={e => setFilters({ ...filters, status: e.target.value })}><option value="all">All statuses</option>{statuses.map(s => <option key={s} value={s}>{s}</option>)}</select></label><label className="text-xs text-muted">From date<input type="date" className="input mt-1 w-full" value={filters.from} onChange={e => setFilters({ ...filters, from: e.target.value })} /></label><label className="text-xs text-muted">To date<input type="date" className="input mt-1 w-full" value={filters.to} onChange={e => setFilters({ ...filters, to: e.target.value })} /></label></div>;
+}
+
 export function AdminEngagementManager() {
-  const announcements = useAdminAnnouncements();
-  const campaigns = useAdminCampaigns();
-  const challenges = useManagedChallenges();
+  const [pages, setPages] = useState<Record<Area, number>>({ announcement: 1, campaign: 1, challenge: 1 });
+  const [challengeCursors, setChallengeCursors] = useState<(number | null)[]>([null]);
+  const announcements = useAdminAnnouncements(pages.announcement);
+  const campaigns = useAdminCampaigns(pages.campaign);
+  const challengePageIndex = pages.challenge - 1;
+  const challenges = useManagedChallenges(challengeCursors[challengePageIndex] ?? null);
   const mutation = useAdminEngagementCommand();
+  const [filters, setFilters] = useState<Record<Area, Filters>>({ announcement: blankFilters, campaign: blankFilters, challenge: blankFilters });
+  const [drawer, setDrawer] = useState<{ area: Area; item?: AdminAnnouncement | AdminCampaign | ManagedChallenge; create?: boolean } | null>(null);
   const [pending, setPending] = useState<PendingAction | null>(null);
-  const [reason, setReason] = useState("");
-  const [success, setSuccess] = useState("");
-  const [validation, setValidation] = useState("");
-  const submitting = useRef(false);
-  const announcementForm = useRef<HTMLFormElement>(null);
-  const challengeForm = useRef<HTMLFormElement>(null);
-  function prepare(command: EngagementCommand, label: string) {
-    mutation.reset(); setReason(""); setSuccess(""); setValidation("");
-    setPending({ command, label, idempotencyKey: `admin-engagement:${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`}` });
-  }
-  function createAnnouncement(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const data = new FormData(event.currentTarget);
+  const [reason, setReason] = useState(""); const [success, setSuccess] = useState(""); const [validation, setValidation] = useState("");
+  const submitting = useRef(false); const form = useRef<HTMLFormElement>(null);
+  const prepare = (command: EngagementCommand, label: string) => { mutation.reset(); setReason(""); setSuccess(""); setValidation(""); setPending({ command, label, idempotencyKey: `admin-engagement:${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`}` }); };
+  function create(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); const data = new FormData(event.currentTarget); const area = drawer?.area;
     const title = String(data.get("title") ?? "").trim();
-    const body = String(data.get("body") ?? "").trim();
-    if (!title || !body) { setValidation("Enter an announcement title and message."); return; }
-    prepare({ kind: "announcement-create", title, body }, `Create announcement: ${title}`);
-  }
-  function createChallenge(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const data = new FormData(event.currentTarget);
-    const title = String(data.get("title") ?? "").trim();
-    const question = String(data.get("question") ?? "").trim();
-    const deadline = new Date(String(data.get("deadline") ?? ""));
-    if (!title || !question || !Number.isFinite(deadline.getTime()) || deadline.getTime() <= Date.now()) { setValidation("Enter a challenge title, question and future deadline."); return; }
-    prepare({ kind: "challenge-create", title, question, deadlineAt: deadline.toISOString(), active: true }, `Create open challenge: ${title}`);
+    if (area === "announcement") { const body = String(data.get("body") ?? "").trim(); if (!title || !body) { setValidation("Enter an announcement title and message."); return; } prepare({ kind: "announcement-create", title, body }, `Create announcement: ${title}`); }
+    if (area === "challenge") { const question = String(data.get("question") ?? "").trim(); const deadline = new Date(String(data.get("deadline") ?? "")); if (!title || !question || !Number.isFinite(deadline.getTime()) || deadline.getTime() <= Date.now()) { setValidation("Enter a challenge title, question and future deadline."); return; } prepare({ kind: "challenge-create", title, question, deadlineAt: deadline.toISOString(), active: true }, `Create open challenge: ${title}`); }
   }
   async function confirm(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!pending || submitting.current || !reason.trim() || reason.trim().length > 500) return;
-    submitting.current = true;
-    try {
-      await mutation.mutateAsync({ command: pending.command, reason: reason.trim(), idempotencyKey: pending.idempotencyKey });
-      if (pending.command.kind === "announcement-create") announcementForm.current?.reset();
-      if (pending.command.kind === "challenge-create") challengeForm.current?.reset();
-      setSuccess(`${pending.label} — saved.`); setPending(null);
-    } catch { /* Keep the same command and key for a safe retry. */ }
-    finally { submitting.current = false; }
+    event.preventDefault(); if (!pending || submitting.current || !reason.trim() || reason.trim().length > 500) return; submitting.current = true;
+    try { await mutation.mutateAsync({ command: pending.command, reason: reason.trim(), idempotencyKey: pending.idempotencyKey });
+      if (pending.command.kind === "announcement-create" || pending.command.kind === "announcement-pin") setPages(p => ({ ...p, announcement: 1 }));
+      if (pending.command.kind === "campaign-status") setPages(p => ({ ...p, campaign: 1 }));
+      if (pending.command.kind === "challenge-create" || pending.command.kind === "challenge-close") { setChallengeCursors([null]); setPages(p => ({ ...p, challenge: 1 })); }
+      setSuccess(`${pending.label} — saved.`); setPending(null); setDrawer(null); form.current?.reset();
+    } catch { /* Keep the same command and key for a safe retry. */ } finally { submitting.current = false; }
   }
+  const ann = filterItems(announcements.data?.items ?? [], filters.announcement, x => x.title, x => x.published ? "published" : "draft", x => x.createdAt ?? null);
+  const camp = filterItems(campaigns.data?.items ?? [], filters.campaign, x => x.title, x => x.active ? "open" : x.endsAt && new Date(x.endsAt).getTime() <= Date.now() ? "expired" : "closed", x => x.createdAt ?? x.endsAt);
+  const chall = filterItems(challenges.data?.items ?? [], filters.challenge, x => x.title, x => !x.active ? "closed" : new Date(x.deadlineAt).getTime() <= Date.now() ? "expired" : "open", x => x.deadlineAt);
+  const actionButton = (item: AdminAnnouncement | AdminCampaign | ManagedChallenge) => {
+    if ("body" in item) return <button className="btn btn-small" disabled={!!pending} onClick={() => prepare({ kind: "announcement-pin", id: item.id, pinned: !item.pinned }, `${item.pinned ? "Unpin" : "Pin"} announcement: ${item.title}`)}>{item.pinned ? "Unpin" : "Pin"}</button>;
+    if ("description" in item) { const expired = !!item.endsAt && new Date(item.endsAt).getTime() <= Date.now(); return <button className="btn btn-small" disabled={!!pending || (!item.active && expired)} onClick={() => prepare({ kind: "campaign-status", id: item.id, active: !item.active }, `${item.active ? "Close" : "Open and pin"} campaign: ${item.title}`)}>{item.active ? "Close campaign" : expired ? "Expired" : "Open and pin"}</button>; }
+    return item.active ? <button className="btn btn-small" disabled={!!pending} onClick={() => prepare({ kind: "challenge-close", id: item.id }, `Close challenge: ${item.title}`)}>Close challenge</button> : null;
+  };
+  const shown = drawer?.item;
   return <div className="space-y-5">
-    {success && <p className="rounded-xl border border-teal/40 p-3 text-sm" role="status">{success}</p>}
-    {validation && <p className="text-sm text-[#d6336c]" role="alert">{validation}</p>}
-    <Card><h2 className="text-xl font-medium">Announcements</h2><p className="mt-1 text-sm text-muted">Pinning replaces the previous pin and notifies employees.</p>
-      <form ref={announcementForm} onSubmit={createAnnouncement} className="my-4 space-y-3">
-        <label className="block text-sm">Title<input name="title" className="input mt-1 w-full" required maxLength={240} /></label>
-        <label className="block text-sm">Message<textarea name="body" className="input mt-1 min-h-24 w-full" required maxLength={4000} /></label>
-        <Button type="submit" className="btn-primary" disabled={!!pending}>Create announcement</Button>
-      </form>
-      <QueryState query={announcements} empty={!announcements.data?.items.length}><PagedItems items={announcements.data?.items ?? []} label="Announcements" render={item => <div className="rounded-xl border border-[var(--line)] p-3"><div className="flex flex-wrap items-center justify-between gap-3"><h3 className="break-words font-medium">{item.title}</h3><button type="button" className="btn btn-small" disabled={!!pending} onClick={() => prepare({ kind: "announcement-pin", id: item.id, pinned: !item.pinned }, `${item.pinned ? "Unpin" : "Pin"} announcement: ${item.title}`)}>{item.pinned ? "Unpin" : "Pin"}</button></div><p className="mt-2 whitespace-pre-wrap break-words text-sm text-muted">{item.body}</p><p className="mt-2 text-xs text-muted">{item.pinned ? "Pinned" : "Not pinned"}</p></div>} /></QueryState>
-    </Card>
-    <Card><h2 className="mb-4 text-xl font-medium">Feedback campaigns</h2>
-      <QueryState query={campaigns} empty={!campaigns.data?.items.length}><PagedItems items={campaigns.data?.items ?? []} label="Campaigns" render={item => <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--line)] p-3"><div className="min-w-0"><h3 className="break-words font-medium">{item.title}</h3><p className="text-sm text-muted">{item.active ? "Open" : "Closed"}{item.pinned ? " · Pinned" : ""}</p>{item.description && <p className="mt-1 break-words text-sm text-muted">{item.description}</p>}</div><button type="button" className="btn btn-small" disabled={!!pending || (!item.active && !!item.endsAt && new Date(item.endsAt).getTime() <= Date.now())} onClick={() => prepare({ kind: "campaign-status", id: item.id, active: !item.active }, `${item.active ? "Close" : "Open"} campaign: ${item.title}`)}>{item.active ? "Close campaign" : item.endsAt && new Date(item.endsAt).getTime() <= Date.now() ? "Expired" : "Open campaign"}</button></div>} /></QueryState>
-    </Card>
-    <Card><h2 className="text-xl font-medium">Challenges</h2><p className="mt-1 text-sm text-muted">Create an open challenge. Closed challenges cannot be reopened.</p>
-      <form ref={challengeForm} onSubmit={createChallenge} className="my-4 grid gap-3 sm:grid-cols-2">
-        <label className="block text-sm">Title<input name="title" className="input mt-1 w-full" required maxLength={240} /></label>
-        <label className="block text-sm">Deadline (your local time)<input name="deadline" type="datetime-local" className="input mt-1 w-full" required /></label>
-        <label className="block text-sm sm:col-span-2">Question<textarea name="question" className="input mt-1 min-h-24 w-full" required maxLength={3000} /></label>
-        <Button type="submit" className="btn-primary justify-self-start" disabled={!!pending}>Create challenge</Button>
-      </form>
-      <QueryState query={challenges} empty={!challenges.data?.length}><PagedItems items={challenges.data ?? []} label="Challenges" render={item => <div className="rounded-xl border border-[var(--line)] p-3"><div className="flex flex-wrap items-center justify-between gap-3"><h3 className="break-words font-medium">{item.title}</h3>{item.active && <button type="button" className="btn btn-small" disabled={!!pending} onClick={() => prepare({ kind: "challenge-close", id: item.id }, `Close challenge: ${item.title}`)}>Close challenge</button>}</div><p className="mt-2 whitespace-pre-wrap break-words text-sm text-muted">{item.question}</p><p className="mt-2 text-xs text-muted">{!item.active ? "Closed" : new Date(item.deadlineAt).getTime() <= Date.now() ? "Expired" : "Open"} · Deadline: {new Date(item.deadlineAt).toLocaleString()} · {item.points} points</p></div>} /></QueryState>
-    </Card>
-    <Dialog open={!!pending} onClose={() => { if (!submitting.current) setPending(null); }} className="relative z-50">
-      <div className="fixed inset-0 bg-black/40" aria-hidden="true" /><div className="fixed inset-0 overflow-y-auto p-4"><DialogPanel className="mx-auto my-12 w-full max-w-lg rounded-2xl border border-[var(--line)] bg-[var(--card)] p-5 shadow-xl">
-        <DialogTitle className="break-words text-lg font-medium">{pending?.label}</DialogTitle>
-        <form onSubmit={confirm} className="mt-4 space-y-3" aria-busy={mutation.isPending}>
-          <label className="block text-sm">Audit reason<textarea autoFocus className="input mt-1 min-h-24 w-full" required maxLength={500} value={reason} disabled={mutation.isPending || mutation.isError} onChange={event => setReason(event.target.value)} /></label>
-          <p className="text-xs text-muted">Required, up to 500 characters. This action is recorded in the audit log.</p>
-          {mutation.isError && <p role="alert" className="text-sm text-[#d6336c]">{errorMessage(mutation.error)} Retry sends the same request safely. Close to change the reason.</p>}
-          <div className="flex flex-wrap justify-end gap-2"><Button type="button" className="btn" disabled={mutation.isPending} onClick={() => setPending(null)}>Cancel</Button><Button type="submit" className="btn-primary" disabled={mutation.isPending || !reason.trim()}>{mutation.isPending ? "Saving…" : mutation.isError ? "Retry action" : "Confirm action"}</Button></div>
-        </form>
-      </DialogPanel></div>
-    </Dialog>
+    {success && <p className="rounded-xl border border-teal/40 p-3 text-sm" role="status">{success}</p>}{validation && !drawer && <p className="text-sm text-[#d6336c]" role="alert">{validation}</p>}
+    <section className="space-y-4 rounded-2xl border border-[var(--line)] bg-white p-4 sm:p-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-xl font-medium">Announcements</h2><p className="mt-1 text-sm text-muted">Pinning replaces the previous pin and notifies employees.</p></div><Button className="btn-primary" disabled={!!pending} onClick={() => { setValidation(""); setDrawer({ area: "announcement", create: true }); }}>Create announcement</Button></div><FilterBar filters={filters.announcement} setFilters={f => { setFilters(v => ({ ...v, announcement: f })); setPages(v => ({ ...v, announcement: 1 })); }} statuses={["published", "draft"]} /><QueryState query={announcements}><Table items={ann} empty="No announcements match these filters." onSelect={item => setDrawer({ area: "announcement", item })} columns={[{ heading: "Title", cell: x => <span className="font-medium">{x.title}</span> }, { heading: "Status", cell: x => <span>{x.published ? "Published" : "Draft"}{x.pinned ? " · Pinned" : ""}</span> }, { heading: "Message", cell: x => <span className="line-clamp-2 text-muted">{x.body}</span> }, { heading: "Action", cell: actionButton }]} /><AdminPagination page={pages.announcement} pageSize={announcements.data?.pageSize ?? SIZE} total={announcements.data?.total ?? 0} busy={announcements.isFetching} label="Announcements" onPageChange={page => setPages(p => ({ ...p, announcement: page }))} /></QueryState></section>
+    <section className="space-y-4 rounded-2xl border border-[var(--line)] bg-white p-4 sm:p-5"><div><h2 className="text-xl font-medium">Feedback campaigns</h2><p className="mt-1 text-sm text-muted">Opening a campaign pins it for feedback and replaces the current pin. Closing it removes its pin.</p></div><FilterBar filters={filters.campaign} setFilters={f => { setFilters(v => ({ ...v, campaign: f })); setPages(v => ({ ...v, campaign: 1 })); }} statuses={["open", "closed", "expired"]} /><QueryState query={campaigns}><Table items={camp} empty="No campaigns match these filters." onSelect={item => setDrawer({ area: "campaign", item })} columns={[{ heading: "Campaign", cell: x => <span className="font-medium">{x.title}</span> }, { heading: "Status", cell: x => <span>{x.active ? "Open" : x.endsAt && new Date(x.endsAt).getTime() <= Date.now() ? "Expired" : "Closed"}{x.pinned ? " · Pinned" : ""}</span> }, { heading: "Ends", cell: x => x.endsAt ? new Date(x.endsAt).toLocaleDateString() : "—" }, { heading: "Action", cell: actionButton }]} /><AdminPagination page={pages.campaign} pageSize={campaigns.data?.pageSize ?? SIZE} total={campaigns.data?.total ?? 0} busy={campaigns.isFetching} label="Campaigns" onPageChange={page => setPages(p => ({ ...p, campaign: page }))} /></QueryState></section>
+    <section className="space-y-4 rounded-2xl border border-[var(--line)] bg-white p-4 sm:p-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-xl font-medium">Challenges</h2><p className="mt-1 text-sm text-muted">Create an open challenge. Closed challenges cannot be reopened.</p></div><Button className="btn-primary" disabled={!!pending} onClick={() => { setValidation(""); setDrawer({ area: "challenge", create: true }); }}>Create challenge</Button></div><FilterBar filters={filters.challenge} setFilters={f => { setFilters(v => ({ ...v, challenge: f })); setPages(v => ({ ...v, challenge: 1 })); setChallengeCursors([null]); }} statuses={["open", "closed", "expired"]} /><QueryState query={challenges}><Table items={chall} empty="No challenges match these filters." onSelect={item => setDrawer({ area: "challenge", item })} columns={[{ heading: "Challenge", cell: x => <span className="font-medium">{x.title}</span> }, { heading: "Status", cell: x => !x.active ? "Closed" : new Date(x.deadlineAt).getTime() <= Date.now() ? "Expired" : "Open" }, { heading: "Deadline", cell: x => new Date(x.deadlineAt).toLocaleString() }, { heading: "Points", cell: x => x.points }, { heading: "Action", cell: actionButton }]} /><AdminPagination page={pages.challenge} pageSize={SIZE} total={challenges.data?.total ?? (challenges.data?.nextAfter != null ? pages.challenge * SIZE + 1 : (pages.challenge - 1) * SIZE + (challenges.data?.items.length ?? 0))} busy={challenges.isFetching} label="Challenges" onPageChange={page => { if (page === pages.challenge - 1) setPages(p => ({ ...p, challenge: page })); else if (page === pages.challenge + 1 && challenges.data?.nextAfter != null) { setChallengeCursors(c => [...c.slice(0, pages.challenge), challenges.data!.nextAfter]); setPages(p => ({ ...p, challenge: page })); } }} /></QueryState></section>
+    <AdminDrawer open={!!drawer || !!pending} onClose={() => { if (!submitting.current) { setPending(null); setDrawer(null); } }} title={pending?.label ?? (drawer?.create ? drawer.area === "announcement" ? "Create announcement" : "Create challenge" : shown?.title ?? "Engagement details")} description={pending ? "Confirm this secured action with an audit reason." : drawer?.create ? "Complete the fields, then confirm with an audit reason." : "Review the record and available management action."} footer={pending ? <form onSubmit={confirm} className="space-y-3" aria-busy={mutation.isPending}><label className="block text-sm">Audit reason<textarea autoFocus className="input mt-1 min-h-24 w-full" required maxLength={500} value={reason} disabled={mutation.isPending || mutation.isError} onChange={e => setReason(e.target.value)} /></label><p className="text-xs text-muted">Required, up to 500 characters. This action is recorded in the audit log.</p>{mutation.isError && <p role="alert" className="text-sm text-[#d6336c]">{errorMessage(mutation.error)} Retry sends the same request safely. Close to change the reason.</p>}<div className="flex justify-end gap-2"><Button type="button" className="btn" disabled={mutation.isPending} onClick={() => setPending(null)}>Back</Button><Button type="submit" className="btn-primary" disabled={mutation.isPending || !reason.trim()}>{mutation.isPending ? "Saving…" : mutation.isError ? "Retry action" : "Confirm action"}</Button></div></form> : undefined}>
+      {drawer?.create && <form ref={form} onSubmit={create} className="space-y-4">{drawer.area === "announcement" ? <><label className="block text-sm">Title<input name="title" className="input mt-1 w-full" required maxLength={240} /></label><label className="block text-sm">Message<textarea name="body" className="input mt-1 min-h-32 w-full" required maxLength={4000} /></label></> : <><label className="block text-sm">Title<input name="title" className="input mt-1 w-full" required maxLength={240} /></label><label className="block text-sm">Deadline (your local time)<input name="deadline" type="datetime-local" className="input mt-1 w-full" required /></label><label className="block text-sm">Question<textarea name="question" className="input mt-1 min-h-32 w-full" required maxLength={3000} /></label></>}{validation && <p role="alert" className="text-sm text-[#d6336c]">{validation}</p>}<Button type="submit" className="btn-primary" disabled={!!pending}>Review and save</Button></form>}
+      {shown && <div className="space-y-4"><dl className="grid gap-3 sm:grid-cols-2">{Object.entries(shown).map(([key, value]) => <div key={key} className="rounded-xl border border-[var(--line)] p-3"><dt className="text-xs capitalize text-muted">{key.replace(/[A-Z]/g, c => ` ${c.toLowerCase()}`)}</dt><dd className="mt-1 break-words whitespace-pre-wrap text-sm">{typeof value === "boolean" ? value ? "Yes" : "No" : value == null ? "—" : key === "deadlineAt" || key === "endsAt" ? new Date(String(value)).toLocaleString() : String(value)}</dd></div>)}</dl><div>{actionButton(shown)}</div></div>}
+    </AdminDrawer>
   </div>;
 }

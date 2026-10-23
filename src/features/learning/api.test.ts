@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { completeArticle, getArticleInsight, listArticles, listJourney, listQuizzes, redeemableRecommendations, startQuizAttempt, submitQuizAttempt } from "./api";
+import { completeArticle, getArticleInsight, listArticles, listJourney, listQuizzes, recommendedArticles, startQuizAttempt, submitQuizAttempt } from "./api";
 
 const envelope = (data: unknown) => new Response(JSON.stringify({ data, error: null, requestId: "client-test" }), { status: 200, headers: { "content-type": "application/json" } });
 
@@ -14,7 +14,7 @@ test("learning catalogue, journey and recommendation requests use the shared API
   try {
     await listQuizzes();
     await listJourney();
-    await redeemableRecommendations();
+    await recommendedArticles();
     await listArticles({ category: "risk" });
     assert.deepEqual(requests.map(({ input }) => String(input)), [
       "/api/quizzes", "/api/quizzes/journey", "/api/articles?view=recommended", "/api/articles?category=risk",
@@ -58,6 +58,20 @@ test("quiz submission sends only selected option keys", async () => {
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("quiz submission can be retried with the same answers without changing the endpoint contract", async () => {
+  const originalFetch = globalThis.fetch;
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit }> = [];
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => { requests.push({ input, init }); return envelope({}); }) as typeof fetch;
+  try {
+    const answers = [{ questionId: 2, optionKey: "b" }];
+    await submitQuizAttempt(5, answers);
+    await submitQuizAttempt(5, answers);
+    assert.deepEqual(requests.map((request) => request.input), ["/api/quizzes/attempts/5/submit", "/api/quizzes/attempts/5/submit"]);
+    assert.deepEqual(JSON.parse(String(requests[1].init?.body)), { answers });
+    assert.equal(new Headers(requests[1].init?.headers).has("idempotency-key"), false);
+  } finally { globalThis.fetch = originalFetch; }
 });
 
 test("article insight uses the secured recommendation insight endpoint", async () => {

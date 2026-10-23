@@ -36,6 +36,13 @@ test("protected layout and refresh endpoint are present", async () => {
   }
 });
 
+test("private layout rejects a revoked session and login remains reachable", async () => {
+  const layout = await source("app/private/layout.tsx");
+  const middleware = await source("middleware.ts");
+  assert.match(layout, /hasValidPrivateSession\(session\)/);
+  assert.doesNotMatch(middleware, /pathname === "\/login" && session\?\.user/);
+});
+
 test("seed path defines the requested default admin without storing plaintext", async () => {
   const seed = await source("src/db/seed.ts");
   assert.match(seed, /admin@admin\.com/);

@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
+import { refreshSession } from "../../auth/client-refresh";
 
 export function RefreshSession() {
-  const inFlight = useRef<Promise<Response> | null>(null);
   useEffect(() => {
     const configuredSeconds = Number(
       process.env.NEXT_PUBLIC_AUTH_REFRESH_INTERVAL_SECONDS ?? 600,
@@ -14,15 +14,8 @@ export function RefreshSession() {
     );
 
     const refresh = () => {
-      if (document.visibilityState === "hidden" || inFlight.current) return;
-      inFlight.current = fetch("/api/auth/refresh", {
-        method: "POST",
-        credentials: "same-origin",
-      })
-        .catch(() => new Response(null, { status: 0 }))
-        .finally(() => {
-          inFlight.current = null;
-        });
+      if (document.visibilityState === "hidden") return;
+      void refreshSession();
     };
 
     const interval = window.setInterval(refresh, intervalMs);

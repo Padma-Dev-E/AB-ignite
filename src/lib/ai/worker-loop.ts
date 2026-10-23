@@ -7,6 +7,17 @@ export function getWorkerPollInterval(value?: string): number {
 }
 
 type Outcome = { status: string };
+
+/** SQLite can briefly reject a write while another process owns its lock. */
+export async function processNextWithSqliteRetry<T extends Outcome>(processNext: () => Promise<T>): Promise<T | { status: "idle" }> {
+  try {
+    return await processNext();
+  } catch (error) {
+    const code = error && typeof error === "object" && "code" in error ? (error as { code?: unknown }).code : undefined;
+    if (code === "SQLITE_BUSY" || code === "SQLITE_LOCKED") return { status: "idle" };
+    throw error;
+  }
+}
 type LoopOptions<T extends Outcome> = {
   processNext: () => Promise<T>;
   once?: boolean;

@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 import test, { after, before } from "node:test";
 import { and, eq } from "drizzle-orm";
 import { db } from "../src/db/connection";
-import { articles, auditEvents, feedbackCampaigns, feedbackResponses, notifications, pointsLedger, quizAttempts, quizRecommendations, quizVersions, quizzes, refreshTokens, users } from "../src/db/schema";
-import { articleInsight, completeArticle, getFeedback, listLibrary, respondToFeedback, submitFeedback } from "../src/lib/articles/service";
+import { articles, auditEvents, feedbackCampaigns, feedbackResponses, notifications, pointsLedger, quizAttempts, quizQuestions, quizRecommendations, quizVersions, quizzes, refreshTokens, users } from "../src/db/schema";
+import { articleInsight, completeArticle, getFeedback, getLibraryArticle, listLibrary, respondToFeedback, submitFeedback } from "../src/lib/articles/service";
 import { ensureArticleCatalogue } from "../src/lib/articles/seed";
+import { ensureQuizCatalogue } from "../src/lib/quizzes/seed";
 
 let userId = 0;
 let adminId = 0;
@@ -21,8 +22,8 @@ const articleTitle = `Library test ${Date.now()}`;
 
 before(async () => {
   const created = await db.insert(users).values([
-    { name: "Library Test Employee", email: `library-${Date.now()}@example.test`, role: "user", department: "Technology", passwordHash: "test-hash" },
-    { name: "Library Test Admin", email: `library-admin-${Date.now()}@example.test`, role: "admin", department: "Technology", passwordHash: "test-hash" },
+    { name: "Library Test Employee", email: `library-${Date.now()}@example.test`, role: "employee", department: "Technology", passwordHash: "test-hash" },
+    { name: "Library Test Admin", email: `library-admin-${Date.now()}@example.test`, role: "back_office", department: "Technology", passwordHash: "test-hash" },
   ]).returning({ id: users.id }).all();
   userId = created[0].id; adminId = created[1].id;
   const sessions = await db.insert(refreshTokens).values([
@@ -59,6 +60,28 @@ test("published library filters categories and keeps external targets restricted
   assert.equal(row?.body, "Internal article content");
   const empty = await listLibrary(userId, "missing-category");
   assert.equal(empty.items.length, 0);
+  for (const category of ["banking", "transformation", "technology"]) {
+    const filtered = await listLibrary(userId, category);
+    assert.ok(filtered.items.length > 0, `${category} has a seeded article`);
+    assert.ok(filtered.items.every((item) => item.category === category));
+  }
+  const [unsafe] = await db.insert(articles).values({ title: `${articleTitle} unsafe external`, summary: "Unsafe legacy source", body: "", category: "banking", categoryCode: "banking", publisher: "Legacy publisher", difficulty: "beginner", readingMinutes: 1, contentType: "external", url: "https://user:pass@example.org/private", published: true }).returning().all();
+  assert.equal((await getLibraryArticle(unsafe.id)).sourceUrl, null);
+  await assert.rejects(() => completeArticle({ userId, sessionId: userSessionId }, unsafe.id, "unsafe-source-read-001"), (error: unknown) => (error as { code?: string }).code === "SOURCE_UNAVAILABLE");
+});
+
+test("article detail selects a visible published quiz by topic before category and ignores unpublished quizzes", async () => {
+  ensureQuizCatalogue();
+  const [matching] = await db.insert(articles).values({ title: `${articleTitle} related`, summary: "Related quiz test", body: "Read", category: "transformation", categoryCode: "transformation", topic: "banking-fundamentals", publisher: "AB Ignite", difficulty: "beginner", readingMinutes: 1, contentType: "internal", published: true }).returning().all();
+  const [bankingQuiz] = await db.select({ id: quizzes.id }).from(quizzes).where(eq(quizzes.title, "Banking Beginner Essentials")).limit(1).all();
+  assert.equal((await getLibraryArticle(matching.id, userId)).relatedQuizId, bankingQuiz.id);
+
+  const hiddenCategory = `hidden-${Date.now()}`;
+  const [hiddenArticle] = await db.insert(articles).values({ title: `${articleTitle} hidden`, summary: "Hidden quiz test", body: "Read", category: hiddenCategory, categoryCode: hiddenCategory, topic: hiddenCategory, publisher: "AB Ignite", difficulty: "beginner", readingMinutes: 1, contentType: "internal", published: true }).returning().all();
+  const [hiddenQuiz] = await db.insert(quizzes).values({ title: `${articleTitle} unpublished`, category: hiddenCategory, difficulty: "beginner", objective: "Hidden", passMark: 70, pointsPerQuestion: 1, questionCount: 1 }).returning().all();
+  const [hiddenVersion] = await db.insert(quizVersions).values({ quizId: hiddenQuiz.id, version: 1, categoryCode: hiddenCategory, level: "beginner", objective: "Hidden", passMark: 70, pointsPerQuestion: 1, published: false }).returning().all();
+  await db.insert(quizQuestions).values({ quizVersionId: hiddenVersion.id, topic: hiddenCategory, prompt: "Hidden question?", sortOrder: 1 }).run();
+  assert.equal((await getLibraryArticle(hiddenArticle.id, userId)).relatedQuizId, null);
 });
 
 test("article completion grants configured points once and rejects idempotency-key reuse", async () => {
@@ -67,11 +90,26 @@ test("article completion grants configured points once and rejects idempotency-k
   const second = await completeArticle(ctx, articleId, "article-read-key-0001");
   assert.equal(first.pointsAwarded, 10);
   assert.equal(second.alreadyCompleted, true);
+  assert.equal(second.pointsAwarded, 0);
+  assert.equal((await getLibraryArticle(articleId, userId)).completed, true);
+  assert.equal((await getLibraryArticle(articleId, adminId)).completed, false);
+  assert.equal((await listLibrary(userId, "learning")).items.find((item) => item.id === articleId)?.completed, true);
   const ledgerRows = await db.select().from(pointsLedger).where(and(eq(pointsLedger.userId, userId), eq(pointsLedger.eventType, "article_read"))).all();
   assert.equal(ledgerRows.length, 1);
   await assert.rejects(() => completeArticle(ctx, secondArticleId, "article-read-key-0001"), (error: unknown) => (error as { code?: string }).code === "IDEMPOTENCY_CONFLICT");
   await assert.rejects(() => articleInsight({ userId: adminId, sessionId: adminSessionId }, articleId, recommendationId), (error: unknown) => (error as { code?: string }).code === "RECOMMENDATION_NOT_FOUND");
   assert.equal((await articleInsight({ userId, sessionId: userSessionId }, articleId, recommendationId)).source, "rule");
+  const [closed] = await db.select().from(quizRecommendations).where(eq(quizRecommendations.id, recommendationId)).all();
+  assert.equal(closed.status, "completed");
+  assert.ok(!(await listLibrary(userId, undefined, true)).items.some((item) => item.id === articleId));
+
+  const seededBanking = (await listLibrary(userId, "banking")).items.find((item) => item.topic === "banking-fundamentals");
+  assert.ok(seededBanking);
+  const [exact] = await db.insert(quizRecommendations).values({ userId, topic: "banking-fundamentals", categoryCode: "banking", scorePercent: 40, thresholdPercent: 70, reason: "Review core banking controls.", sourceAttemptId: attemptId }).returning().all();
+  await db.insert(quizRecommendations).values({ userId, topic: "banking-advanced", categoryCode: "banking", scorePercent: 55, thresholdPercent: 70, reason: "Explore advanced banking.", sourceAttemptId: attemptId }).run();
+  const recommended = (await listLibrary(userId, undefined, true)).items.filter((item) => item.id === seededBanking.id);
+  assert.equal(recommended.length, 1);
+  assert.equal(recommended[0].recommendation?.id, exact.id);
 });
 
 test("feedback campaign accepts categorized feedback once and administrator response notifies employee", async () => {

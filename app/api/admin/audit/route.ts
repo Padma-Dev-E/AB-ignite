@@ -7,6 +7,6 @@ export async function GET(request: Request) {
   const id = requestId(request);
   try {
     await adminAccess(await auth(), CAPABILITIES.AUDIT_READ);
-    return ok(await listAuditEvents(auditFilters(new URL(request.url), 100)), 200, id);
+    return ok(await listAuditEvents(auditFilters(new URL(request.url), 10)), 200, id);
   } catch (error) { return adminApiError(error, id); }
 }

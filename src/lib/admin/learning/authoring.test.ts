@@ -12,6 +12,7 @@ import {
   quizOptions,
   quizQuestions,
   quizVersions,
+  quizzes,
   refreshTokens,
   users,
 } from "../../../db/schema";
@@ -36,7 +37,7 @@ test("admin authoring creates immutable published quiz versions and replays the 
     .values({
       name: "Author",
       email: `author-${stamp}@example.test`,
-      role: "admin",
+      role: "back_office",
       passwordHash: "test",
     })
     .returning()
@@ -181,7 +182,7 @@ test("publishing rejects incomplete questions and challenge closure preserves pa
     .values({
       name: "Author",
       email: `author2-${stamp}@example.test`,
-      role: "admin",
+      role: "back_office",
       passwordHash: "test",
     })
     .returning()
@@ -340,7 +341,7 @@ test("question PATCH replays safely and rejects duplicate option keys or order",
     .values({
       name: "Question author",
       email: `question-author-${stamp}@example.test`,
-      role: "admin",
+      role: "back_office",
       passwordHash: "test",
     })
     .returning()
@@ -394,6 +395,26 @@ test("question PATCH replays safely and rejects duplicate option keys or order",
       ],
     },
     `question-create-${stamp}`,
+  );
+  const nextQuestion = addQuestion(
+    actor,
+    quiz.versionId,
+    {
+      prompt: "Which separate verification step should follow?",
+      topic: "controls",
+      sortOrder: 2,
+      points: 10,
+      options: [
+        { optionKey: "a", label: "Independent review", sortOrder: 1, isCorrect: true },
+        { optionKey: "b", label: "Skip the review", sortOrder: 2, isCorrect: false },
+      ],
+    },
+    `question-create-next-${stamp}`,
+  );
+  assert.ok(nextQuestion.id > question.id);
+  assert.equal(
+    db.select().from(quizzes).where(eq(quizzes.id, quiz.id)).get()?.questionCount,
+    2,
   );
   const input = {
     prompt: "Updated?",
@@ -491,7 +512,7 @@ test("article create and PATCH require replay-safe idempotency and publish rejec
     .values({
       name: "Article author",
       email: `article-author-${stamp}@example.test`,
-      role: "admin",
+      role: "back_office",
       passwordHash: "test",
     })
     .returning()

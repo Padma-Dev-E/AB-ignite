@@ -1,4 +1,4 @@
-export type IdeaStatus = "screening" | "returned" | "business_review" | "control_review" | "decision" | "poc" | "implementation" | "implemented" | "rejected" | "deferred";
+export type IdeaStatus = "draft" | "screening" | "returned" | "business_review" | "control_review" | "decision" | "poc" | "implementation" | "implemented" | "rejected" | "deferred";
 export type IdeaKind = "idea" | "problem";
 
 export type Idea = {
@@ -15,7 +15,7 @@ export type Idea = {
   risks: string | null;
   category: string;
   status: IdeaStatus;
-  priorityBand: "Watch" | "Qualify" | "Priority" | null;
+  priorityBand: "Watch" | "Quality" | "Priority" | null;
   priorityScore: number | null;
   reference: string;
   challengeId: number | null;
@@ -45,7 +45,12 @@ export type IdeaCreateInput = {
 };
 export type IdeaCreateResponse = { idea: Idea; versionId: number };
 export type IdeaPriorityBreakdown = { key: "turnaround" | "volume" | "value"; score: number; weight: number; contribution: number };
-export type IdeaSubmitResponse = { ideaId: number; versionId: number; runId?: number | null; status: string; submitted?: boolean; reference?: string; minimumScore?: number; confirmation?: string; score?: number; priorityBand?: "Watch" | "Qualify" | "Priority"; category?: string; breakdown?: IdeaPriorityBreakdown[] };
+export type IdeaPriorityPolicy = {
+  kpis: Array<{ key: "turnaround" | "volume" | "value"; question: string; hint: string; weight: number }>;
+  bands: Array<{ name: "Watch" | "Quality" | "Priority"; minimum: number }>;
+  minimumScore: number;
+};
+export type IdeaSubmitResponse = { ideaId: number; versionId: number; runId?: number | null; status: string; submitted?: boolean; reference?: string; minimumScore?: number; confirmation?: string; score?: number; priorityBand?: "Watch" | "Quality" | "Priority"; category?: string; breakdown?: IdeaPriorityBreakdown[]; pointsAwarded?: number; aiValidationScore?: number | null; aiValidationAttempts?: number; submittedWithLowAiScore?: boolean };
 export type IdeaAiStatusResponse = { idea: Pick<Idea, "id" | "status" | "reference">; runs: Array<{ id: number; jobKey: string; status: string; attemptCount: number; createdAt: string; updatedAt: string; completedAt: string | null }>; events: Array<{ id: number; eventType: string; createdAt: string }>; reviews: unknown[] };
 export type IdeaEnrichment = { suggestedTitle: string; conciseSummary: string; problemStatement: string; solutionStatement?: string; riskStatement?: string; valueStatement: string; tags: string[]; taxonomy: string[]; affectedTeams: string[]; assumptions: string[] };
 export type IdeaValidation = { decision: string; confidence: number; overallScore: number; strengths: string[]; gaps: string[]; assumptions: string[]; questions: Array<{ question: string; reason: string }>; risks: Array<{ severity: string; description: string }>; nextActions: Array<{ action: string; ownerRole: string }> };

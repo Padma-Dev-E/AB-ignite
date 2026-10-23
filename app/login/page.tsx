@@ -14,17 +14,15 @@ export default function LoginPage() {
     const refresh = await fetch("/api/auth/refresh", { method: "POST", credentials: "same-origin" });
     if (!refresh.ok) throw new Error("Unable to establish a secure session.");
     const session = await getSession();
-    const profile = session?.user?.profile;
-    router.replace(session?.user?.role === "admin" || ["reviewer", "business_owner", "control", "management"].includes(profile ?? "") ? "/private/admin" : "/private");
+    if (!session?.user?.role) throw new Error("Unable to verify your account. Please sign in again.");
+    if (session?.user?.mustChangePassword) {
+      router.replace("/change-password");
+      router.refresh();
+      return;
+    }
+    if (session?.user?.role) router.replace(session.user.role === "employee" ? "/private" : "/private/admin");
     router.refresh();
   }
 
-  async function joinDemo(details: { name: string; department: string }) {
-    const response = await fetch("/api/demo/session", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify(details) });
-    if (!response.ok) throw new Error(response.status === 403 ? "Demo entry is unavailable." : "Unable to create a demo session. Please try again.");
-    router.replace("/private");
-    router.refresh();
-  }
-
-  return <LoginScreen onEnter={joinDemo} onCredentials={authenticate} />;
+  return <LoginScreen onCredentials={authenticate} />;
 }

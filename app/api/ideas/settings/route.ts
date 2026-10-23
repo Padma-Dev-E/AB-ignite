@@ -19,7 +19,7 @@ export async function PATCH(request: Request) {
   try {
     const session = await auth();
     if (!session?.user?.id || session.isValid === false) return apiError("unauthorized", "Authentication required.", 401, id);
-    if (session.user.role !== "admin") return apiError("forbidden", "Administrator access required.", 403, id);
+    if (session.user.role !== "back_office") return apiError("forbidden", "Administrator access required.", 403, id);
     const { minimumScore } = schema.parse(await request.json());
     await setIdeaMinimumScore({ kind: "admin", id: session.user.id }, minimumScore);
     return ok({ minimumScore }, 200, id);

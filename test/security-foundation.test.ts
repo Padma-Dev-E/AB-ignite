@@ -32,10 +32,10 @@ test("Wave 0 migration adds security tables and append-only protections", async 
 
 test("roles map to explicit capabilities without adding JWT roles", async () => {
   const permissions = await import("../src/lib/auth/permissions");
-  assert.deepEqual(permissions.capabilitiesForRole("user"), ["ideas.read", "ideas.write", "profile.read"]);
-  assert.ok(permissions.hasCapability("admin", "users.manage"));
-  assert.ok(permissions.hasCapability("admin", "audit.read"));
-  assert.equal(permissions.hasCapability("user", "users.manage"), false);
+  assert.deepEqual(permissions.capabilitiesForRole("employee"), ["ideas.read", "ideas.write", "profile.read"]);
+  assert.ok(permissions.hasCapability("back_office", "users.manage"));
+  assert.ok(permissions.hasCapability("back_office", "audit.read"));
+  assert.equal(permissions.hasCapability("employee", "users.manage"), false);
 });
 
 test("audit metadata is allowlisted and request identities are hashed", async () => {

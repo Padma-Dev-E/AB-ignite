@@ -12,7 +12,7 @@ before(async () => {
   const [user] = await db.insert(users).values({
     name: "Rewards Domain User",
     email: `rewards-domain-${Date.now()}@example.test`,
-    role: "user",
+    role: "employee",
     passwordHash: "test-hash",
   }).returning({ id: users.id }).all();
   userId = user.id;
@@ -65,12 +65,12 @@ test("negative point changes cannot create a negative balance", async () => {
     awardPoints({
       userId,
       amount: -51,
-      eventType: "reward_redemption",
-      sourceType: "redemption",
-      sourceId: "redemption-too-expensive",
+      eventType: "invalid_negative_award",
+      sourceType: "test",
+      sourceId: "negative-points-rejected",
       idempotencyKey: `overspend-${Date.now()}`,
     }),
-    /insufficient|balance/i,
+    /positive integer/i,
   );
   assert.equal((await getBalance(userId)).balance, 50);
 });

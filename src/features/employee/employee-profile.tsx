@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { ApiError } from "../../lib/api/client";
 import { Button, Card } from "../../components/ui";
-import { useRewards } from "../rewards/hooks";
+import { usePointsSummary } from "../points/hooks";
 import { useEmployeeProfile, useUpdateEmployeeProfile } from "./profile-hooks";
 
 function errorMessage(error: unknown) {
@@ -18,7 +18,7 @@ export type EmployeeProfileCardProps = {
 /** Live employee profile with current rewards balance and level. */
 export function EmployeeProfileCard({ className = "", editable = true }: EmployeeProfileCardProps) {
   const profileQuery = useEmployeeProfile();
-  const rewardsQuery = useRewards();
+  const rewardsQuery = usePointsSummary();
   const update = useUpdateEmployeeProfile();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState("");

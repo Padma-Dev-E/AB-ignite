@@ -1,7 +1,7 @@
 import { apiFetch } from "../../lib/api/client";
 
-export type AdminAnnouncement = { id: number; title: string; body: string; pinned: boolean; published: boolean };
-export type AdminCampaign = { id: number; title: string; description: string | null; active: boolean; pinned: boolean; endsAt: string | null };
+export type AdminAnnouncement = { id: number; title: string; body: string; pinned: boolean; published: boolean; createdAt?: string };
+export type AdminCampaign = { id: number; title: string; description: string | null; active: boolean; pinned: boolean; endsAt: string | null; createdAt?: string };
 export type ManagedChallenge = { id: number; title: string; question: string; deadlineAt: string; active: boolean; points: number };
 export type EngagementCommand =
   | { kind: "announcement-create"; title: string; body: string }
@@ -15,9 +15,19 @@ export const adminEngagementKeys = {
   campaigns: ["admin", "engagement", "campaigns"] as const,
   challenges: ["admin", "engagement", "challenges"] as const,
 };
-export const listAdminAnnouncements = () => apiFetch<{ items: AdminAnnouncement[] }>("/api/admin/engagement/announcements?limit=100");
-export const listAdminCampaigns = () => apiFetch<{ items: AdminCampaign[] }>("/api/admin/engagement/campaigns?limit=100");
-export const listManagedChallenges = () => apiFetch<ManagedChallenge[]>("/api/admin/learning/challenges");
+export type EngagementPage<T> = { items: T[]; nextAfter: number | null; total?: number };
+export type EngagementNumberedPage<T> = { items: T[]; page: number; pageSize: number; total: number; totalPages: number };
+function pageUrl(path: string, after: number | null) {
+  const params = new URLSearchParams({ limit: "10" });
+  if (after !== null) params.set("after", String(after));
+  return `${path}?${params}`;
+}
+function numberedPageUrl(path: string, page: number) {
+  return `${path}?${new URLSearchParams({ page: String(Math.max(1, Math.floor(page))), pageSize: "10" })}`;
+}
+export const listAdminAnnouncements = (page = 1) => apiFetch<EngagementNumberedPage<AdminAnnouncement>>(numberedPageUrl("/api/admin/engagement/announcements", page));
+export const listAdminCampaigns = (page = 1) => apiFetch<EngagementNumberedPage<AdminCampaign>>(numberedPageUrl("/api/admin/engagement/campaigns", page));
+export const listManagedChallenges = (after: number | null = null) => apiFetch<EngagementPage<ManagedChallenge>>(pageUrl("/api/admin/learning/challenges", after));
 export function executeEngagementCommand({ command, reason, idempotencyKey }: { command: EngagementCommand; reason: string; idempotencyKey: string }) {
   let path: string;
   let method = "PATCH";

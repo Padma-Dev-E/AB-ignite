@@ -4,7 +4,14 @@ import test from "node:test";
 import { createElement } from "react";
 import { renderToString } from "react-dom/server";
 import { AppProviders } from "../../../providers/app-providers";
-import { EmployeeIdeaSubmissionPage } from "./employee-idea-flow";
+import { buildIdeaSearchPhrase, EmployeeIdeaSubmissionPage } from "./employee-idea-flow";
+
+test("related-idea search uses an early distinctive phrase instead of the full opening sentence", () => {
+  assert.equal(
+    buildIdeaSearchPhrase("Problem: daily receipt printer checks fail before morning service."),
+    "daily receipt printer",
+  );
+});
 
 test("employee submission flow starts with the describe stage", () => {
   const html = renderToString(
@@ -16,7 +23,6 @@ test("employee submission flow starts with the describe stage", () => {
       }),
     ),
   );
-
   assert.match(html, /Share an idea/);
   assert.match(html, /Continue to develop/);
   assert.match(html, /Server originality check/);
@@ -27,10 +33,14 @@ test("employee submission presents exact score bands and blocks a failed validat
     new URL("./employee-idea-flow.tsx", import.meta.url),
     "utf8",
   );
-  assert.match(source, /Watch/);
-  assert.match(source, /Qualify/);
-  assert.match(source, /Priority/);
+  assert.match(source, /scorePriority/);
+  assert.match(source, /Quality/);
+  assert.match(source, /priorityPolicyQuery\.data/);
   assert.match(source, /validationBlocked/);
+  assert.match(source, /ideaValidationPasses\(validation\)/);
+  assert.match(source, /normalizeIdeaValidationScore\(validation\?\.overallScore\)/);
+  assert.match(source, /above 7\/10/);
+  assert.match(source, /Improve draft/);
 });
 
 test("employee development exposes AI structure fields and explicit validation pass/fail reasons", () => {
@@ -70,4 +80,19 @@ test("employee wizard renders the reviewer-question and impact-number stages", (
   assert.match(source, /Continue to numbers/);
   assert.match(source, /Turnaround time/);
   assert.match(source, /Expected savings or revenue/);
+  assert.match(source, /Points earned/);
+  assert.match(source, /submitResult\.pointsAwarded/);
+  assert.match(source, /\{submitResult\.pointsAwarded\} points/);
+  assert.match(source, /candidateQuery\.refetch\(\)/);
+  assert.match(source, /submitResult\.breakdown\.map/);
+  assert.match(source, /submitResult\?\.reference/);
+  assert.match(source, /priorityRejectionDetails/);
+  assert.match(source, /error\.details/);
+  assert.match(source, /const lifecycle = \[/);
+  assert.match(source, /"Business review"/);
+  assert.match(source, /"Proof of concept"/);
+  assert.match(source, /"Impact"/);
+  assert.match(source, /Your saved drafts/);
+  assert.match(source, /Resume draft/);
+  assert.match(source, /unresolvedOriginality/);
 });

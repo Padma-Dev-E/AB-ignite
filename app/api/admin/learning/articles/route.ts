@@ -10,6 +10,7 @@ import {
   createAdminArticle,
   listAdminArticles,
 } from "../../../../../src/lib/admin/learning/service";
+import { adminContentTotals } from "../../../../../src/lib/admin/service";
 import {
   idempotencyKey,
   requestAuditMetadata,
@@ -35,7 +36,7 @@ export async function GET(request: Request) {
   try {
     await adminAccess(await auth(), CAPABILITIES.SETTINGS_MANAGE);
     return ok(
-      await listAdminArticles(parsePage(new URL(request.url), 100)),
+      { ...await listAdminArticles(parsePage(new URL(request.url), 10)), total: adminContentTotals().articles },
       200,
       id,
     );

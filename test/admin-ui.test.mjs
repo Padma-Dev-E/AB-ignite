@@ -17,11 +17,11 @@ test("admin feature owns TanStack Query wiring for available quiz and rewards AP
   assert.match(api, /\/api\/quizzes/);
   assert.match(api, /\/api\/challenges/);
   assert.match(api, /\/api\/admin\/rewards/);
-  assert.match(api, /\/api\/admin\/rewards\/redemptions/);
   assert.match(hooks, /useQuery/);
   assert.match(hooks, /useAdminQuizCatalogue/);
   assert.match(hooks, /useAdminRewards/);
-  assert.match(hooks, /useAdminRedemptions/);
+  assert.doesNotMatch(api, /\/api\/admin\/rewards\/redemptions/);
+  assert.doesNotMatch(hooks, /useAdminRedemptions|useAdminRedemptionAction/);
 });
 
 test("admin workspace exposes safe states for unavailable operations", async () => {

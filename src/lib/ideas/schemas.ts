@@ -106,7 +106,7 @@ export const IdeaSubmissionDetailsSchema = z.strictObject({
 
 export function calculateIdeaPriority(metrics: { turnaround: number; volume: number; value: number }) {
   const score = Math.round((metrics.turnaround * 0.3 + metrics.volume * 0.3 + metrics.value * 0.4) * 100) / 100;
-  const band: "Priority" | "Qualify" | "Watch" = score >= 2.5 ? "Priority" : score >= 1.5 ? "Qualify" : "Watch";
+  const band: "Priority" | "Quality" | "Watch" = score >= 2.5 ? "Priority" : score >= 1.5 ? "Quality" : "Watch";
   return { score, band, breakdown: [
     { key: "turnaround", score: metrics.turnaround, weight: 0.3, contribution: Math.round(metrics.turnaround * 30) / 100 },
     { key: "volume", score: metrics.volume, weight: 0.3, contribution: Math.round(metrics.volume * 30) / 100 },
@@ -136,7 +136,10 @@ export const IdeaValidationOutputSchema = z.strictObject({
   decision: z.enum(["accept", "needs_clarification", "needs_human_review", "reject"]),
   recommendedStatus: ideaStatusSchema,
   confidence: z.number().min(0).max(1),
-  overallScore: z.number().min(0).max(100),
+  overallScore: z.preprocess(
+    (value) => typeof value === "number" && value > 10 && value <= 100 ? value / 10 : value,
+    z.number().min(0).max(10),
+  ),
   scores: z.strictObject({
     novelty: scoreSchema,
     problemClarity: scoreSchema,
@@ -200,7 +203,7 @@ export const IdeaRiskOutputSchema = z.strictObject({
 
 export const IdeaRouteOutputSchema = z.strictObject({
   recommendedRoute: RecommendedRouteSchema,
-  priorityBand: z.enum(["Watch", "Qualify", "Priority"]),
+  priorityBand: z.enum(["Watch", "Quality", "Priority"]),
   priorityScore: z.number().min(0).max(100),
   confidence: z.number().min(0).max(1),
   rationale: boundedText(1_500),

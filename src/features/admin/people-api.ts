@@ -16,29 +16,31 @@ export type AdminUserSession = {
 
 export const peopleQueryKeys = {
   users: ["admin", "people", "users"] as const,
+  search: (query: string) => ["admin", "people", "users", "search", query] as const,
   sessions: (userId: number) => ["admin", "people", "users", userId, "sessions"] as const,
 };
 
-export function listPeople(after: number | null = null) {
-  const params = new URLSearchParams({ limit: "100" });
+export function listPeople(after: number | null = null, search = "") {
+  const params = new URLSearchParams({ limit: "10" });
   if (after !== null) params.set("after", String(after));
+  if (search.trim()) params.set("q", search.trim());
   return apiFetch<{ items: AdminUser[]; nextAfter: number | null }>(`/api/admin/users?${params}`);
 }
 
 export function listPersonSessions(userId: number) {
-  return apiFetch<{ items: AdminUserSession[]; nextAfter: number | null }>(`/api/admin/users/${userId}/sessions?limit=100`);
+  return apiFetch<{ items: AdminUserSession[]; nextAfter: number | null }>(`/api/admin/users/${userId}/sessions?limit=10`);
 }
 
 function json(body: unknown): RequestInit {
   return { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(body) };
 }
 
-export type AdminProfile = AdminUser["profile"];
-export function createPerson(input: { name: string; email: string; department: string; jobTitle?: string; profile: AdminProfile; reason: string }) {
+export type AdminRole = AdminUser["role"];
+export function createPerson(input: { name: string; email: string; department: string; jobTitle?: string; role: AdminRole; reason: string }) {
   return apiFetch<{ user: AdminUser; temporaryPassword: string }>("/api/admin/users", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(input) });
 }
-export function updatePersonRole(userId: number, profile: AdminProfile, reason: string) {
-  return apiFetch<AdminUser>(`/api/admin/users/${userId}/role`, json({ role: profile, reason }));
+export function updatePersonRole(userId: number, role: AdminRole, reason: string) {
+  return apiFetch<AdminUser>(`/api/admin/users/${userId}/role`, json({ role: role, reason }));
 }
 
 export function updatePersonActivation(userId: number, active: boolean, reason: string) {

@@ -1,9 +1,6 @@
 "use client";
 
 import {
-  Dialog,
-  DialogPanel,
-  DialogTitle,
   Disclosure,
   DisclosureButton,
   DisclosurePanel,
@@ -11,7 +8,6 @@ import {
 import React from "react";
 import type {
   BadgeProgress,
-  Redemption,
   Reward,
   RewardsBalance,
 } from "../types";
@@ -60,25 +56,9 @@ export function RewardsState({
 
 export function RewardCard({
   reward,
-  balance,
-  onRedeem,
-  pending = false,
-  successMessage,
-  errorMessage,
 }: {
   reward: Reward;
-  balance: number;
-  onRedeem?: () => void;
-  pending?: boolean;
-  successMessage?: string;
-  errorMessage?: string;
 }) {
-  const canAfford = balance >= reward.cost;
-  const [confirmOpen, setConfirmOpen] = React.useState(false);
-  const confirm = () => {
-    setConfirmOpen(false);
-    onRedeem?.();
-  };
   return (
     <article
       className={cardClass}
@@ -105,77 +85,9 @@ export function RewardCard({
           Point details
         </DisclosureButton>
         <DisclosurePanel className="mt-2 text-sm text-slate-700">
-          Costs {reward.cost} points. Your available balance is {balance}{" "}
-          points.
+          {reward.kind === "earned" ? "Recognition earned through activity." : `Recognition value: ${reward.cost} points.`}
         </DisclosurePanel>
       </Disclosure>
-      {onRedeem && (
-        <>
-          <button
-            type="button"
-            className={`${actionClass} mt-4`}
-            onClick={() => setConfirmOpen(true)}
-            disabled={!canAfford || pending}
-          >
-            {pending
-              ? "Requesting…"
-              : canAfford
-                ? `Redeem for ${reward.cost} points`
-                : `Need ${reward.cost - balance} more points`}
-          </button>
-          {successMessage && (
-            <p className="mt-3 text-sm text-emerald-800" role="status">
-              {successMessage}
-            </p>
-          )}
-          {errorMessage && (
-            <p className="mt-3 text-sm text-red-800" role="alert">
-              {errorMessage}
-            </p>
-          )}
-          <Dialog
-            open={confirmOpen}
-            onClose={() => setConfirmOpen(false)}
-            className="relative z-50"
-          >
-            <div className="fixed inset-0 bg-slate-950/30" aria-hidden="true" />
-            <div className="fixed inset-0 grid place-items-center p-4">
-              <DialogPanel className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
-                <DialogTitle className="text-lg font-semibold text-slate-950">
-                  Confirm redemption
-                </DialogTitle>
-                <p className="mt-2 text-sm text-slate-700">
-                  Redeem <b>{reward.name}</b> for{" "}
-                  <b>{reward.cost.toLocaleString()} points</b>? The points will
-                  be deducted immediately and the request will be sent to the
-                  innovation team.
-                </p>
-                <p className="mt-2 text-sm text-slate-600">
-                  Available after redemption:{" "}
-                  {(balance - reward.cost).toLocaleString()} points.
-                </p>
-                <div className="mt-5 flex justify-end gap-2">
-                  <button
-                    type="button"
-                    className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-800"
-                    onClick={() => setConfirmOpen(false)}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    className={actionClass}
-                    onClick={confirm}
-                    disabled={pending}
-                  >
-                    {pending ? "Requesting…" : "Confirm redemption"}
-                  </button>
-                </div>
-              </DialogPanel>
-            </div>
-          </Dialog>
-        </>
-      )}
     </article>
   );
 }
@@ -216,14 +128,8 @@ export function RewardsBalanceCard({
 
 export function RewardCatalogue({
   rewards,
-  balance,
-  onRedeem,
-  pendingRewardId,
 }: {
   rewards: Reward[];
-  balance: number;
-  onRedeem?: (reward: Reward) => void;
-  pendingRewardId?: number;
 }) {
   if (!rewards.length)
     return (
@@ -238,75 +144,10 @@ export function RewardCatalogue({
         <li key={reward.id}>
           <RewardCard
             reward={reward}
-            balance={balance}
-            onRedeem={onRedeem ? () => onRedeem(reward) : undefined}
-            pending={pendingRewardId === reward.id}
           />
         </li>
       ))}
     </ul>
-  );
-}
-
-export function RedemptionHistory({
-  redemptions,
-  hasNextPage = false,
-  isLoadingMore = false,
-  onLoadMore,
-}: {
-  redemptions: Redemption[];
-  hasNextPage?: boolean;
-  isLoadingMore?: boolean;
-  onLoadMore?: () => void;
-}) {
-  if (!redemptions.length)
-    return (
-      <p className={cardClass} role="status">
-        No redemptions yet.
-      </p>
-    );
-  return (
-    <div className="space-y-3">
-      <ul
-        className="divide-y divide-slate-200 rounded-xl border border-slate-200 bg-white"
-        aria-label="Your redemptions"
-      >
-        {redemptions.map((redemption) => (
-          <li
-            key={redemption.id}
-            className="flex flex-wrap items-center justify-between gap-2 p-4"
-          >
-            <div>
-              <span className="font-medium text-slate-950">
-                {redemption.rewardName}
-              </span>
-              <time
-                className="mt-1 block text-xs text-slate-600"
-                dateTime={redemption.requestedAt}
-              >
-                {new Intl.DateTimeFormat("en", {
-                  dateStyle: "medium",
-                  timeZone: "UTC",
-                }).format(new Date(redemption.requestedAt))}
-              </time>
-            </div>
-            <span className="text-sm capitalize text-slate-700">
-              {redemption.status} · {redemption.cost} points
-            </span>
-          </li>
-        ))}
-      </ul>
-      {hasNextPage && onLoadMore && (
-        <button
-          type="button"
-          className={actionClass}
-          onClick={onLoadMore}
-          disabled={isLoadingMore}
-        >
-          {isLoadingMore ? "Loading…" : "Load more redemptions"}
-        </button>
-      )}
-    </div>
   );
 }
 

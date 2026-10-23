@@ -1,8 +1,13 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import React, { useState, type FormEvent } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "../../../components/ui";
-import { useAdminFeedback, useAdminFeedbackResponse } from "../hooks";
+import { adminQueryKeys } from "../api";
+import { useAdminFeedbackResponse } from "../hooks";
+import { listAdminFeedbackPage } from "../standalone-list-api";
+import type { AdminFeedbackResponse } from "../types";
+import { AdminDrawer, AdminPagination } from "./admin-data-ui";
 
 export type AdminFeedbackResponsesProps = { className?: string };
 
@@ -12,55 +17,72 @@ function dateLabel(value: string) {
 }
 
 export function AdminFeedbackResponses({ className = "" }: AdminFeedbackResponsesProps) {
-  const feedback = useAdminFeedback();
+  const [cursors, setCursors] = useState<(number | null)[]>([null]);
+  const [page, setPage] = useState(1);
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState("all");
+  const [campaign, setCampaign] = useState("all");
+  const [selected, setSelected] = useState<AdminFeedbackResponse | null>(null);
+  const [draft, setDraft] = useState("");
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const feedback = useQuery({ queryKey: [...adminQueryKeys.feedback, cursors[page - 1]], queryFn: () => listAdminFeedbackPage(cursors[page - 1]) });
   const respond = useAdminFeedbackResponse();
-  const [drafts, setDrafts] = useState<Record<number, string>>({});
-  const [errors, setErrors] = useState<Record<number, string>>({});
-  const [success, setSuccess] = useState<Record<number, string>>({});
-  const [requestedPage, setRequestedPage] = useState(1);
+
+  async function goToPage(target: number) {
+    const cursorIndex = target - 1;
+    if (cursorIndex >= cursors.length) return;
+    if (target === cursors.length && feedback.data?.nextAfter != null) {
+      const next = feedback.data.nextAfter;
+      setCursors(current => [...current.slice(0, cursorIndex), next]);
+    }
+    setPage(target);
+  }
+
+  function resetFilters(update: () => void) { update(); setPage(1); }
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selected) return;
+    const response = draft.trim();
+    if (!response || response.length > 2000) return;
+    setError(""); setSuccess("");
+    try {
+      await respond.mutateAsync({ id: selected.id, response });
+      setDraft(""); setSuccess("Response sent.");
+      setSelected({ ...selected, response, respondedAt: new Date().toISOString() });
+      void feedback.refetch();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Your response could not be sent.");
+    }
+  }
 
   if (feedback.isPending) return <section className={`app-card ${className}`} aria-busy="true"><p className="text-sm text-muted" role="status">Loading campaign feedback…</p></section>;
   if (feedback.isError) return <section className={`app-card ${className}`}><p className="text-sm text-[#d6336c]" role="alert">{feedback.error instanceof Error ? feedback.error.message : "Feedback could not be loaded."}</p><button type="button" className="btn mt-3" onClick={() => void feedback.refetch()}>Try again</button></section>;
 
   const items = Array.isArray(feedback.data?.items) ? feedback.data.items : [];
-  const pageSize = 10;
-  const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
-  const page = Math.min(requestedPage, totalPages);
-  const visibleItems = items.slice((page - 1) * pageSize, page * pageSize);
-  const campaigns = new Map<number, typeof items>();
-  for (const item of visibleItems) campaigns.set(item.campaignId, [...(campaigns.get(item.campaignId) ?? []), item]);
-
-  async function submit(event: FormEvent<HTMLFormElement>, id: number) {
-    event.preventDefault();
-    const response = (drafts[id] ?? "").trim();
-    if (!response || response.length > 2000) return;
-    setErrors((current) => ({ ...current, [id]: "" }));
-    setSuccess((current) => ({ ...current, [id]: "" }));
-    try {
-      await respond.mutateAsync({ id, response });
-      setDrafts((current) => ({ ...current, [id]: "" }));
-      setSuccess((current) => ({ ...current, [id]: "Response sent." }));
-    } catch (cause) {
-      setErrors((current) => ({ ...current, [id]: cause instanceof Error ? cause.message : "Your response could not be sent." }));
-    }
-  }
+  const campaigns = Array.from(new Set(items.map(item => item.campaignId))).sort((a, b) => a - b);
+  const needle = search.trim().toLowerCase();
+  const filtered = items.filter(item => {
+    const matchesSearch = !needle || [item.userName, item.userId, item.category, item.message, item.response, item.campaignId].some(value => String(value ?? "").toLowerCase().includes(needle));
+    const matchesStatus = status === "all" || (status === "responded" ? Boolean(item.respondedAt || item.response) : !item.respondedAt && !item.response);
+    const matchesCampaign = campaign === "all" || String(item.campaignId) === campaign;
+    return matchesSearch && matchesStatus && matchesCampaign;
+  });
+  const total = feedback.data?.total ?? (feedback.data?.nextAfter != null ? Math.max(items.length + 1, (page - 1) * 10 + items.length + 1) : (page - 1) * 10 + items.length);
 
   return <section className={`app-card ${className}`}>
     <div className="mb-5"><h2 className="text-xl font-medium">Campaign feedback</h2><p className="mt-1 text-sm text-muted">Review employee responses and reply to feedback that has not been answered.</p></div>
-    {items.length === 0 ? <p className="rounded-xl border p-4 text-sm text-muted" style={{ borderColor: "var(--line)" }}>There are no campaign responses yet.</p> : <div className="space-y-6">{Array.from(campaigns, ([campaignId, responses]) => <section key={campaignId} aria-labelledby={`feedback-campaign-${campaignId}`}>
-      <h3 id={`feedback-campaign-${campaignId}`} className="mb-3 text-lg font-medium">Campaign {campaignId}</h3>
-      <div className="space-y-3">{responses.map((item) => <article key={item.id} className="rounded-xl border p-4" style={{ borderColor: "var(--line)" }}>
-        <div className="flex flex-wrap items-start justify-between gap-2"><div><p className="font-medium">{item.category || "Uncategorized"}</p><p className="mt-1 text-sm text-muted">{item.userName || "Employee"} · Employee #{item.userId}</p></div><time className="text-xs text-muted" dateTime={item.createdAt}>{dateLabel(item.createdAt)}</time></div>
-        <p className="mt-3 whitespace-pre-wrap text-sm">{item.message || "No message provided."}</p>
-        {item.respondedAt || item.response ? <div className="mt-4 rounded-lg bg-teal/5 p-3"><p className="text-xs font-medium text-muted">Response{item.respondedAt ? ` · ${dateLabel(item.respondedAt)}` : ""}</p><p className="mt-1 whitespace-pre-wrap text-sm">{item.response || "Response recorded."}</p></div> : <form className="mt-4 space-y-2" onSubmit={(event) => void submit(event, item.id)}>
-          <label className="block text-sm"><span className="field-label">Your response</span><textarea className="input mt-1 min-h-24 resize-y" value={drafts[item.id] ?? ""} onChange={(event) => setDrafts((current) => ({ ...current, [item.id]: event.target.value }))} maxLength={2000} required aria-describedby={`feedback-response-help-${item.id}`} /></label>
-          <p id={`feedback-response-help-${item.id}`} className="text-xs text-muted">Up to 2000 characters.</p>
-          {errors[item.id] && <p className="text-sm text-[#d6336c]" role="alert">{errors[item.id]}</p>}
-          {success[item.id] && <p className="text-sm text-[#0e9f7a]" role="status">{success[item.id]}</p>}
-          <Button variant="primary" type="submit" disabled={respond.isPending || !(drafts[item.id] ?? "").trim()}>{respond.isPending ? "Sending…" : "Send response"}</Button>
-        </form>}
-      </article>)}</div>
-    </section>)}{totalPages > 1 && <nav aria-label="Campaign feedback pages" className="flex items-center justify-between gap-3 border-t pt-4 text-sm"><button className="btn btn-small" type="button" disabled={page === 1} onClick={() => setRequestedPage(page - 1)}>Previous</button><span>Page {page} of {totalPages}</span><button className="btn btn-small" type="button" disabled={page >= totalPages} onClick={() => setRequestedPage(page + 1)}>Next</button></nav>}</div>}
+    <div className="mb-4 grid gap-3 sm:grid-cols-3">
+      <label className="text-sm"><span className="field-label">Search responses</span><input className="input mt-1" type="search" value={search} onChange={event => resetFilters(() => setSearch(event.target.value))} placeholder="Employee, category, message…" /></label>
+      <label className="text-sm"><span className="field-label">Status</span><select className="input mt-1" value={status} onChange={event => resetFilters(() => setStatus(event.target.value))}><option value="all">All statuses</option><option value="unanswered">Unanswered</option><option value="responded">Responded</option></select></label>
+      <label className="text-sm"><span className="field-label">Campaign</span><select className="input mt-1" value={campaign} onChange={event => resetFilters(() => setCampaign(event.target.value))}><option value="all">All campaigns</option>{campaigns.map(id => <option key={id} value={id}>Campaign {id}</option>)}</select></label>
+    </div>
+    {filtered.length === 0 ? <p className="rounded-xl border p-4 text-sm text-muted" style={{ borderColor: "var(--line)" }}>{items.length === 0 ? "There are no campaign responses yet." : "No responses match these filters on this page."}</p> : <div className="overflow-x-auto rounded-xl border" style={{ borderColor: "var(--line)" }}><table className="w-full min-w-[680px] text-left text-sm"><thead className="bg-[#f4f7fb] text-xs uppercase tracking-wide text-muted"><tr><th className="px-4 py-3">Employee</th><th className="px-4 py-3">Campaign</th><th className="px-4 py-3">Category</th><th className="px-4 py-3">Submitted</th><th className="px-4 py-3">Status</th><th className="px-4 py-3"><span className="sr-only">Details</span></th></tr></thead><tbody className="divide-y" style={{ borderColor: "var(--line)" }}>{filtered.map(item => <tr key={item.id} className="align-middle"><td className="px-4 py-3"><p className="font-medium">{item.userName || "Employee"}</p><p className="text-xs text-muted">Employee #{item.userId}</p></td><td className="px-4 py-3">Campaign {item.campaignId}</td><td className="px-4 py-3">{item.category || "Uncategorized"}</td><td className="px-4 py-3 whitespace-nowrap">{dateLabel(item.createdAt)}</td><td className="px-4 py-3">{item.respondedAt || item.response ? "Responded" : "Unanswered"}</td><td className="px-4 py-3 text-right"><button type="button" className="btn btn-small" onClick={() => { setSelected(item); setDraft(""); setError(""); setSuccess(""); }}>View details</button></td></tr>)}</tbody></table></div>}
+    <div className="mt-4"><AdminPagination page={page} pageSize={10} total={total} onPageChange={number => void goToPage(number)} busy={feedback.isFetching} label="Campaign feedback" /></div>
+    <AdminDrawer open={selected !== null} onClose={() => setSelected(null)} title="Feedback details" description={selected ? `Campaign ${selected.campaignId} · ${selected.userName || "Employee"}` : undefined} footer={selected && !selected.response && !selected.respondedAt ? <Button variant="primary" type="submit" form="feedback-response-form" disabled={respond.isPending || !draft.trim()}>{respond.isPending ? "Sending…" : "Send response"}</Button> : undefined}>
+      {selected && <div className="space-y-5"><dl className="grid gap-3 rounded-xl border p-4 text-sm sm:grid-cols-2" style={{ borderColor: "var(--line)" }}><div><dt className="text-xs text-muted">Employee</dt><dd className="mt-1 font-medium">{selected.userName || "Employee"} · #{selected.userId}</dd></div><div><dt className="text-xs text-muted">Category</dt><dd className="mt-1">{selected.category || "Uncategorized"}</dd></div><div><dt className="text-xs text-muted">Submitted</dt><dd className="mt-1">{dateLabel(selected.createdAt)}</dd></div><div><dt className="text-xs text-muted">Campaign</dt><dd className="mt-1">{selected.campaignId}</dd></div></dl><section><h3 className="text-sm font-medium">Employee response</h3><p className="mt-2 whitespace-pre-wrap break-words rounded-xl bg-[#f4f7fb] p-4 text-sm">{selected.message || "No message provided."}</p></section>{selected.response || selected.respondedAt ? <section className="rounded-xl bg-teal/5 p-4"><h3 className="text-sm font-medium">Administrator reply{selected.respondedAt ? ` · ${dateLabel(selected.respondedAt)}` : ""}</h3><p className="mt-2 whitespace-pre-wrap break-words text-sm">{selected.response || "Response recorded."}</p></section> : <form id="feedback-response-form" className="space-y-2" onSubmit={event => void submit(event)}><label className="block text-sm"><span className="field-label">Your response</span><textarea className="input mt-1 min-h-32 resize-y" value={draft} onChange={event => setDraft(event.target.value)} maxLength={2000} required aria-describedby="feedback-response-help" /></label><p id="feedback-response-help" className="text-xs text-muted">Up to 2000 characters.</p>{error && <p className="text-sm text-[#d6336c]" role="alert">{error}</p>}{success && <p className="text-sm text-[#0e9f7a]" role="status">{success}</p>}</form>}</div>}
+    </AdminDrawer>
   </section>;
 }
 

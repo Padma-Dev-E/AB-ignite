@@ -1,11 +1,11 @@
 import { createHash, randomBytes } from "node:crypto";
-import { desc, ne } from "drizzle-orm";
+import { and, desc, ne } from "drizzle-orm";
 import { auth } from "../../../auth";
 import { db } from "../../../src/db/connection";
 import { ideaEvents, ideaVersions, ideas, ideaSubmissions, notifications } from "../../../src/db/schema";
 import { IdeaInputSchema, IdeaListQuerySchema } from "../../../src/lib/ideas/schemas";
 import { getIdeaMinimumScore, listIdeas } from "../../../src/lib/ideas/repository";
-import { calculateIdeaPriority } from "../../../src/lib/ideas/schemas";
+import { scoreIdeaWithCurrentPriorityPolicy } from "../../../src/lib/ideas/priority-policy-store";
 import { apiError, handleApiError, ok, requestId } from "../../../src/lib/http/errors";
 
 function sessionUserId(session: { user?: { id?: string | null } } | null) {
@@ -35,7 +35,7 @@ export async function POST(request: Request) {
     const input = IdeaInputSchema.parse(await request.json());
     const { answers, metrics, buildsOnId, differentiation, ...ideaInput } = input;
     const { dataClassification: _dataClassification, ...ideaFields } = ideaInput;
-    const allIdeas = await db.select().from(ideas).where(ne(ideas.authorId, userId)).orderBy(desc(ideas.createdAt)).limit(500).all();
+    const allIdeas = await db.select().from(ideas).where(and(ne(ideas.authorId, userId), ne(ideas.status, "draft"))).orderBy(desc(ideas.createdAt)).limit(500).all();
     const words = (text: string) => new Set(text.toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter((word) => word.length > 3));
     const similarity = (left: string, right: string) => {
       const a = words(left); const b = words(right);
@@ -52,7 +52,7 @@ export async function POST(request: Request) {
       return apiError("similar_idea", "A similar registered idea exists. Open the original or explain how this idea differs in at least 20 characters.", 409, id);
     }
     if (buildsOnId && !selectedOriginal) return apiError("validation_error", "The selected original is not a matching registered idea.", 400, id);
-    const priority = metrics ? calculateIdeaPriority(metrics) : null;
+    const priority = metrics ? scoreIdeaWithCurrentPriorityPolicy(metrics) : null;
     const minimumScore = await getIdeaMinimumScore();
     const reference = `IDEA-${Date.now()}-${randomBytes(3).toString("hex").toUpperCase()}`;
     const contentHash = createHash("sha256").update(JSON.stringify(input)).digest("hex");
@@ -60,6 +60,7 @@ export async function POST(request: Request) {
       const [createdIdea] = tx.insert(ideas).values({
         authorId: userId,
         ...ideaFields,
+        status: "draft",
         buildsOnId: buildsOnId ?? null,
         ...(priority ? { priorityScore: priority.score, priorityBand: priority.band } : {}),
         reference,

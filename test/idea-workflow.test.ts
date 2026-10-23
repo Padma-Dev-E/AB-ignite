@@ -38,8 +38,7 @@ before(async () => {
   const [user] = await db.insert(users).values({
     name: "Workflow Test User",
     email: `workflow-${Date.now()}@example.test`,
-    role: "admin",
-    profile: "admin",
+    role: "back_office",
     passwordHash: "test-hash",
   }).returning({ id: users.id }).all();
   userId = user.id;
@@ -47,7 +46,7 @@ before(async () => {
   const [otherUser] = await db.insert(users).values({
     name: "Other Workflow User",
     email: `workflow-other-${Date.now()}@example.test`,
-    role: "user",
+    role: "employee",
     passwordHash: "test-hash",
   }).returning({ id: users.id }).all();
   otherUserId = otherUser.id;
@@ -85,6 +84,11 @@ test("creates immutable idea versions and authorized snapshots", async () => {
   versionId = version.id;
   versionId = version.id;
   assert.equal((await getAuthorizedIdeaSnapshot({ kind: "user", id: String(userId) }, ideaId))?.idea.id, ideaId);
+  // Current NextAuth sessions carry the persisted account role, not the legacy
+  // generic actor kind. The submit/AI routes must still recognize the owner.
+  assert.equal((await getAuthorizedIdeaSnapshot({ kind: "employee", id: String(userId) }, ideaId))?.idea.id, ideaId);
+  assert.equal((await getAuthorizedIdeaSnapshot({ kind: "business_owner", id: String(userId) }, ideaId))?.idea.id, ideaId);
+  assert.equal((await getAuthorizedIdeaSnapshot({ kind: "back_office", id: String(otherUserId) }, ideaId))?.idea.id, ideaId);
   assert.equal(await getAuthorizedIdeaSnapshot({ kind: "user", id: String(otherUserId) }, ideaId), null);
   assert.equal((await getAuthorizedIdeaSnapshot({ kind: "admin", id: String(otherUserId) }, ideaId))?.idea.id, ideaId);
 });
@@ -147,11 +151,13 @@ test("events and human reviews are append-only records", async () => {
 
 test("workflow policy allows only authorized human/system transitions", async () => {
   assert.equal(canTransitionIdeaStatus({ kind: "system" }, "screening", "business_review"), true);
+  assert.equal(canTransitionIdeaStatus({ kind: "back_office", id: String(userId) }, "screening", "poc"), true);
+  assert.equal(canTransitionIdeaStatus({ kind: "employee", id: String(userId) }, "screening", "poc"), false);
   assert.equal(canTransitionIdeaStatus({ kind: "ai" }, "screening", "business_review"), false);
-  assert.equal(canTransitionIdeaStatus({ kind: "admin", id: String(userId) }, "decision", "implemented"), false);
-  assert.equal(canTransitionIdeaStatus({ kind: "admin", id: String(userId) }, "decision", "poc"), true);
+  assert.equal(canTransitionIdeaStatus({ kind: "back_office", id: String(userId) }, "decision", "implemented"), false);
+  assert.equal(canTransitionIdeaStatus({ kind: "back_office", id: String(userId) }, "decision", "poc"), true);
 
-  const updated = await transitionIdeaStatus({ kind: "admin", id: String(userId) }, ideaId, "business_review", "Automated preflight is complete.");
+  const updated = await transitionIdeaStatus({ kind: "back_office", id: String(userId) }, ideaId, "business_review", "Automated preflight is complete.");
   assert.equal(updated.status, "business_review");
   await assert.rejects(
     transitionIdeaStatus({ kind: "ai" }, ideaId, "control_review", "AI suggested control review."),
@@ -164,7 +170,7 @@ test("each lifecycle transition notifies the author, with a distinct acceptance 
   const transitions = ["business_review", "control_review", "decision", "poc", "implementation", "implemented"] as const;
   let status = "screening";
   for (const next of transitions) {
-    await transitionIdeaStatus({ kind: "admin", id: String(userId) }, lifecycleIdea.id, next, `Advance to ${next} with review evidence.`);
+    await transitionIdeaStatus({ kind: "back_office", id: String(userId) }, lifecycleIdea.id, next, `Advance to ${next} with review evidence.`);
     status = next;
   }
   const rows = await db.select().from(notifications).where(eq(notifications.userId, userId)).all();
@@ -177,10 +183,10 @@ test("each lifecycle transition notifies the author, with a distinct acceptance 
 
 test("workflow stages require the matching assigned governance profile", async () => {
   const { canTransitionIdeaStatus } = await import("../src/lib/ideas/workflow");
-  assert.equal(canTransitionIdeaStatus({ kind: "reviewer", id: String(userId) }, "screening", "business_review"), true);
+  assert.equal(canTransitionIdeaStatus({ kind: "back_office", id: String(userId) }, "screening", "business_review"), true);
   assert.equal(canTransitionIdeaStatus({ kind: "business_owner", id: String(userId) }, "business_review", "control_review"), true);
-  assert.equal(canTransitionIdeaStatus({ kind: "control", id: String(userId) }, "control_review", "decision"), true);
-  assert.equal(canTransitionIdeaStatus({ kind: "management", id: String(userId) }, "decision", "poc"), false);
+  assert.equal(canTransitionIdeaStatus({ kind: "back_office", id: String(userId) }, "control_review", "decision"), true);
+  assert.equal(canTransitionIdeaStatus({ kind: "back_office", id: String(userId) }, "decision", "poc"), false);
   assert.equal(canTransitionIdeaStatus({ kind: "employee", id: String(userId) }, "decision", "poc"), false);
 });
 
@@ -191,7 +197,7 @@ test("every accepted lifecycle transition notifies the idea author with the dest
     const from = status === "business_review" ? "screening" : status === "control_review" ? "business_review" : status === "decision" ? "control_review" : status === "poc" ? "decision" : status === "implementation" ? "poc" : "implementation";
     await db.update(ideas).set({ status: from }).where(eq(ideas.id, lifecycleIdea.id)).run();
     const beforeCount = (await db.select().from(notifications).where(eq(notifications.userId, userId)).all()).length;
-    await transitionIdeaStatus({ kind: "admin", id: String(userId) }, lifecycleIdea.id, status, "Lifecycle transition test reason.");
+    await transitionIdeaStatus({ kind: "back_office", id: String(userId) }, lifecycleIdea.id, status, "Lifecycle transition test reason.");
     const rows = await db.select().from(notifications).where(eq(notifications.userId, userId)).all();
     assert.equal(rows.length, beforeCount + 1);
     assert.match(rows.at(-1)!.body ?? "", new RegExp(status.replaceAll("_", " "), "i"));

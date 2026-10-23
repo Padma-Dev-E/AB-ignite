@@ -30,7 +30,7 @@ export async function changePassword(actor: { userId: number; sessionId: number;
       tx.insert(auditEvents).values(buildAuditRecord({ actorUserId: current.id, sessionId: actor.sessionId, action: 'account.password.rejected', targetType: 'user', targetId: current.id, ipAddress: actor.ipAddress, userAgent: actor.userAgent }, at)).run();
       return false;
     }
-    tx.update(users).set({ passwordHash, failedLoginAttempts: 0, lockedUntil: null, sessionVersion: sql`${users.sessionVersion} + 1`, updatedAt: at }).where(eq(users.id, current.id)).run();
+    tx.update(users).set({ passwordHash, mustChangePassword: false, failedLoginAttempts: 0, lockedUntil: null, sessionVersion: sql`${users.sessionVersion} + 1`, updatedAt: at }).where(eq(users.id, current.id)).run();
     tx.update(refreshTokens).set({ revokedAt: at, revocationReason: 'account.password.changed', updatedAt: at }).where(and(eq(refreshTokens.userId, current.id), isNull(refreshTokens.revokedAt))).run();
     tx.insert(auditEvents).values(buildAuditRecord({ actorUserId: current.id, sessionId: actor.sessionId, action: 'account.password.changed', targetType: 'user', targetId: current.id, metadata: { result: 'all_sessions_revoked' }, ipAddress: actor.ipAddress, userAgent: actor.userAgent }, at)).run();
     return true;

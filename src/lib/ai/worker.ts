@@ -4,13 +4,16 @@ import "./jobs";
 import { executeClaimedAiRun } from "./runner";
 import { evaluateAiInput } from "./policy";
 import { IdeaAnalysisInputSchema } from "../ideas/schemas";
-import { appendIdeaEvent, claimNextAiRun, failAiRun, getAuthorizedIdeaSnapshot, requeueAiRun } from "../ideas/repository";
+import { appendIdeaEvent, claimNextAiRun, failAiRun, getAuthorizedIdeaSnapshot, recoverStaleAiRuns, requeueAiRun, withAiRunLease } from "../ideas/repository";
 import type { AiProvider } from "./provider";
 
 export type WorkerDependencies = {
   provider?: AiProvider;
   maxAttempts?: number;
+  staleAfterMs?: number;
 };
+
+const activeRunIds = new Set<number>();
 
 export type WorkerOutcome =
   | { status: "idle" }
@@ -35,8 +38,21 @@ function inputFromVersion(version: { kind: "idea" | "problem"; title: string; su
 }
 
 export async function processNextAiRun(workerId: string, dependencies: WorkerDependencies = {}): Promise<WorkerOutcome> {
+  const maxAttempts = dependencies.maxAttempts ?? 3;
+  const configuredStaleAfter = Number(process.env.AI_WORKER_STALE_AFTER_MS);
+  const staleAfterMs = dependencies.staleAfterMs ?? (Number.isSafeInteger(configuredStaleAfter) && configuredStaleAfter >= 30_000 ? configuredStaleAfter : 120_000);
+  await recoverStaleAiRuns(new Date(), staleAfterMs, maxAttempts, Array.from(activeRunIds));
   const claimed = await claimNextAiRun(workerId, new Date());
   if (!claimed) return { status: "idle" };
+  activeRunIds.add(claimed.id);
+  try {
+    return await withAiRunLease(claimed, () => processClaimedAiRun(workerId, claimed, dependencies, maxAttempts));
+  } finally {
+    activeRunIds.delete(claimed.id);
+  }
+}
+
+async function processClaimedAiRun(workerId: string, claimed: NonNullable<Awaited<ReturnType<typeof claimNextAiRun>>>, dependencies: WorkerDependencies, maxAttempts: number): Promise<WorkerOutcome> {
   if (!dependencies.provider) {
     await failAiRun(claimed.id, { errorCode: "worker_provider_missing", errorMessage: "AI worker provider is not configured" });
     return { status: "failed", runId: claimed.id };
@@ -77,7 +93,6 @@ export async function processNextAiRun(workerId: string, dependencies: WorkerDep
     return { status: "succeeded", runId: claimed.id };
   } catch (error) {
     const retryable = error instanceof AiProviderError && (error.category === "transient" || error.category === "rate_limited");
-    const maxAttempts = dependencies.maxAttempts ?? 3;
     if (retryable && claimed.attemptCount < maxAttempts) {
       await requeueAiRun(claimed.id, { errorCode: "provider_retry", errorMessage: "Transient AI provider failure" }, new Date(Date.now() + 250 * (2 ** (claimed.attemptCount - 1))));
       await appendIdeaEvent({ ideaId: claimed.ideaId, ideaVersionId: claimed.ideaVersionId, actorType: "system", actorId: null, eventType: "ai_retry_scheduled", correlationId: claimed.correlationId, metadataJson: JSON.stringify({ runId: claimed.id, attempt: claimed.attemptCount }) });

@@ -1,8 +1,7 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  actOnAdminRedemption,
   adminQueryKeys,
   createAdminReward,
   decideAdminEvaluation,
@@ -13,18 +12,17 @@ import {
   listAdminChallenges,
   listAdminFeedback,
   listAdminQuizCatalogue,
-  listAdminRedemptions,
   listAdminRewards,
   listAdminRoutedEvaluations,
   listAdminScreening,
   listAdminTransformation,
+  listAdminBusinessOwners,
   listAdminUsers,
   respondToAdminFeedback,
   updateAdminReward,
   type AdminRewardInput,
   type EvaluationAction,
   type GovernanceAction,
-  type RedemptionAction,
 } from "./api";
 import { getAdminAnalytics } from "./api";
 
@@ -50,25 +48,6 @@ export function useAdminGovernanceDecision() {
   });
 }
 
-export function useAdminRedemptionAction() {
-  const client = useQueryClient();
-  return useMutation({
-    mutationFn: ({
-      id,
-      action,
-      reason,
-      idempotencyKey,
-    }: {
-      id: number;
-      action: RedemptionAction;
-      reason: string;
-      idempotencyKey: string;
-    }) => actOnAdminRedemption(id, action, reason, idempotencyKey),
-    onSuccess: () =>
-      client.invalidateQueries({ queryKey: adminQueryKeys.redemptions }),
-  });
-}
-
 export function useAdminQuizCatalogue(enabled = true) {
   return useQuery({
     queryKey: adminQueryKeys.quizzes,
@@ -86,39 +65,17 @@ export function useAdminChallenges(enabled = true) {
 }
 
 export function useAdminRewards(enabled = true) {
-  return useQuery({
-    queryKey: adminQueryKeys.rewards,
-    queryFn: listAdminRewards,
-    enabled,
-  });
+  return useQuery({ queryKey: adminQueryKeys.rewards, queryFn: listAdminRewards, enabled });
 }
-
 export function useCreateAdminReward() {
   const client = useQueryClient();
-  return useMutation({
-    mutationFn: (input: AdminRewardInput) => createAdminReward(input),
-    onSuccess: () =>
-      client.invalidateQueries({ queryKey: adminQueryKeys.rewards }),
-  });
+  return useMutation({ mutationFn: (input: AdminRewardInput) => createAdminReward(input), onSuccess: () => client.invalidateQueries({ queryKey: adminQueryKeys.rewards }) });
 }
-
 export function useUpdateAdminReward() {
   const client = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, input }: { id: number; input: AdminRewardInput }) =>
-      updateAdminReward(id, input),
-    onSuccess: () =>
-      client.invalidateQueries({ queryKey: adminQueryKeys.rewards }),
-  });
+  return useMutation({ mutationFn: ({ id, input }: { id: number; input: AdminRewardInput }) => updateAdminReward(id, input), onSuccess: () => client.invalidateQueries({ queryKey: adminQueryKeys.rewards }) });
 }
 
-export function useAdminRedemptions(enabled = true) {
-  return useQuery({
-    queryKey: adminQueryKeys.redemptions,
-    queryFn: listAdminRedemptions,
-    enabled,
-  });
-}
 export function useAdminUsers(enabled = true) {
   return useQuery({
     queryKey: adminQueryKeys.users,
@@ -146,14 +103,41 @@ export function useAdminAnalytics(enabled = true) {
 export function useAdminScreening(enabled = true) {
   return useQuery({
     queryKey: adminQueryKeys.screening,
-    queryFn: listAdminScreening,
+    queryFn: () => listAdminScreening(),
     enabled,
   });
 }
 export function useAdminTransformation(enabled = true) {
   return useQuery({
     queryKey: adminQueryKeys.transformation,
-    queryFn: listAdminTransformation,
+    queryFn: () => listAdminTransformation(),
+    enabled,
+  });
+}
+export function useAdminScreeningPages(enabled = true) {
+  return useInfiniteQuery({
+    queryKey: [...adminQueryKeys.screening, "pages", 10] as const,
+    queryFn: ({ pageParam }) => listAdminScreening(10, pageParam),
+    initialPageParam: null as number | null,
+    getNextPageParam: (page) => page.nextAfter ?? undefined,
+    enabled,
+  });
+}
+export function useAdminTransformationPages(enabled = true) {
+  return useInfiniteQuery({
+    queryKey: [...adminQueryKeys.transformation, "pages", 10] as const,
+    queryFn: ({ pageParam }) => listAdminTransformation(10, pageParam),
+    initialPageParam: null as number | null,
+    getNextPageParam: (page) => page.nextAfter ?? undefined,
+    enabled,
+  });
+}
+export function useAdminBusinessOwnerPages(enabled = true) {
+  return useInfiniteQuery({
+    queryKey: ["admin", "governance", "owners", 100] as const,
+    queryFn: ({ pageParam }) => listAdminBusinessOwners(100, pageParam),
+    initialPageParam: null as number | null,
+    getNextPageParam: (page) => page.nextAfter ?? undefined,
     enabled,
   });
 }
@@ -187,11 +171,13 @@ export function useAdminEvaluationDecision() {
       ideaId,
       action,
       reason,
+      controlName,
     }: {
       ideaId: number;
       action: EvaluationAction;
       reason: string;
-    }) => decideAdminEvaluation(ideaId, action, reason),
+      controlName?: string;
+    }) => decideAdminEvaluation(ideaId, action, reason, controlName),
     onSuccess: (_data, variables) =>
       Promise.all([
         client.invalidateQueries({ queryKey: adminQueryKeys.evaluations }),

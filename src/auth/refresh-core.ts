@@ -62,7 +62,7 @@ function refreshSessionIsActive(session: typeof refreshTokens.$inferSelect, user
 export async function issueRefreshToken(userId: number, metadata?: RefreshMetadata) {
   const now = new Date();
   const [user] = db.select().from(users).where(and(eq(users.id, userId), eq(users.isActive, true))).limit(1).all();
-  if (!user) return null;
+  if (!user || isDemo(user.email)) return null;
   return { userId, ...insertRefreshToken(db, user.id, user.sessionVersion, now, null, metadata) };
 }
 
@@ -76,7 +76,7 @@ export async function rotateRefreshToken(rawToken: string, metadata?: RefreshMet
     )).limit(1).all();
     if (!current) return null;
     const [user] = tx.select().from(users).where(eq(users.id, current.userId)).limit(1).all();
-    if (!user || !refreshSessionIsActive(current, user, now)) return null;
+    if (!user || isDemo(user.email) || !refreshSessionIsActive(current, user, now)) return null;
 
     tx.update(refreshTokens).set({
       revokedAt: now,

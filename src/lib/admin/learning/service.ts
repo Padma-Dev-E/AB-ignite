@@ -58,7 +58,7 @@ function assertActor(tx: Tx, actor: Actor, now: Date) {
     .get();
   if (
     !user ||
-    (user.role !== "admin" && user.profile !== "admin") ||
+    user.role !== "back_office" ||
     !user.isActive ||
     !session ||
     session.userId !== user.id ||

@@ -12,6 +12,7 @@ const TITLES = Object.fromEntries(NAV_ITEMS.map(({ key, label }) => [key, label]
 export function pageTitle(page) {
   if (page === "idea") return "Idea";
   if (page === "article") return "Library";
+  if (page === "quiz") return "Ignite Your Knowledge";
   return TITLES[page] ?? TITLES.community;
 }
 

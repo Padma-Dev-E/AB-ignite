@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { getWorkerPollInterval, runWorkerLoop } from "./worker-loop";
+import { getWorkerPollInterval, processNextWithSqliteRetry, runWorkerLoop } from "./worker-loop";
 
 test("poll interval defaults and clamps environment values to 100–60000ms", () => {
   for (const value of [undefined, "", "bad", "Infinity"]) assert.equal(getWorkerPollInterval(value), 1000);
@@ -62,6 +62,18 @@ test("stop interrupts a long idle timer", { timeout: 1000 }, async () => {
 
 test("unexpected processing errors propagate to the script error handler", async () => {
   await assert.rejects(runWorkerLoop({ processNext: async () => { throw new Error("database unavailable"); } }), /database unavailable/);
+});
+
+test("a transient SQLite lock leaves the worker polling, while other failures still surface", async () => {
+  let calls = 0;
+  const outcome = await processNextWithSqliteRetry(async () => {
+    calls += 1;
+    if (calls === 1) throw Object.assign(new Error("database is locked"), { code: "SQLITE_BUSY" });
+    return { status: "succeeded" };
+  });
+  assert.deepEqual(outcome, { status: "idle" });
+  assert.deepEqual(await processNextWithSqliteRetry(async () => ({ status: "succeeded" })), { status: "succeeded" });
+  await assert.rejects(processNextWithSqliteRetry(async () => { throw new Error("unavailable"); }), /unavailable/);
 });
 
 test("Next development output is separate from build and start output", async () => {

@@ -8,14 +8,8 @@ import { isLoginLocked, nextLoginFailure, successfulLoginState, isSessionActive 
 import { issueRefreshToken } from "./src/auth/refresh";
 import { verifyPassword } from "./src/auth/password";
 import { appendAuditEvent } from "./src/lib/audit/service";
-
-function requestMetadata(request: Request) {
-  return {
-    ipAddress: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
-      ?? request.headers.get("x-real-ip"),
-    userAgent: request.headers.get("user-agent"),
-  };
-}
+import { authorizeCredentialLogin } from "./src/auth/credentials-login";
+import { stripSessionCookie } from "./src/auth/session-cookies";
 
 function recordLoginFailure(userId: number, now: Date) {
   return db.transaction((tx) => {
@@ -44,7 +38,7 @@ function recordLoginSuccess(userId: number, now: Date) {
   }).where(eq(users.id, userId)).run();
 }
 
-export const { handlers, auth, signIn, signOut } = NextAuth({
+const nextAuth = NextAuth({
   ...authConfig,
   providers: [
     Credentials({
@@ -53,50 +47,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials, request) {
-        const email = typeof credentials?.email === "string" ? credentials.email.trim().toLowerCase() : "";
-        const password = typeof credentials?.password === "string" ? credentials.password : "";
-        const metadata = requestMetadata(request);
-        if (!email || !password) return null;
-
-        const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
-        if (!user) {
-          appendAuditEvent({ action: "auth.login.failed", metadata: { reasonCode: "invalid_credentials" }, ...metadata });
-          return null;
-        }
-
-        if (user.email.endsWith("@demo.abignite.invalid")) return null;
-
-        const now = new Date();
-        if (!user.isActive || isLoginLocked(user, now)) {
-          appendAuditEvent({ actorUserId: user.id, action: "auth.login.locked", metadata: { reasonCode: user.isActive ? "locked" : "inactive" }, ...metadata });
-          return null;
-        }
-
-        if (!(await verifyPassword(user.passwordHash, password))) {
-          const next = recordLoginFailure(user.id, now);
-          appendAuditEvent({
-            actorUserId: user.id,
-            action: "auth.login.failed",
-            metadata: { reasonCode: next?.lockedUntil ? "lockout" : "invalid_credentials", attempts: next?.failedLoginAttempts ?? 0 },
-            ...metadata,
-          });
-          return null;
-        }
-
-        recordLoginSuccess(user.id, now);
-        const issued = await issueRefreshToken(user.id, metadata);
-        if (!issued) return null;
-        appendAuditEvent({ actorUserId: user.id, sessionId: issued.record.id, action: "auth.login.succeeded", ...metadata });
-
-        return {
-          id: String(user.id),
-          name: user.name,
-          email: user.email,
-          role: user.role,
-          profile: user.profile,
-          sessionId: String(issued.record.id),
-          sessionVersion: user.sessionVersion,
-        };
+        return authorizeCredentialLogin(credentials, request, {
+          async findUser(email) {
+            const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+            return user ?? null;
+          },
+          verifyPassword,
+          recordLoginFailure,
+          recordLoginSuccess,
+          issueSession: issueRefreshToken,
+          appendAudit: appendAuditEvent,
+        });
       },
     }),
   ],
@@ -107,9 +68,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (user) {
         token.sub = user.id;
         token.role = user.role;
-        token.profile = user.profile;
         token.name = user.name;
         token.email = user.email;
+        token.mustChangePassword = user.mustChangePassword;
         token.sessionId = user.sessionId;
         token.sessionVersion = user.sessionVersion;
         token.accessTokenExpires = Date.now() + accessTokenTtlSeconds * 1000;
@@ -122,13 +83,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const [session] = sessionId
           ? db.select().from(refreshTokens).where(and(eq(refreshTokens.id, sessionId), eq(refreshTokens.userId, userId))).limit(1).all()
           : [];
-        if (!current || !current.isActive || current.sessionVersion !== token.sessionVersion || (sessionId !== null && (!session || !isSessionActive(session, current)))) {
+        if (!current || current.email.endsWith("@demo.abignite.invalid") || !current.isActive || current.sessionVersion !== token.sessionVersion || (sessionId !== null && (!session || !isSessionActive(session, current)))) {
           token.sessionRevoked = true;
         } else {
           token.role = current.role;
-          token.profile = current.profile;
           token.name = current.name;
           token.email = current.email;
+          token.mustChangePassword = current.mustChangePassword;
           token.sessionVersion = current.sessionVersion;
           token.sessionRevoked = false;
         }
@@ -138,11 +99,27 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     session({ session, token }) {
       if (token.sub) session.user.id = token.sub;
       if (token.role) session.user.role = token.role;
-      if (token.profile) session.user.profile = token.profile;
       if (token.sessionId) session.user.sessionId = token.sessionId;
+      session.user.mustChangePassword = token.mustChangePassword === true;
       session.accessTokenExpires = token.accessTokenExpires;
       session.isValid = token.sessionRevoked !== true;
       return session;
     },
   },
 });
+
+export const { auth, signIn, signOut } = nextAuth;
+
+// SessionProvider refetches /api/auth/session on focus. Auth.js reissues the
+// request JWT there too, so a delayed response could undo a refresh rotation.
+const { GET, POST } = nextAuth.handlers;
+export const handlers = {
+  GET: async (...args: Parameters<typeof GET>) => {
+    const response = await GET(...args);
+    return args[0].nextUrl.pathname === "/api/auth/session" ? stripSessionCookie(response) : response;
+  },
+  POST: async (...args: Parameters<typeof POST>) => {
+    const response = await POST(...args);
+    return args[0].nextUrl.pathname === "/api/auth/session" ? stripSessionCookie(response) : response;
+  },
+};

@@ -10,7 +10,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   try {
     const session = await auth();
     if (!session?.user?.id || session.isValid === false) return apiError("unauthorized", "Authentication required.", 401, id);
-    if (session.user.role !== "admin") return apiError("forbidden", "Reviewer access required.", 403, id);
+    if (session.user.role !== "back_office") return apiError("forbidden", "Reviewer access required.", 403, id);
     const ideaId = Number((await params).id);
     const snapshot = await getAuthorizedIdeaSnapshot({ kind: "admin", id: session.user.id }, ideaId);
     if (!snapshot) return apiError("not_found", "Idea not found.", 404, id);

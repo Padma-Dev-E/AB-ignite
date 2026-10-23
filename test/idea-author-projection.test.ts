@@ -12,6 +12,8 @@ let ideas: typeof import("../src/db/schema").ideas;
 let ideaSupports: typeof import("../src/db/schema").ideaSupports;
 let listIdeas: typeof import("../src/lib/ideas/repository").listIdeas;
 let getIdeaById: typeof import("../src/lib/ideas/repository").getIdeaById;
+let supportIdea: typeof import("../src/lib/ideas/repository").supportIdea;
+let createIdeaComment: typeof import("../src/lib/ideas/repository").createIdeaComment;
 
 before(async () => {
   const directory = mkdtempSync(join(tmpdir(), "idea-author-projection-"));
@@ -22,7 +24,7 @@ before(async () => {
   process.env.DATABASE_URL = databasePath;
   ({ db } = await import("../src/db/connection"));
   ({ users, ideas, ideaSupports } = await import("../src/db/schema"));
-  ({ listIdeas, getIdeaById } = await import("../src/lib/ideas/repository"));
+  ({ listIdeas, getIdeaById, supportIdea, createIdeaComment } = await import("../src/lib/ideas/repository"));
 });
 
 test("real list and detail project only safe author fields and preserve filters, pages and viewer support", async () => {
@@ -35,6 +37,7 @@ test("real list and detail project only safe author fields and preserve filters,
     { authorId: owner.id, title: `${tag} first`, summary: "First projection fixture", category: "Operations", reference: `${tag}-1`, status: "returned" },
     { authorId: viewer.id, title: `${tag} second`, summary: "Second projection fixture", category: "Operations", reference: `${tag}-2`, status: "returned" },
   ]).returning().all();
+  const draft = db.insert(ideas).values({ authorId: owner.id, title: `${tag} private draft`, summary: "Unsubmitted proposal", category: "Operations", reference: `${tag}-draft`, status: "draft" }).returning().get();
   db.insert(ideaSupports).values({ ideaId: created[0].id, userId: viewer.id }).run();
   const actor = { kind: "user" as const, id: String(viewer.id) };
   const query = { page: 1, pageSize: 1, search: tag, category: "Operations", status: "returned" as const };
@@ -59,4 +62,11 @@ test("real list and detail project only safe author fields and preserve filters,
   assert.ok(ownerView.items.every((item) => item.supported === false));
   assert.equal(await getIdeaById(-1), null);
   assert.equal(await getIdeaById(2147483647), null);
+  const community = await listIdeas(actor, { page: 1, pageSize: 10, search: tag });
+  assert.equal(community.total, 2);
+  assert.ok(community.items.every((item) => item.id !== draft.id));
+  const ownerDrafts = await listIdeas({ kind: "user", id: String(owner.id) }, { page: 1, pageSize: 10, mine: true, search: tag });
+  assert.ok(ownerDrafts.items.some((item) => item.id === draft.id));
+  await assert.rejects(supportIdea(actor, draft.id), /not found/i);
+  await assert.rejects(createIdeaComment(actor, draft.id, "This should stay private"), /not found/i);
 });

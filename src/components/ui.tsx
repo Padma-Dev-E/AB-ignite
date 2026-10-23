@@ -1,7 +1,7 @@
 import React, { type ReactNode } from "react";
 
-export function Button({ children, variant = "secondary", size = "default", className = "", type = "button", disabled = false, onClick }: { children: ReactNode; variant?: "primary" | "secondary"; size?: "default" | "small"; className?: string; type?: "button" | "submit" | "reset"; disabled?: boolean; onClick?: () => void }) {
-  return <button type={type} disabled={disabled} onClick={onClick} className={`${variant === "primary" ? "btn-primary" : "btn"} ${size === "small" ? "btn-small" : ""} ${className}`}>{children}</button>;
+export function Button({ children, variant = "secondary", size = "default", className = "", type = "button", disabled = false, onClick, form }: { children: ReactNode; variant?: "primary" | "secondary"; size?: "default" | "small"; className?: string; type?: "button" | "submit" | "reset"; disabled?: boolean; onClick?: () => void; form?: string }) {
+  return <button type={type} form={form} disabled={disabled} onClick={onClick} className={`${variant === "primary" ? "btn-primary" : "btn"} ${size === "small" ? "btn-small" : ""} ${className}`}>{children}</button>;
 }
 
 export function Card({ children, className = "", as: Tag = "section" }: { children: ReactNode; className?: string; as?: "div" | "section" | "article" }) {

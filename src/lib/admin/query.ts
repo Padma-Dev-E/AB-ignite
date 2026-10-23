@@ -41,6 +41,10 @@ export function boundedFilter(value: string | null, maxLength: number): string |
   return trimmed;
 }
 
+export function directoryQuery(url: URL): string | null {
+  return boundedFilter(url.searchParams.get("q"), 120);
+}
+
 export function safeAuditMetadata(json: string | null) {
   if (!json) return {};
   try { return redactAuditMetadata(JSON.parse(json)); } catch { return {}; }

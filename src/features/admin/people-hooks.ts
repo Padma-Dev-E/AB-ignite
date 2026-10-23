@@ -1,12 +1,12 @@
 "use client";
 
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createPerson, listPeople, listPersonSessions, peopleQueryKeys, resetPersonPassword, resetPersonSignInSecurity, revokePersonSession, updatePersonActivation, updatePersonRole, type AdminProfile } from "./people-api";
+import { createPerson, listPeople, listPersonSessions, peopleQueryKeys, resetPersonPassword, resetPersonSignInSecurity, revokePersonSession, updatePersonActivation, updatePersonRole, type AdminRole } from "./people-api";
 
-export function usePeopleUsers() {
-  return useInfiniteQuery({ queryKey: peopleQueryKeys.users, queryFn: ({ pageParam }) => listPeople(pageParam), initialPageParam: null as number | null, getNextPageParam: (lastPage) => lastPage.nextAfter ?? undefined });
+export function usePeopleUsers(search = "") {
+  return useInfiniteQuery({ queryKey: peopleQueryKeys.search(search), queryFn: ({ pageParam }) => listPeople(pageParam, search), initialPageParam: null as number | null, getNextPageParam: (lastPage) => lastPage.nextAfter ?? undefined });
 }
-export function useCreatePerson() { return usePeopleMutation((input: { name: string; email: string; department: string; jobTitle?: string; profile: AdminProfile; reason: string }) => createPerson(input)); }
+export function useCreatePerson() { return usePeopleMutation((input: { name: string; email: string; department: string; jobTitle?: string; role: AdminRole; reason: string }) => createPerson(input)); }
 
 export function usePersonSessions(userId: number | null) {
   return useQuery({ queryKey: userId === null ? [...peopleQueryKeys.users, "no-user"] : peopleQueryKeys.sessions(userId), queryFn: () => listPersonSessions(userId!), enabled: userId !== null });
@@ -24,7 +24,7 @@ function usePeopleMutation<TVariables, TResult>(mutationFn: (variables: TVariabl
 }
 
 export function useUpdatePersonRole() {
-  return usePeopleMutation(({ userId, profile, reason }: { userId: number; profile: AdminProfile; reason: string }) => updatePersonRole(userId, profile, reason));
+  return usePeopleMutation(({ userId, role, reason }: { userId: number; role: AdminRole; reason: string }) => updatePersonRole(userId, role, reason));
 }
 
 export function useUpdatePersonActivation() {

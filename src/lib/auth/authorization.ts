@@ -2,7 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "../../db/connection";
 import { refreshTokens, users } from "../../db/schema";
 import { isSessionActive } from "../../auth/security-core";
-import { capabilitiesForProfile, profileHasCapability, type Capability, type UserRole, type UserProfile } from "./permissions";
+import { capabilitiesForRole, hasCapability, type Capability, type UserRole } from "./permissions";
 import { AuthorizationError, requirePrivilegedReason } from "./authorization-core";
 
 export { AuthorizationError, requirePrivilegedReason } from "./authorization-core";
@@ -16,7 +16,6 @@ export type AuthorizationSubject = {
 export type AuthorizationContext = {
   userId: number;
   role: UserRole;
-  profile: UserProfile;
   capabilities: readonly Capability[];
   sessionId: number | null;
 };
@@ -47,18 +46,16 @@ export async function loadAuthorizationContext(
     }
   }
 
-  const profile = user.role === "admin" ? "admin" : user.profile;
   return {
     userId: user.id,
     role: user.role,
-    profile,
-    capabilities: capabilitiesForProfile(profile),
+    capabilities: capabilitiesForRole(user.role),
     sessionId,
   };
 }
 
 export function assertCapability(context: AuthorizationContext, capability: Capability) {
-  if (!profileHasCapability(context.profile, capability)) {
+  if (!hasCapability(context.role, capability)) {
     throw new AuthorizationError("You do not have permission to perform this action.");
   }
   return context;

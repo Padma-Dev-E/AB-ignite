@@ -42,11 +42,6 @@ export async function adminContext(session: Session | null) {
   return assertCapability(context, CAPABILITIES.SETTINGS_MANAGE);
 }
 
-export async function redemptionContext(session: Session | null) {
-  const context = await employeeContext(session);
-  return assertCapability(context, CAPABILITIES.REWARDS_MANAGE);
-}
-
 export function rewardApiError(error: unknown, requestId: string) {
   if (error instanceof RewardsError)
     return apiError(

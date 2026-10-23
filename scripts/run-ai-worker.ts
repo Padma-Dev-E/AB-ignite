@@ -3,7 +3,7 @@ import "dotenv/config";
 import { createGeminiProvider } from "../src/lib/ai/gemini-provider-core";
 import { getAiConfig } from "../src/lib/ai/config-core";
 import { processNextAiRun } from "../src/lib/ai/worker";
-import { getWorkerPollInterval, runWorkerLoop } from "../src/lib/ai/worker-loop";
+import { getWorkerPollInterval, processNextWithSqliteRetry, runWorkerLoop } from "../src/lib/ai/worker-loop";
 
 const workerId = process.env.AI_WORKER_ID ?? `local-worker-${process.pid}`;
 const runOnce = process.argv.includes("--once");
@@ -24,7 +24,7 @@ async function run() {
       once: runOnce,
       signal: shutdown.signal,
       pollIntervalMs: getWorkerPollInterval(process.env.AI_WORKER_POLL_INTERVAL_MS),
-      processNext: () => processNextAiRun(workerId, { provider }),
+      processNext: () => processNextWithSqliteRetry(() => processNextAiRun(workerId, { provider })),
       onOutcome: (outcome) => console.log(JSON.stringify({ workerId, ...outcome })),
     });
   } finally {

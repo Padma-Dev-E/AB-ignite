@@ -1,0 +1,68 @@
+name: ab-ignite-local
+
+x-app: &app
+  image: ab-ignite-local:production
+  build:
+    context: .
+    dockerfile: Dockerfile
+    args:
+      NEXT_PUBLIC_AUTH_REFRESH_INTERVAL_SECONDS: ${NEXT_PUBLIC_AUTH_REFRESH_INTERVAL_SECONDS:-600}
+  pull_policy: build
+  env_file:
+    - path: ./.env
+      required: true
+  environment:
+    DATABASE_URL: /app/data/ab-ignite.db
+    NODE_ENV: production
+  volumes:
+    - sqlite_data:/app/data
+  init: true
+  security_opt:
+    - no-new-privileges:true
+  stop_grace_period: 30s
+
+services:
+  setup:
+    <<: *app
+    command: ["setup"]
+    volumes:
+      - sqlite_data:/app/data
+      - ./data:/dev-data:ro
+    restart: "no"
+
+  web:
+    <<: *app
+    command: ["web"]
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+    ports:
+      - "127.0.0.1:3100:3000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "docker/healthcheck.mjs"]
+      interval: 15s
+      timeout: 6s
+      start_period: 45s
+      retries: 4
+
+  ai-worker:
+    <<: *app
+    profiles: ["ai"]
+    command: ["ai-worker"]
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  notification-worker:
+    <<: *app
+    profiles: ["email"]
+    command: ["notification-worker"]
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+volumes:
+  sqlite_data:

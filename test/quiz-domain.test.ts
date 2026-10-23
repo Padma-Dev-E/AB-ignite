@@ -4,6 +4,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { db } from "../src/db/connection";
 import {
   auditEvents,
+  articles,
   notifications,
   pointRules,
   pointsLedger,
@@ -31,6 +32,7 @@ import {
   startQuizAttempt,
   submitQuizAttempt,
 } from "../src/lib/quizzes/service";
+import { ensureQuizCatalogue } from "../src/lib/quizzes/seed";
 
 let userId = 0;
 let departmentPeerId = 0;
@@ -42,15 +44,16 @@ let auditPeerSessionId = 0;
 let quizId = 0;
 let versionId = 0;
 let challengeId = 0;
+let journeyArticleId = 0;
 let questionIds: number[] = [];
 
 before(async () => {
   const usersCreated = await db.insert(users).values([
-    { name: "Quiz Domain User", email: `quiz-domain-${Date.now()}@example.test`, role: "user", department: "Technology", passwordHash: "test-hash" },
-    { name: "Quiz Department Peer", email: `quiz-peer-${Date.now()}@example.test`, role: "user", department: "Technology", passwordHash: "test-hash" },
-    { name: "Quiz Other Department", email: `quiz-other-${Date.now()}@example.test`, role: "user", department: "Banking", passwordHash: "test-hash" },
-    { name: "Quiz Retry User", email: `quiz-retry-${Date.now()}@example.test`, role: "user", department: "Technology", passwordHash: "test-hash" },
-    { name: "Quiz Award Retry User", email: `quiz-award-retry-${Date.now()}@example.test`, role: "user", department: "Technology", passwordHash: "test-hash" },
+    { name: "Quiz Domain User", email: `quiz-domain-${Date.now()}@example.test`, role: "employee", department: "Technology", passwordHash: "test-hash" },
+    { name: "Quiz Department Peer", email: `quiz-peer-${Date.now()}@example.test`, role: "employee", department: "Technology", passwordHash: "test-hash" },
+    { name: "Quiz Other Department", email: `quiz-other-${Date.now()}@example.test`, role: "employee", department: "Banking", passwordHash: "test-hash" },
+    { name: "Quiz Retry User", email: `quiz-retry-${Date.now()}@example.test`, role: "employee", department: "Technology", passwordHash: "test-hash" },
+    { name: "Quiz Award Retry User", email: `quiz-award-retry-${Date.now()}@example.test`, role: "employee", department: "Technology", passwordHash: "test-hash" },
   ]).returning({ id: users.id }).all();
   userId = usersCreated[0].id;
   departmentPeerId = usersCreated[1].id;
@@ -122,6 +125,7 @@ before(async () => {
 });
 
 after(async () => {
+  if (journeyArticleId) await db.delete(articles).where(eq(articles.id, journeyArticleId));
   if (challengeId) await db.delete(quizChallenges).where(eq(quizChallenges.id, challengeId));
   if (quizId) await db.delete(quizAttempts).where(eq(quizAttempts.quizId, quizId));
   if (versionId) await db.delete(quizVersions).where(eq(quizVersions.id, versionId));
@@ -136,6 +140,28 @@ test("quiz details redact answer keys while preserving selectable options", asyn
   assert.equal(detail?.versions[0]?.questions.length, 2);
   assert.ok(detail?.versions[0]?.questions[0]?.options.every((option) => !Object.hasOwn(option, "isCorrect")));
   assert.ok(!JSON.stringify(detail).includes('"isCorrect"'));
+});
+
+test("seed ensures a usable published three category by four level catalogue", async () => {
+  ensureQuizCatalogue();
+  ensureQuizCatalogue();
+  const { listQuizCatalogue } = await import("../src/lib/quizzes/service");
+  const catalogue = await listQuizCatalogue();
+  assert.equal(catalogue.length, 12);
+  assert.deepEqual(new Set(catalogue.map((item) => item.category)), new Set(["banking", "transformation", "technology"]));
+  for (const category of ["banking", "transformation", "technology"]) {
+    const entries = catalogue.filter((item) => item.category === category);
+    assert.deepEqual(new Set(entries.map((item) => item.level)), new Set(["beginner", "intermediate", "advanced", "expert"]));
+    assert.ok(entries.every((item) => item.questionCount >= 3 && item.timeLimitSeconds !== null));
+  }
+  assert.equal((await db.select().from(quizCategories).where(inArray(quizCategories.code, ["banking", "transformation", "technology"])).all()).length, 3);
+});
+
+test("reading an overdue attempt records server-enforced expiration", async () => {
+  const startedAt = new Date("2026-05-01T00:00:00.000Z");
+  const attempt = await startQuizAttempt(departmentPeerId, quizId, `read-expiry-${Date.now()}`, startedAt);
+  const fetched = await getQuizAttempt(departmentPeerId, attempt.attempt.id);
+  assert.equal(fetched.result?.status, "expired");
 });
 
 test("timed attempts grade on server time and replay the immutable result", async () => {
@@ -214,9 +240,22 @@ test("quiz point awards remain pending after policy failure and retry on replay"
 });
 
 test("low topic scores create an open recommendation and notification", async () => {
+  const [article] = await db.insert(articles).values({
+    title: "Authentication control practices", summary: "Practical authentication controls.", body: "Use multi-factor authentication and monitor access.",
+    category: "banking", categoryCode: "banking", topic: "authentication", publisher: "Quiz test", difficulty: "beginner",
+    readingMinutes: 4, contentType: "internal", published: true,
+  }).returning().all();
+  journeyArticleId = article.id;
   const journey = await getJourney(userId);
   assert.ok(journey.topics.some((topic) => topic.topic === "authentication" && topic.scorePercent < 70));
   assert.ok(journey.recommendations.some((recommendation) => recommendation.status === "open"));
+  assert.deepEqual(journey.nextRecommendedArticle, { id: article.id, title: article.title });
+  assert.ok(journey.recommendedArticles.some((recommended) => recommended.id === article.id && recommended.recommendation.topic === "authentication"));
+  assert.ok(journey.recommendedArticles.every((recommended) => !Object.hasOwn(recommended, "body")));
+  assert.ok(journey.topics.find((topic) => topic.topic === "authentication")?.totalQuestions);
+  assert.ok(journey.recentQuizzes.some((recent) => recent.quizId === quizId));
+  assert.equal(typeof journey.streakDays, "number");
+  assert.ok(Array.isArray(journey.improvement));
   assert.ok((await db.select().from(notifications).where(eq(notifications.userId, userId)).all()).some((notification) => notification.type === "learning_recommendation"));
   assert.equal((await db.select().from(quizRecommendations).where(and(eq(quizRecommendations.userId, userId), eq(quizRecommendations.topic, "authentication"), eq(quizRecommendations.status, "open"))).all()).length, 1);
 });

@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import React from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { ApiError } from "../../../lib/api/client";
+import { scorePriority } from "../../../lib/ideas/priority-policy";
+import { ideaValidationPasses, normalizeIdeaValidationScore } from "../../../lib/ideas/validation-score";
 import type { AppDispatch, RootState } from "../../../store";
 import { resetIdeaWizard, setIdeaWizardStep } from "../../../store/ui-slice";
 import {
@@ -13,6 +15,7 @@ import {
   useIdeaAiStatus,
   useIdeaComments,
   useIdeaDevelopment,
+  useIdeaPriorityPolicy,
   useIdeas,
   useQueueIdeaDevelopment,
   useSaveIdeaSubmission,
@@ -30,6 +33,7 @@ import type {
   IdeaCreateInput,
   IdeaEnrichment,
   IdeaKind,
+  IdeaPriorityBreakdown,
   IdeaSubmissionInput,
   IdeaValidation,
 } from "../types";
@@ -42,7 +46,6 @@ type Page =
   | "new"
   | "learn"
   | "library"
-  | "rewards"
   | "me"
   | "article"
   | "idea"
@@ -172,7 +175,44 @@ function errorMessage(error: unknown) {
         : "Something went wrong. Please try again.";
 }
 
+const leadingSearchNoise = new Set([
+  "a", "an", "the", "this", "that", "my", "our", "we", "i", "problem",
+  "idea", "proposal", "suggestion", "about", "how", "what", "why", "is",
+  "are", "have", "has", "need", "needs", "to", "for", "with",
+]);
+
+export function buildIdeaSearchPhrase(text: string) {
+  const tokens = text.toLocaleLowerCase().match(/[a-z0-9]+/g) ?? [];
+  while (tokens[0] !== undefined && leadingSearchNoise.has(tokens[0])) tokens.shift();
+  return tokens.slice(0, 3).join(" ");
+}
+
+function priorityRejectionDetails(error: unknown) {
+  if (!(error instanceof ApiError) || error.status !== 422 || !error.details || typeof error.details !== "object") return null;
+  const details = error.details as {
+    score?: unknown;
+    minimumScore?: unknown;
+    priorityBand?: unknown;
+    breakdown?: unknown;
+  };
+  const isNumber = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
+  return {
+    score: isNumber(details.score) ? details.score : undefined,
+    minimumScore: isNumber(details.minimumScore) ? details.minimumScore : undefined,
+    priorityBand: typeof details.priorityBand === "string" ? details.priorityBand : undefined,
+    breakdown: Array.isArray(details.breakdown)
+      ? details.breakdown.filter((item): item is IdeaPriorityBreakdown => {
+          if (!item || typeof item !== "object") return false;
+          const row = item as Partial<IdeaPriorityBreakdown>;
+          return ["turnaround", "volume", "value"].includes(String(row.key)) &&
+            isNumber(row.score) && isNumber(row.weight) && isNumber(row.contribution);
+        })
+      : [],
+  };
+}
+
 const statusLabels: Record<Idea["status"], string> = {
+  draft: "Private draft",
   screening: "Screening", returned: "Returned for changes", business_review: "Business review",
   control_review: "Control review", decision: "Confirmation", poc: "Accepted: proof of concept",
   implementation: "Implementation", implemented: "Impact", rejected: "Rejected", deferred: "Deferred",
@@ -190,7 +230,7 @@ function IdeaCard({ idea, onOpen }: { idea: Idea; onOpen: () => void }) {
   const bandTone =
     idea.priorityBand === "Priority"
       ? "sand"
-      : idea.priorityBand === "Qualify"
+      : idea.priorityBand === "Quality"
         ? "teal"
         : "muted";
   return (
@@ -481,6 +521,16 @@ export function EmployeeIdeaSubmissionPage({
   const step = useSelector((state: RootState) => state.ui.ideaWizardStep);
   const [kind, setKind] = useState<IdeaKind>("idea");
   const [raw, setRaw] = useState("");
+  const [resumeDraftId, setResumeDraftId] = useState<number | null>(null);
+  const savedDraftsQuery = useIdeas({ page: 1, pageSize: 50, mine: true });
+  const savedDrafts = (savedDraftsQuery.data?.items ?? []).filter((idea) => idea.status === "draft");
+  const resumeDraftQuery = useIdea(resumeDraftId ?? 0, Boolean(resumeDraftId));
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const rawSearch = buildIdeaSearchPhrase(raw).slice(0, 120);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(rawSearch), 400);
+    return () => clearTimeout(timer);
+  }, [rawSearch]);
   const [title, setTitle] = useState("");
   const [summary, setSummary] = useState("");
   const [details, setDetails] = useState<Record<string, string>>({
@@ -512,6 +562,7 @@ export function EmployeeIdeaSubmissionPage({
     import("../types").IdeaSubmitResponse | null
   >(null);
   const [submitError, setSubmitError] = useState<unknown>(null);
+  const [submitForHumanReview, setSubmitForHumanReview] = useState(false);
   const [developmentError, setDevelopmentError] = useState<string | null>(null);
   const [appliedRunId, setAppliedRunId] = useState<number | null>(null);
   const validationSnapshot = useRef<string | null>(null);
@@ -521,15 +572,23 @@ export function EmployeeIdeaSubmissionPage({
   const developmentMutation = useQueueIdeaDevelopment();
   const saveSubmissionMutation = useSaveIdeaSubmission();
   const submitMutation = useSubmitIdea();
+  const priorityPolicyQuery = useIdeaPriorityPolicy();
   const busy =
     createMutation.isPending ||
     saveSubmissionMutation.isPending ||
     submitMutation.isPending;
+  const searchMatches = rawSearch === debouncedSearch;
   const candidateQuery = useIdeas({
     page: 1,
     pageSize: 5,
-    search: raw.trim().length >= 4 ? raw.trim().slice(0, 120) : undefined,
-  }, raw.trim().length >= 4);
+    search: debouncedSearch.length >= 4 ? debouncedSearch : undefined,
+  }, searchMatches && debouncedSearch.length >= 4);
+  const unresolvedOriginality = Boolean(
+    searchMatches &&
+    (candidateQuery.data?.items.length ?? 0) > 0 &&
+    !buildsOnId &&
+    differentiation.trim().length < 20,
+  );
   const aiStatusQuery = useIdeaAiStatus(
     created?.idea.id ?? 0,
     Boolean(created && submitResult && !submitResult.submitted),
@@ -538,7 +597,8 @@ export function EmployeeIdeaSubmissionPage({
     created?.idea.id ?? 0,
     Boolean(created),
   );
-  const currentRuns = (developmentQuery.data?.runs ?? []).filter(
+  const allIdeaRuns = developmentQuery.data?.runs ?? [];
+  const currentRuns = allIdeaRuns.filter(
     (run) => run.ideaVersionId === created?.versionId,
   );
   const enrichmentRun = currentRuns.find((run) => run.jobKey === "idea.enrich");
@@ -553,7 +613,14 @@ export function EmployeeIdeaSubmissionPage({
     validationRun?.status === "succeeded"
       ? (validationRun.result as IdeaValidation | null)
       : null;
-  const validationPassed = validation?.decision === "accept";
+  const validationScore = normalizeIdeaValidationScore(validation?.overallScore);
+  const validationPassed = ideaValidationPasses(validation);
+  const lowValidationVersions = new Set(allIdeaRuns.flatMap((run) => {
+    if (run.jobKey !== "idea.validate" || run.status !== "succeeded" || run.ideaVersionId <= 0) return [];
+    const result = run.result as IdeaValidation | null;
+    const score = normalizeIdeaValidationScore(result?.overallScore);
+    return score !== null && score <= 7 ? [run.ideaVersionId] : [];
+  }));
   const currentContent = JSON.stringify({ kind, raw, title, summary, details });
   const validationIsCurrent = Boolean(
     validationRun &&
@@ -561,19 +628,18 @@ export function EmployeeIdeaSubmissionPage({
     validationRun.ideaVersionId === created.versionId &&
     validatedContent === currentContent,
   );
-  const validationBlocked = !validationIsCurrent || !validationPassed;
+  const canSubmitForHumanReview = Boolean(validationIsCurrent && validationScore !== null && validationScore <= 7 && lowValidationVersions.size >= 2);
+  const validationBlocked = !validationIsCurrent || (!validationPassed && !canSubmitForHumanReview);
   const metrics = {
     turnaround: Number(impact.turnaround),
     volume: Number(impact.volume),
     value: Number(impact.value),
   };
-  const liveScore =
-    Math.round(
-      (metrics.turnaround * 0.3 + metrics.volume * 0.3 + metrics.value * 0.4) *
-        100,
-    ) / 100;
-  const liveBand =
-    liveScore >= 2.5 ? "Priority" : liveScore >= 1.5 ? "Qualify" : "Watch";
+  const hasAllImpactValues = Object.values(impact).every((value) => value.trim().length > 0);
+  const validImpactValues = hasAllImpactValues && Object.values(metrics).every((value) => Number.isFinite(value) && value >= 0 && value <= 3);
+  const priorityResult = validImpactValues && priorityPolicyQuery.data
+    ? scorePriority(metrics, priorityPolicyQuery.data)
+    : null;
   const submissionInput: IdeaSubmissionInput = {
     answers: {
       beneficiaries: answers[0],
@@ -600,10 +666,55 @@ export function EmployeeIdeaSubmissionPage({
       (value) => Number.isFinite(value) && value >= 0 && value <= 3,
     );
   const serverValidation = saveSubmissionMutation.data;
+  const submissionError = saveSubmissionMutation.error ?? submitMutation.error;
+  const submissionRejection = priorityRejectionDetails(submissionError);
+  const priorityScoreRejected = submissionRejection?.score !== undefined || submissionRejection?.minimumScore !== undefined;
 
   useEffect(() => {
     dispatch(resetIdeaWizard());
   }, [dispatch]);
+
+  useEffect(() => {
+    const detail = resumeDraftQuery.data;
+    if (!resumeDraftId || !detail || detail.idea.id !== resumeDraftId) return;
+    const { idea, submission } = detail;
+    setKind(idea.kind);
+    setRaw(idea.summary);
+    setTitle(idea.title);
+    setSummary(idea.summary);
+    setDetails({
+      problem: idea.problem ?? "",
+      solution: idea.solution ?? "",
+      benefits: idea.benefits ?? "",
+      risks: idea.risks ?? "",
+    });
+    setBuildsOnId(idea.buildsOnId ?? undefined);
+    if (submission) {
+      setAnswers([
+        submission.answers.beneficiaries,
+        submission.answers.currentProcess,
+        submission.answers.needed,
+        submission.answers.risks,
+        submission.answers.successMeasure,
+      ]);
+      setImpact({
+        turnaround: String(submission.metrics.turnaround),
+        volume: String(submission.metrics.volume),
+        value: String(submission.metrics.value),
+      });
+      setMetricExplanations({
+        turnaround: submission.metrics.turnaroundExplanation ?? "",
+        volume: submission.metrics.volumeExplanation ?? "",
+        value: submission.metrics.valueExplanation ?? "",
+      });
+      setDifferentiation(submission.differentiation ?? "");
+    }
+    setCreated({ idea, versionId: 0 });
+    setAppliedRunId(null);
+    setValidatedContent(null);
+    setResumeDraftId(null);
+    dispatch(setIdeaWizardStep(2));
+  }, [dispatch, resumeDraftId, resumeDraftQuery.data]);
 
   useEffect(() => {
     if (!enrichment || !enrichmentRun || appliedRunId === enrichmentRun.id)
@@ -707,9 +818,9 @@ export function EmployeeIdeaSubmissionPage({
       setDevelopmentError(errorMessage(error));
     }
   };
-  const finishSubmit = async (id: number, versionId: number) => {
+  const finishSubmit = async (id: number, versionId: number, humanReview = submitForHumanReview) => {
     try {
-      const result = await submitMutation.mutateAsync({ id, versionId });
+      const result = await submitMutation.mutateAsync({ id, versionId, submitForHumanReview: humanReview });
       setSubmitResult(result);
     } catch (error) {
       setSubmitError(error);
@@ -728,7 +839,7 @@ export function EmployeeIdeaSubmissionPage({
       (run) => run.jobKey === "idea.preflight",
     );
     if (preflight?.status === "succeeded")
-      void finishSubmit(created.idea.id, created.versionId).catch(
+      void finishSubmit(created.idea.id, created.versionId, submitForHumanReview).catch(
         () => undefined,
       );
   }, [
@@ -737,12 +848,14 @@ export function EmployeeIdeaSubmissionPage({
     submitResult,
     submitError,
     submitMutation.isPending,
+    submitForHumanReview,
   ]);
-  const submit = async () => {
+  const submit = async (humanReview = false) => {
     if (
       !fieldsValid ||
       busy ||
-      validationBlocked ||
+      !validationIsCurrent ||
+      (!validationPassed && !(humanReview && canSubmitForHumanReview)) ||
       (candidateQuery.data?.items.some((item) => item.id !== buildsOnId) &&
         !buildsOnId &&
         differentiation.trim().length < 20)
@@ -750,12 +863,13 @@ export function EmployeeIdeaSubmissionPage({
       return;
     try {
       const result = await syncDraft();
+      setSubmitForHumanReview(humanReview);
       await saveSubmissionMutation.mutateAsync({
         id: result.idea.id,
         input: submissionInput,
       });
       setCreated(result);
-      await finishSubmit(result.idea.id, result.versionId);
+      await finishSubmit(result.idea.id, result.versionId, humanReview);
     } catch {
       /* the mutation error is rendered below */
     }
@@ -814,11 +928,17 @@ export function EmployeeIdeaSubmissionPage({
               className="mx-auto mt-5 max-w-2xl text-left"
               aria-label="Submission details"
             >
-              <div className="grid gap-3 sm:grid-cols-3">
+              <div className="grid gap-3 sm:grid-cols-5">
                 <div className="tile">
                   <span className="block text-xs text-muted">Category</span>
                   <b>{submitResult.category ?? created.idea.category}</b>
                 </div>
+                {typeof submitResult.pointsAwarded === "number" && (
+                  <div className="tile">
+                    <span className="block text-xs text-muted">Points earned</span>
+                    <b>{submitResult.pointsAwarded} points</b>
+                  </div>
+                )}
                 <div className="tile">
                   <span className="block text-xs text-muted">
                     Priority band
@@ -834,7 +954,13 @@ export function EmployeeIdeaSubmissionPage({
                     {submitResult.minimumScore?.toFixed(2) ?? "—"}
                   </b>
                 </div>
+                <div className="tile">
+                  <span className="block text-xs text-muted">AI validation</span>
+                  <b>{submitResult.aiValidationScore?.toFixed(1) ?? "—"} / 10</b>
+                  {submitResult.submittedWithLowAiScore && <span className="mt-1 block text-xs text-sand">Submitted for human review</span>}
+                </div>
               </div>
+              {submitResult.submittedWithLowAiScore && <p className="mt-3 rounded-xl border border-sand/40 bg-sand/5 p-3 text-sm">Your idea entered the normal review queue after two below-threshold AI validation results. A reviewer will assess it manually.</p>}
               {submitResult.breakdown && (
                 <div
                   className="mt-3 rounded-xl border p-4 text-sm"
@@ -879,6 +1005,8 @@ export function EmployeeIdeaSubmissionPage({
             </p>
           )}
           <div className="mt-5 flex flex-wrap justify-center gap-2">
+            {failed && preflight?.status === "succeeded" && <button className="btn" type="button" disabled={submitMutation.isPending} onClick={() => setSubmitError(null)}>{submitMutation.isPending ? "Retrying…" : "Retry submission"}</button>}
+            {failed && preflight?.status !== "succeeded" && <button className="btn" type="button" onClick={() => { setSubmitResult(null); setSubmitError(null); dispatch(setIdeaWizardStep(2)); }}>Improve draft</button>}
             {completed && (
               <button
                 className="btn"
@@ -1070,8 +1198,8 @@ export function EmployeeIdeaSubmissionPage({
             <div>
               <h2 className="text-lg font-medium">AI validation</h2>
               <p className="mt-1 text-sm text-muted">
-                A passing validation is required before submission. Update the
-                draft and run validation again after a failed result.
+                An AI score above 7/10 lets you continue to numbers. A score
+                of 7/10 or below needs an improved draft and another check.
               </p>
             </div>
             <button
@@ -1116,9 +1244,12 @@ export function EmployeeIdeaSubmissionPage({
             <div className="mt-4 space-y-2 text-sm">
               <p>
                 <b>Validation {validationPassed ? "passed" : "failed"}:</b>{" "}
-                {validation.overallScore}/100 ·{" "}
+                {validationScore === null ? "Score unavailable" : `${validationScore}/10`} ·{" "}
                 {validation.decision.replaceAll("_", " ")}
               </p>
+              {validation.decision === "needs_human_review" && (
+                <p>AI recommends human review. This remains advisory; the separate safety check still applies when you submit.</p>
+              )}
               {validation.strengths.length > 0 && (
                 <p>
                   <b>Strengths:</b> {validation.strengths.join("; ")}
@@ -1142,13 +1273,15 @@ export function EmployeeIdeaSubmissionPage({
                 </p>
               )}
               {!validationPassed && (
-                <p className="text-[#d6336c]">
-                  Improve the draft, then run validation again to continue.
+                <p className="text-[#d6336c]" role="alert">
+                  {validationScore === null
+                    ? "Validation returned no usable score. Run validation again before continuing."
+                    : `Your score is ${validationScore}/10; the AI validation threshold is above 7/10. Improve the draft and run validation again. After two below-threshold results on different draft versions, you can submit it for human review.`}
                 </p>
               )}
             </div>
           )}
-          {validationRun && !validationIsCurrent && (
+          {validationRun?.status === "succeeded" && !validationIsCurrent && (
             <p className="mt-3 text-sm text-[#d6336c]" role="alert">
               This result belongs to an older draft. Run validation again for
               the current version.
@@ -1172,7 +1305,10 @@ export function EmployeeIdeaSubmissionPage({
           )}
           <div className="mt-4 flex flex-wrap gap-2">
             <button className="btn" type="button" onClick={() => dispatch(setIdeaWizardStep(3))}>Back to questions</button>
-            <button className="btn-primary" type="button" disabled={!validationIsCurrent || !validationPassed} onClick={() => dispatch(setIdeaWizardStep(5))}>Continue to numbers</button>
+            {validation && !validationPassed && <button className="btn" type="button" onClick={() => dispatch(setIdeaWizardStep(2))}>Improve draft</button>}
+            {canSubmitForHumanReview
+              ? <button className="btn-primary" type="button" onClick={() => dispatch(setIdeaWizardStep(5))}>Continue to human review submission</button>
+              : <button className="btn-primary" type="button" disabled={!validationIsCurrent || !validationPassed} onClick={() => dispatch(setIdeaWizardStep(5))}>Continue to numbers</button>}
           </div>
         </section>
       )}
@@ -1183,20 +1319,33 @@ export function EmployeeIdeaSubmissionPage({
           <div className="mt-4 grid gap-4 sm:grid-cols-3">
             {(["turnaround", "volume", "value"] as const).map((key) => {
               const labels = { turnaround: "Turnaround time", volume: "Volume", value: "Expected savings or revenue" };
-              return <label className="block" key={key}><span className="field-label">{labels[key]}</span><input className="input" type="number" min="0" max="3" step="0.1" value={impact[key]} onChange={(event) => setImpact((current) => ({ ...current, [key]: event.target.value }))} placeholder="0" /><span className="mt-1 block text-xs text-muted">0–3 score · explain the expected change</span></label>;
+              const configured = priorityPolicyQuery.data?.kpis.find((item) => item.key === key);
+              return <label className="block" key={key}><span className="field-label">{configured?.question ?? labels[key]}</span><input className="input" type="number" min="0" max="3" step="0.1" value={impact[key]} onChange={(event) => setImpact((current) => ({ ...current, [key]: event.target.value }))} placeholder="0" /><span className="mt-1 block text-xs text-muted">{configured?.hint ?? "0–3 score · explain the expected change"}{configured ? ` · ${Math.round(configured.weight * 100)}% weight` : ""}</span></label>;
             })}
           </div>
           <div className="mt-4 grid gap-4 sm:grid-cols-3">
             {(["turnaround", "volume", "value"] as const).map((key) => <label className="block" key={key}><span className="field-label">{key[0].toUpperCase() + key.slice(1)} explanation</span><textarea className="input min-h-[76px]" value={metricExplanations[key]} onChange={(event) => setMetricExplanations((current) => ({ ...current, [key]: event.target.value }))} /></label>)}
           </div>
+          {priorityPolicyQuery.isPending && <p className="mt-4 text-sm text-muted" role="status">Loading priority policy…</p>}
+          {priorityPolicyQuery.isError && <p className="mt-4 text-sm text-[#d6336c]" role="alert">Priority policy could not be loaded. <button className="underline" onClick={() => void priorityPolicyQuery.refetch()}>Retry</button></p>}
+          {priorityResult && <div className="mt-4 rounded-xl border p-4 text-sm" style={{ borderColor: "var(--line)" }} aria-live="polite"><p className="font-medium">Live priority score: {priorityResult.score.toFixed(2)} / 3 · {priorityResult.band}</p><p className="mt-1 text-muted">Minimum to submit: {priorityPolicyQuery.data!.minimumScore.toFixed(2)}</p><div className="mt-2 space-y-1">{priorityResult.breakdown.map((item) => <p key={item.key} className="flex justify-between gap-3"><span className="capitalize">{item.key} · {Math.round(item.weight * 100)}%</span><span>{item.score.toFixed(1)} → {item.contribution.toFixed(2)}</span></p>)}</div>{priorityResult.score < priorityPolicyQuery.data!.minimumScore && <p className="mt-2 text-[#d6336c]" role="alert">Increase the impact scores or improve the estimates to meet the submission minimum.</p>}</div>}
+          {submissionError && <div className="mt-4 rounded-xl border border-[#d6336c]/40 p-4 text-sm" role="alert"><p className="font-medium text-[#d6336c]">{errorMessage(submissionError)}</p>{submissionRejection && priorityScoreRejected && <p className="mt-1">Server score / minimum: {submissionRejection.score?.toFixed(2) ?? "—"} / {submissionRejection.minimumScore?.toFixed(2) ?? "—"}{submissionRejection.priorityBand ? ` · ${submissionRejection.priorityBand}` : ""}</p>}{submissionRejection?.breakdown.map((item) => <p className="mt-1 flex justify-between gap-3" key={item.key}><span className="capitalize">{item.key} · {Math.round(item.weight * 100)}%</span><span>{item.score.toFixed(1)} → {item.contribution.toFixed(2)}</span></p>)}{priorityScoreRejected && <p className="mt-2 text-muted">Adjust the impact numbers to meet the server minimum, then submit again.</p>}</div>}
           <div className="mt-4 flex flex-wrap gap-2">
             <button className="btn" type="button" onClick={() => dispatch(setIdeaWizardStep(4))}>Back to validation</button>
-            <button className="btn-primary" type="button" disabled={!fieldsValid || busy || validationBlocked} onClick={() => void submit()}>Submit idea</button>
+            <button className="btn-primary" type="button" disabled={!fieldsValid || busy || validationBlocked || !priorityResult || priorityResult.score < priorityPolicyQuery.data!.minimumScore} onClick={() => void submit(canSubmitForHumanReview && !validationPassed)}>{canSubmitForHumanReview && !validationPassed ? "Submit for human review" : "Submit idea"}</button>
           </div>
         </section>
       )}
       {step === 1 && (
         <div className="app-card">
+          <section className="mb-5 rounded-xl border p-3" style={{ borderColor: "var(--line)" }} aria-label="Saved drafts">
+            <h2 className="font-medium">Your saved drafts</h2>
+            {savedDraftsQuery.isPending && <p className="mt-1 text-sm text-muted" role="status">Loading private drafts…</p>}
+            {savedDraftsQuery.isError && <p className="mt-1 text-sm text-[#d6336c]" role="alert">Could not load drafts: {errorMessage(savedDraftsQuery.error)} <button className="underline" type="button" onClick={() => void savedDraftsQuery.refetch()}>Retry</button></p>}
+            {savedDrafts.length === 0 && !savedDraftsQuery.isPending && !savedDraftsQuery.isError && <p className="mt-1 text-sm text-muted">No saved drafts to resume.</p>}
+            {savedDrafts.length > 0 && <ul className="mt-2 space-y-2">{savedDrafts.map((draft) => <li key={draft.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-[var(--hover)] p-2"><span className="min-w-0 flex-1"><b className="block truncate text-sm">{draft.title}</b><span className="block truncate text-xs text-muted">{draft.summary}</span></span><button className="btn btn-small" type="button" disabled={Boolean(resumeDraftId)} onClick={() => setResumeDraftId(draft.id)}>{resumeDraftId === draft.id && resumeDraftQuery.isPending ? "Loading…" : "Resume draft"}</button></li>)}</ul>}
+            {resumeDraftQuery.isError && <p className="mt-2 text-sm text-[#d6336c]" role="alert">Could not open this draft: {errorMessage(resumeDraftQuery.error)} <button className="underline" type="button" onClick={() => void resumeDraftQuery.refetch()}>Retry</button></p>}
+          </section>
           <div
             className="inline-flex max-w-full gap-0.5 overflow-x-auto rounded-xl border bg-white p-1"
             style={{ borderColor: "var(--line)" }}
@@ -1238,17 +1387,18 @@ export function EmployeeIdeaSubmissionPage({
               final match check runs when you submit the completed details.
             </span>
           </div>
-          {candidateQuery.isPending && raw.trim().length >= 4 && (
+          {(!searchMatches || candidateQuery.isPending) && raw.trim().length >= 4 && (
             <p className="mt-3 text-sm text-muted" aria-live="polite">
               Searching registered ideas…
             </p>
           )}
-          {candidateQuery.isError && (
+          {searchMatches && candidateQuery.isError && (
             <p className="mt-3 text-sm text-[#d6336c]" role="alert">
-              Could not load related ideas: {errorMessage(candidateQuery.error)}
+              Could not load related ideas: {errorMessage(candidateQuery.error)}{" "}
+              <button className="underline" type="button" onClick={() => void candidateQuery.refetch()}>Retry</button>
             </p>
           )}
-          {raw.trim().length >= 4 && (candidateQuery.data?.items.length ?? 0) > 0 && (
+          {searchMatches && raw.trim().length >= 4 && (candidateQuery.data?.items.length ?? 0) > 0 && (
             <div
               className="mt-4 rounded-xl border p-3"
               style={{ borderColor: "var(--line-strong)" }}
@@ -1298,9 +1448,10 @@ export function EmployeeIdeaSubmissionPage({
               <span className="text-xs text-muted">
                 {differentiation.trim().length}/20 characters
               </span>
+              {unresolvedOriginality && <p className="mt-2 text-sm text-[#d6336c]" role="alert">Select an original idea or enter at least 20 characters describing your new contribution.</p>}
             </div>
           )}
-          {raw.trim().length >= 4 && candidateQuery.data?.items.length === 0 && (
+          {searchMatches && raw.trim().length >= 4 && candidateQuery.data?.items.length === 0 && (
             <label className="mt-4 block">
               <span className="field-label">
                 Differentiation from existing work (optional)
@@ -1316,7 +1467,7 @@ export function EmployeeIdeaSubmissionPage({
           )}
           <button
             className="btn-primary mt-4"
-            disabled={raw.trim().length < 10 || candidateQuery.isPending}
+            disabled={raw.trim().length < 10 || !searchMatches || candidateQuery.isPending || unresolvedOriginality}
             onClick={nextFromDescribe}
           >
             <Icon name="spark" /> Develop with AI<span className="sr-only"> — Continue to develop</span>
@@ -1345,7 +1496,7 @@ export function EmployeeIdeaDetailPage({
   onBack: () => void;
 }) {
   const detailQuery = useIdea(ideaId);
-  const commentsQuery = useIdeaComments(ideaId);
+  const commentsQuery = useIdeaComments(ideaId, {}, Boolean(detailQuery.data?.idea && detailQuery.data.idea.status !== "draft"));
   const supportMutation = useSupportIdea();
   const commentMutation = useAddIdeaComment();
   const updateMutation = useUpdateIdea();
@@ -1362,7 +1513,7 @@ export function EmployeeIdeaDetailPage({
   });
   const idea = detailQuery.data?.idea;
   const author = idea ? ideaAuthor(idea) : { name: "Contributor", department: undefined };
-  const activeStage = idea ? ({ screening: 0, returned: 0, business_review: 1, control_review: 2, decision: 3, poc: 4, implementation: 5, implemented: 6, rejected: -1, deferred: -1 }[idea.status]) : -1;
+  const activeStage = idea ? ({ draft: -1, screening: 0, returned: 0, business_review: 1, control_review: 2, decision: 3, poc: 4, implementation: 5, implemented: 6, rejected: -1, deferred: -1 }[idea.status]) : -1;
   const comments =
     commentsQuery.data?.items ?? detailQuery.data?.comments.items ?? [];
   const startEdit = () => {
@@ -1444,7 +1595,7 @@ export function EmployeeIdeaDetailPage({
             {idea.reference}
           </span>
         </div>
-        <div className="my-7 overflow-x-auto pb-2" aria-label="Idea progress">
+        {idea.status !== "draft" && <div className="my-7 overflow-x-auto pb-2" aria-label="Idea progress">
           <ol className="grid min-w-[620px] grid-cols-7 gap-0">
             {lifecycle.map((stage, index) => (
               <li key={stage} aria-current={index === activeStage ? "step" : undefined} className={`relative text-center text-xs ${index === activeStage ? "text-sand" : index < activeStage ? "text-blue" : "text-muted"}`}>
@@ -1454,7 +1605,7 @@ export function EmployeeIdeaDetailPage({
               </li>
             ))}
           </ol>
-        </div>
+        </div>}
         {editing ? (
           <div className="space-y-4">
             <label className="block">
@@ -1531,8 +1682,7 @@ export function EmployeeIdeaDetailPage({
               <div>
                 <b className="font-medium">Registered to {author.name}{author.department ? `, ${author.department}` : ""}</b>
                 <p className="text-muted">
-                  Record {idea.reference}. Supporters and commenters are
-                  credited by name.
+                  {idea.status === "draft" ? `Draft ${idea.reference} is visible only to you.` : `Record ${idea.reference}. Supporters and commenters are credited by name.`}
                 </p>
               </div>
             </div>
@@ -1550,7 +1700,9 @@ export function EmployeeIdeaDetailPage({
                 </div>
               ))}
             </div>
+            {idea.status === "draft" && <p className="mt-4 text-sm text-muted">This draft is private until AI validation and final submission finish.</p>}
             <div className="mt-4 flex flex-wrap gap-2">
+              {idea.status !== "draft" &&
               <button
                 className="btn-primary"
                 disabled={supportMutation.isPending}
@@ -1560,7 +1712,7 @@ export function EmployeeIdeaDetailPage({
                 {supportMutation.isPending
                   ? "Supporting…"
                   : `${idea.supports} Support this idea`}
-              </button>
+              </button>}
               {idea.status === "returned" && (
                 <button className="btn" onClick={startEdit}>
                   Edit and resubmit
@@ -1575,7 +1727,7 @@ export function EmployeeIdeaDetailPage({
           </>
         )}
       </section>
-      <section className="app-card">
+      {idea.status !== "draft" && <section className="app-card">
         <h2 className="text-xl font-medium">
           Discussion{" "}
           <span className="font-normal text-muted">
@@ -1638,7 +1790,7 @@ export function EmployeeIdeaDetailPage({
             {errorMessage(commentMutation.error)}
           </p>
         )}
-      </section>
+      </section>}
     </div>
   );
 }

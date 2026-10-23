@@ -18,14 +18,14 @@ export function objectResponseSchema(properties: Record<string, JsonSchema>, req
 export const jsonRiskFinding: JsonSchema = {
   type: "object",
   properties: {
-    category: { type: "string" }, severity: { type: "string" }, description: { type: "string" },
+    category: { type: "string", enum: ["privacy", "security", "regulatory", "operational", "financial", "reputational", "model", "data"] }, severity: { type: "string", enum: ["low", "medium", "high", "critical"] }, description: { type: "string" },
     mitigations: { type: "array", items: { type: "string" }, maxItems: 10 }, requiresHumanReview: { type: "boolean" },
   },
   required: ["category", "severity", "description", "mitigations", "requiresHumanReview"],
 };
 export const jsonQuestion: JsonSchema = {
   type: "object",
-  properties: { id: { type: "string" }, question: { type: "string" }, reason: { type: "string" }, required: { type: "boolean" }, answerType: { type: "string" } },
+  properties: { id: { type: "string" }, question: { type: "string" }, reason: { type: "string" }, required: { type: "boolean" }, answerType: { type: "string", enum: ["text", "number", "boolean", "date", "choice"] } },
   required: ["id", "question", "reason", "required", "answerType"],
 };
 export const jsonDuplicate: JsonSchema = {
@@ -40,12 +40,12 @@ export const jsonRoute: JsonSchema = {
 };
 export const jsonImpact: JsonSchema = {
   type: "object",
-  properties: { benefits: { type: "array", items: { type: "string" } }, affectedUsers: { type: "string" }, timeSaved: { type: "string" }, costBand: { type: "string" }, effortBand: { type: "string" }, timeToValue: { type: "string" }, confidence: { type: "number", minimum: 0, maximum: 1 } },
+  properties: { benefits: { type: "array", items: { type: "string" } }, affectedUsers: { type: "string" }, timeSaved: { type: "string" }, costBand: { type: "string", enum: ["unknown", "low", "medium", "high"] }, effortBand: { type: "string", enum: ["unknown", "small", "medium", "large"] }, timeToValue: { type: "string" }, confidence: { type: "number", minimum: 0, maximum: 1 } },
   required: ["benefits", "affectedUsers", "timeSaved", "costBand", "effortBand", "timeToValue", "confidence"],
 };
 export const jsonNextAction: JsonSchema = {
   type: "object",
-  properties: { action: { type: "string" }, ownerRole: { type: "string" }, priority: { type: "string" }, dueInDays: { type: "number" } },
+  properties: { action: { type: "string" }, ownerRole: { type: "string", enum: ["author", "business_owner", "back_office", "delivery"] }, priority: { type: "string", enum: ["low", "medium", "high"] }, dueInDays: { type: "integer", minimum: 0, maximum: 365 } },
   required: ["action", "ownerRole", "priority"],
 };
 export const jsonMetric: JsonSchema = {

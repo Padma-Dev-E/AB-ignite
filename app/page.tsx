@@ -5,11 +5,13 @@ import { AccountOverview } from "../src/features/account/account-page";
 import {
   Dialog,
   DialogPanel,
+  DialogTitle,
   Transition,
   TransitionChild,
 } from "@headlessui/react";
-import { Fragment, useEffect, useMemo, useState } from "react";
-import { signOut as authSignOut } from "next-auth/react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import { getSession, signIn, signOut as authSignOut } from "next-auth/react";
 import { isActiveNav, NAV_ITEMS, pageTitle } from "../src/lib/navigation";
 import {
   Button,
@@ -29,6 +31,11 @@ import {
   LearningState,
 } from "../src/features/learning/components/learning-cards";
 import { QuizJourney } from "../src/features/learning/components/quiz-journey";
+import { LibraryCatalogue } from "../src/features/learning/components/library-catalogue";
+import { LibraryArticleDetail } from "../src/features/learning/components/library-article-detail";
+import type { LibraryFilter } from "../src/features/learning/components/library-shared";
+import { getArticle } from "../src/features/learning/api";
+import { useGlobalToast } from "../src/components/ui/global-toast";
 import {
   LearningChallenges,
   LearningRanking,
@@ -39,26 +46,22 @@ import {
   useLearningArticle,
   useLearningJourney,
   useLearningRecommendations,
+  useQuizzes,
 } from "../src/features/learning/hooks";
 import { ArticleCard } from "../src/features/learning/components/learning-cards";
-import {
-  useRedemptions,
-  useRequestRedemption,
-  useRewards,
-} from "../src/features/rewards/hooks";
-import {
-  BadgeProgressList,
-  RedemptionHistory,
-  RewardCatalogue,
-  RewardsBalanceCard,
-  RewardsState,
-} from "../src/features/rewards/components/reward-cards";
+import { usePointsSummary } from "../src/features/points/hooks";
+import { useRewards } from "../src/features/rewards/hooks";
+import { BadgeProgressList, RewardCatalogue, RewardsBalanceCard, RewardsState } from "../src/features/rewards/components/reward-cards";
 import {
   useEmployeeNotifications,
   useSetEmployeeNotificationRead,
 } from "../src/features/employee/engagement-hooks";
 import type { Notification } from "../src/features/employee/engagement-api";
+import { notificationDestination, notificationLocation } from "../src/features/employee/notification-navigation";
+import { NotificationNavigationProvider } from "../src/features/employee/notification-navigation-context";
+import { NotificationAnnouncementDetail, NotificationFeedbackDetail, NotificationRecommendationDetail } from "../src/features/employee/notification-destinations";
 import { EmployeeProfileCard } from "../src/features/employee/employee-profile";
+import { PortalBrand, PortalTopBar, portalNavigationClass, portalNavigationItemClass, portalSidebarClass } from "../src/components/layout/portal-shell";
 
 type Page =
   | "community"
@@ -69,7 +72,10 @@ type Page =
   | "me"
   | "article"
   | "idea"
-  | "quiz";
+  | "quiz"
+  | "announcement"
+  | "feedback"
+  | "recommendation";
 type IconName = keyof typeof iconPaths;
 
 const iconPaths = {
@@ -129,35 +135,7 @@ function Icon({
 }
 
 function Logo({ large = false }: { large?: boolean }) {
-  return (
-    <div className={`flex items-center gap-2 ${large ? "justify-center" : ""}`}>
-      <svg
-        width={large ? 40 : 32}
-        height={large ? 40 : 32}
-        viewBox="0 0 24 24"
-        aria-hidden="true"
-      >
-        <defs>
-          <linearGradient id="flame" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stopColor="#FBBF24" />
-            <stop offset="1" stopColor="#F97316" />
-          </linearGradient>
-        </defs>
-        <path
-          d="M12.6 2.5c3.6 3.9 6.4 7.2 6.4 11.3a7 7 0 0 1-14 0c0-2.8 1.3-5 3.1-6.7.1 2.4.9 3.7 2.2 3.9 1.3-2.1 2.3-5 2.3-8.5z"
-          fill="url(#flame)"
-        />
-        <path
-          d="M12.3 12.6c1.7 1.9 3 3.5 3 5.4a3.3 3.3 0 0 1-6.6 0c0-1.3.6-2.4 1.5-3.2 0 1.1.4 1.7 1 1.9.6-1 1.1-2.4 1.1-4.1z"
-          fill="#FDE68A"
-        />
-      </svg>
-      <div className={`brand-wordmark ${large ? "scale-125 origin-left" : ""}`}>
-        <small>ARAB BANK</small>
-        <b>AB IGNITE</b>
-      </div>
-    </div>
-  );
+  return <PortalBrand className={large ? "justify-center [&_.brand-wordmark]:origin-left [&_.brand-wordmark]:scale-125" : ""} />;
 }
 
 function Avatar({
@@ -251,16 +229,18 @@ function SideNav({
   onClose,
   onNavigate,
   onSignOut,
+  adminPortalRole,
 }: {
   page: Page;
   open: boolean;
   onClose: () => void;
   onNavigate: (page: Page) => void;
   onSignOut: () => void;
+  adminPortalRole: "back_office" | "business_owner" | null;
 }) {
   return (
     <aside
-      className={`fixed inset-y-0 left-0 z-50 flex w-[268px] -translate-x-[105%] flex-col gap-6 border-r p-[22px_14px] transition-transform lg:sticky lg:top-0 lg:h-screen lg:w-[240px] lg:translate-x-0 lg:bg-white/60 ${open ? "translate-x-0" : ""}`}
+      className={`${portalSidebarClass} ${open ? "translate-x-0" : ""}`}
       style={{
         borderColor: "var(--line)",
         backgroundColor: "rgba(255,255,255,.76)",
@@ -270,7 +250,7 @@ function SideNav({
       <div className="px-2">
         <Logo />
       </div>
-      <nav className="flex flex-col gap-0.5">
+      <nav className={portalNavigationClass}>
         {NAV_ITEMS.map((item) => (
           <button
             key={item.key}
@@ -278,7 +258,7 @@ function SideNav({
               onNavigate(item.key as Page);
               onClose();
             }}
-            className={`relative flex items-center gap-3 rounded-[10px] px-3 py-3 text-left font-normal transition ${isActiveNav(item.key, page) ? "bg-gradient-to-r from-blue/20 to-transparent font-medium text-ink before:absolute before:bottom-[9px] before:left-0 before:top-[9px] before:w-[3px] before:rounded-sm before:bg-blue" : "text-muted hover:bg-[var(--hover)] hover:text-ink"}`}
+            className={`${portalNavigationItemClass} ${isActiveNav(item.key, page) ? "bg-gradient-to-r from-blue/20 to-transparent font-medium text-ink before:absolute before:bottom-[9px] before:left-0 before:top-[9px] before:w-[3px] before:rounded-sm before:bg-blue" : "text-muted hover:bg-[var(--hover)] hover:text-ink"}`}
           >
             <Icon
               name={item.icon as IconName}
@@ -296,7 +276,8 @@ function SideNav({
         <br />
         Technology
         <br />
-        <button onClick={onSignOut} className="mt-2 text-blue">
+        {adminPortalRole && <Link href="/private/admin" className="mt-2 inline-block font-medium text-blue">Return to your {adminPortalRole === "business_owner" ? "business-owner" : "back-office"} portal</Link>}
+        <button onClick={onSignOut} className="mt-2 block text-blue">
           Sign out
         </button>
       </div>
@@ -311,6 +292,7 @@ function TopBar({
   onMenu,
   onNavigate,
   onNotifications,
+  notificationsOpen,
 }: {
   page: Page;
   points: number;
@@ -318,12 +300,10 @@ function TopBar({
   onMenu: () => void;
   onNavigate: (page: Page) => void;
   onNotifications: () => void;
+  notificationsOpen: boolean;
 }) {
   return (
-    <header
-      className="sticky top-0 z-30 flex items-center gap-2 border-b bg-white/75 px-3 py-2.5 backdrop-blur-md sm:px-7"
-      style={{ borderColor: "var(--line)" }}
-    >
+    <PortalTopBar>
       <button
         className="icon-button lg:hidden"
         onClick={onMenu}
@@ -332,7 +312,7 @@ function TopBar({
         <Icon name="menu" />
       </button>
       <h2 className="mr-auto min-w-0 truncate text-[15px] font-medium before:mr-2.5 before:inline-block before:h-2.5 before:w-2.5 before:rounded-full before:bg-blue sm:text-base">
-        {pageTitle(page)}
+        {page === "announcement" ? "Announcement" : page === "feedback" ? "My Feedback" : page === "recommendation" ? "Recommended reading" : pageTitle(page)}
       </h2>
       <button
         className="btn-primary btn-small hidden sm:inline-flex"
@@ -351,6 +331,8 @@ function TopBar({
       <button
         className="icon-button relative"
         onClick={onNotifications}
+        aria-haspopup="dialog"
+        aria-expanded={notificationsOpen}
         aria-label={`Notifications${unreadCount ? `, ${unreadCount} unread` : ""}`}
       >
         <Icon name="bell" />
@@ -363,7 +345,7 @@ function TopBar({
       <button onClick={() => onNavigate("me")} className="hidden sm:block">
         <Avatar name="padmadev" />
       </button>
-    </header>
+    </PortalTopBar>
   );
 }
 
@@ -420,6 +402,8 @@ function Notifications({
   onLoadMore,
   onRetry,
   onMarkAllRead,
+  onMarkRead,
+  onOpenNotification,
 }: {
   open: boolean;
   onClose: () => void;
@@ -432,6 +416,8 @@ function Notifications({
   onLoadMore: () => void;
   onRetry: () => void;
   onMarkAllRead: () => void;
+  onMarkRead: (id: number) => void;
+  onOpenNotification: (notification: Notification) => void;
 }) {
   return (
     <Transition show={open} as={Fragment}>
@@ -459,7 +445,7 @@ function Notifications({
           <DialogPanel className="fixed right-3 top-[62px] w-[370px] max-w-[calc(100vw-24px)] rounded-2xl border bg-white p-2 shadow-[0_24px_60px_-14px_rgba(3,10,30,.5)] sm:right-6">
             <div className="flex items-center justify-between px-3 py-2">
               <div>
-                <h3 className="font-medium">Notifications</h3>
+                <DialogTitle as="h3" className="font-medium">Notifications</DialogTitle>
                 <p className="text-xs text-muted">{unreadCount} unread</p>
               </div>
               <button
@@ -502,10 +488,15 @@ function Notifications({
                           className="mt-0.5 h-[19px] w-[19px] shrink-0 text-blue"
                         />
                         <div className="min-w-0 flex-1">
-                          <b className="font-medium">{item.title}</b>
-                          <div className="text-[13px] text-muted">
-                            {item.body}
-                          </div>
+                          {notificationDestination(item.target).kind === "none" ? (
+                            <><b className="font-medium">{item.title}</b><div className="text-[13px] text-muted">{item.body}</div>{item.target.type !== "none" && !item.target.available && <span className="mt-1 block text-xs text-muted">This item is no longer available.</span>}</>
+                          ) : (
+                            <button type="button" className="block w-full rounded text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue" onClick={() => onOpenNotification(item)}>
+                              <span className="block font-medium text-blue">{item.title}</span>
+                              <span className="block text-[13px] text-muted">{item.body}</span>
+                            </button>
+                          )}
+                          {!item.isRead && <button type="button" className="mt-1 text-xs font-medium text-blue underline focus-visible:outline focus-visible:outline-2" onClick={() => onMarkRead(item.id)}>Mark read</button>}
                         </div>
                         <time
                           className="whitespace-nowrap text-xs text-muted"
@@ -596,7 +587,7 @@ const ideas = [
     ref: "ABI-2026-00013",
     supports: 0,
     comments: 0,
-    band: "Qualify",
+    band: "Quality",
   },
   {
     category: "Growth",
@@ -610,7 +601,7 @@ const ideas = [
     ref: "ABI-2026-00012",
     supports: 0,
     comments: 0,
-    band: "Qualify",
+    band: "Quality",
   },
   {
     category: "Efficiency",
@@ -656,7 +647,7 @@ function IdeaCard({
           tone={
             idea.band === "Priority"
               ? "sand"
-              : idea.band === "Qualify"
+              : idea.band === "Quality"
                 ? "teal"
                 : "muted"
           }
@@ -957,12 +948,12 @@ function Hero({
   children?: React.ReactNode;
 }) {
   return (
-    <section className="hero-surface relative overflow-hidden rounded-[24px] px-5 py-6 text-white sm:px-7 sm:py-[30px]">
+    <section className="hero-surface relative overflow-hidden rounded-[24px] px-5 py-6 text-white sm:px-9 sm:py-[48px]">
       <div className="relative z-10 max-w-[62%] sm:max-w-[65%]">
-        <h1 className="text-[25px] font-medium leading-tight tracking-[-.02em] sm:text-[32px]">
+        <h1 className="text-[25px] font-medium leading-tight tracking-[-.02em] sm:text-[40px]">
           {title}
         </h1>
-        <p className="mt-1.5 text-sm leading-6 text-white/85 sm:text-[15px]">
+        <p className="mt-1.5 text-sm leading-6 text-white/85 sm:text-[18px]">
           {subtitle}
         </p>
         {children}
@@ -1283,8 +1274,8 @@ function LegacyNewIdeaPage() {
           </div>
           <div className="mt-5 grid gap-3 sm:grid-cols-3">
             {[
-              ["Customer impact", "2.4", "Qualify"],
-              ["Business value", "2.1", "Qualify"],
+              ["Customer impact", "2.4", "Quality"],
+              ["Business value", "2.1", "Quality"],
               ["Feasibility", "2.8", "Priority"],
             ].map(([label, score, band]) => (
               <div key={label} className="tile text-center">
@@ -1676,81 +1667,6 @@ function ArticlePage({ onBack }: { onBack: () => void }) {
   );
 }
 
-function RewardsPage() {
-  const [redeemed, setRedeemed] = useState(false);
-  return (
-    <div className="stack">
-      <Hero
-        art="rewards"
-        title="Rewards"
-        subtitle="Your ideas, learning and collaboration add up to Ignite Points and recognition."
-      />
-      <section className="app-card border-sand/40 bg-[radial-gradient(circle_at_50%_0,rgba(217,119,6,.12),transparent_65%)] text-center">
-        <div className="mx-auto mb-3 grid h-[76px] w-[76px] place-items-center rounded-full border border-sand/60 text-4xl">
-          🎁
-        </div>
-        <h2 className="text-xl font-medium">Your Ignite balance</h2>
-        <div className="mt-1 text-4xl font-semibold">
-          0 <span className="text-lg font-normal text-muted">points</span>
-        </div>
-        <p className="mt-2 text-sm text-muted">
-          Earn points by sharing ideas, supporting colleagues and completing
-          learning.
-        </p>
-      </section>
-      <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <h2 className="text-xl font-medium">Rewards you can redeem</h2>
-        <span className="text-sm text-muted">0 points available</span>
-      </div>
-      <div className="grid gap-[18px] md:grid-cols-2 xl:grid-cols-3">
-        {[
-          ["Innovation Champion recognition", "500 points", "🏆"],
-          ["Present your idea to the COO", "750 points", "🎤"],
-          ["Learning day experience", "1,000 points", "📚"],
-        ].map(([name, cost, emoji]) => (
-          <article className="app-card" key={name}>
-            <div className="text-4xl">{emoji}</div>
-            <h3 className="mt-3 text-lg font-medium">{name}</h3>
-            <p className="mt-1 text-sm text-muted">{cost}</p>
-            <button
-              disabled={!redeemed}
-              onClick={() => setRedeemed(false)}
-              className="btn mt-4 w-full opacity-50"
-            >
-              Redeem
-            </button>
-          </article>
-        ))}
-      </div>
-      <section className="app-card">
-        <h2 className="text-xl font-medium">Badges</h2>
-        <p className="mt-1 text-sm text-muted">
-          Keep exploring to unlock recognition for the moments that move ideas
-          forward.
-        </p>
-        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {[
-            ["First Idea", "💡"],
-            ["AI Explorer", "🤖"],
-            ["Quiz Whiz", "🧠"],
-            ["Collaborator", "🤝"],
-          ].map(([name, emoji]) => (
-            <div className="p-3 text-center opacity-55" key={name}>
-              <div
-                className="mx-auto grid h-[54px] w-[54px] place-items-center rounded-full border text-2xl"
-                style={{ borderColor: "var(--line-strong)" }}
-              >
-                {emoji}
-              </div>
-              <b className="mt-2 block text-sm font-medium">{name}</b>
-            </div>
-          ))}
-        </div>
-      </section>
-    </div>
-  );
-}
-
 function AccountPage({ onNavigate }: { onNavigate: (page: Page) => void }) {
   return <AccountOverview onNavigate={onNavigate} />;
 }
@@ -1841,9 +1757,44 @@ function LegacyAccountPage({
   );
 }
 
-function LiveLearnPage() {
-  const [tab, setTab] = useState("My journey");
+function LiveLearnPage({ onArticle, relatedQuizId = null }: { onArticle: (id: number) => void; relatedQuizId?: number | null }) {
+  const [tab, setTab] = useState(relatedQuizId ? "Quizzes" : "My journey");
+  const [selectedRelatedQuizId, setSelectedRelatedQuizId] = useState<number | null>(relatedQuizId);
+  const [pendingQuizArticleId, setPendingQuizArticleId] = useState<number | undefined>();
+  const [articleErrors, setArticleErrors] = useState<Record<number, string>>({});
   const journey = useLearningJourney();
+  const completeArticle = useCompleteArticle();
+  const toast = useGlobalToast();
+  useEffect(() => {
+    if (relatedQuizId) {
+      setSelectedRelatedQuizId(relatedQuizId);
+      setTab("Quizzes");
+    }
+  }, [relatedQuizId]);
+  const markArticleCompleted = async (articleId: number) => {
+    setArticleErrors((current) => { const next = { ...current }; delete next[articleId]; return next; });
+    try {
+      const result = await completeArticle.mutateAsync({ articleId });
+      toast.success(result.alreadyCompleted ? "Already completed." : `Marked as completed.${result.pointsAwarded > 0 ? ` +${result.pointsAwarded} points.` : ""}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "This article could not be completed.";
+      setArticleErrors((current) => ({ ...current, [articleId]: message }));
+      toast.error(message);
+    }
+  };
+  const openRelatedQuiz = async (articleId: number, knownQuizId: number | null) => {
+    setPendingQuizArticleId(articleId);
+    try {
+      const quizId = knownQuizId ?? (await getArticle(articleId)).relatedQuizId ?? null;
+      if (!quizId) throw new Error("No related quiz is available for this article.");
+      setSelectedRelatedQuizId(quizId);
+      setTab("Quizzes");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "The related quiz could not be opened.");
+    } finally {
+      setPendingQuizArticleId(undefined);
+    }
+  };
   const journeyState = journey.isPending
     ? "loading"
     : journey.isError
@@ -1853,7 +1804,7 @@ function LiveLearnPage() {
     <div className="stack">
       <Hero
         art="arena"
-        title="Ignite Your Knowledge"
+        title="Ignite Your Knowledge ⚡"
         subtitle="Challenge yourself, learn from your gaps and watch your skills grow."
       />
       <Tabs
@@ -1864,7 +1815,17 @@ function LiveLearnPage() {
       {tab === "My journey" && (
         <>
           {journey.data ? (
-            <JourneyCard journey={journey.data} />
+            <JourneyCard
+              journey={journey.data}
+              onReadArticle={onArticle}
+              onCompleteArticle={(articleId) => void markArticleCompleted(articleId)}
+              onRetakeRelatedQuiz={(articleId, quizId) => void openRelatedQuiz(articleId, quizId)}
+              pendingArticleId={completeArticle.isPending ? completeArticle.variables?.articleId : undefined}
+              pendingQuizArticleId={pendingQuizArticleId}
+              completedArticleIds={completeArticle.isSuccess && completeArticle.data?.completed ? [completeArticle.variables.articleId] : []}
+              alreadyCompletedArticleIds={completeArticle.isSuccess && completeArticle.data?.alreadyCompleted ? [completeArticle.variables.articleId] : []}
+              articleErrors={articleErrors}
+            />
           ) : (
             <LearningState
               state={journeyState}
@@ -1885,7 +1846,7 @@ function LiveLearnPage() {
           </button>
         </>
       )}
-      {tab === "Quizzes" && <QuizJourney />}
+      {tab === "Quizzes" && <QuizJourney relatedQuizId={selectedRelatedQuizId} />}
       {tab === "Ranking" && <LearningRanking />}
       {tab === "Challenges" && <LearningChallenges />}
     </div>
@@ -1893,127 +1854,67 @@ function LiveLearnPage() {
 }
 
 function LiveLibraryPage({ onArticle }: { onArticle: (id: number) => void }) {
-  const [tab, setTab] = useState("All");
+  const [filter, setFilter] = useState<LibraryFilter>("all");
   const [page, setPage] = useState(1);
-  const categoryMap: Record<string, string | undefined> = {
-    All: undefined,
-    Recommended: undefined,
-    "Banking Excellence": "banking",
-    "Innovation & Business Transformation": "transformation",
-    "Technology & AI": "technology",
-  };
-  const category = categoryMap[tab];
-  const articlesQuery = useArticles(category);
+  const articlesQuery = useArticles();
   const recommendations = useLearningRecommendations();
-  const isRecommended = tab === "Recommended";
-  const query = isRecommended ? recommendations : articlesQuery;
-  const items = isRecommended
-    ? (recommendations.data?.items ?? [])
-    : (articlesQuery.data?.items ?? []);
-  const pageSize = 12;
-  const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
-  const visibleItems = items.slice((page - 1) * pageSize, page * pageSize);
-  return (
-    <div className="stack">
-      <Hero
-        art="library"
-        title="Library"
-        subtitle="Reading on banking, transformation and technology. Articles recommended from your quiz results are marked."
-      />
-      <Tabs
-        items={[
-          "All",
-          "Recommended",
-          "Banking Excellence",
-          "Innovation & Business Transformation",
-          "Technology & AI",
-        ]}
-        active={tab}
-        onChange={(nextTab) => { setTab(nextTab); setPage(1); }}
-      />
-      {query.isPending ? (
-        <LearningState state="loading" label="Loading the library…" />
-      ) : query.isError ? (
-        <LearningState
-          state="error"
-          label="The library could not be loaded."
-          onRetry={() => void query.refetch()}
-        />
-      ) : !items.length ? (
-        <LearningState state="empty" label={isRecommended ? "No recommended reading yet. Complete a quiz to get reading suggestions for your topic gaps." : "No published articles in this category yet."} />
-      ) : (
-        <>
-          <ArticleList
-            articles={visibleItems}
-            onOpen={(article) => onArticle(article.id)}
-          />
-          {totalPages > 1 && <nav aria-label="Library pages" className="flex items-center justify-between gap-3 rounded-xl border bg-white p-3 text-sm"><button className="btn btn-small" type="button" disabled={page === 1} onClick={() => setPage(current => current - 1)}>Previous</button><span>Page {page} of {totalPages}</span><button className="btn btn-small" type="button" disabled={page >= totalPages} onClick={() => setPage(current => current + 1)}>Next</button></nav>}
-        </>
-      )}
-    </div>
-  );
+  const activeQuery = filter === "recommended" ? recommendations : articlesQuery;
+  return <LibraryCatalogue
+    articles={articlesQuery.data?.items ?? []}
+    recommendedArticles={recommendations.data?.items ?? []}
+    filter={filter}
+    onFilterChange={(next) => { setFilter(next); setPage(1); }}
+    onRead={(article) => onArticle(article.id)}
+    page={page}
+    onPageChange={setPage}
+    loading={activeQuery.isPending}
+    error={activeQuery.isError ? "The library could not be loaded." : null}
+    onRetry={() => void activeQuery.refetch()}
+  />;
 }
 
 function LiveArticlePage({
   articleId,
   onBack,
+  onRelatedQuiz,
 }: {
   articleId: number | null;
   onBack: () => void;
+  onRelatedQuiz: (quizId: number) => void;
 }) {
   const articleQuery = useLearningArticle(articleId ?? 0, Boolean(articleId));
   const complete = useCompleteArticle();
-  if (articleQuery.isPending)
-    return <LearningState state="loading" label="Loading article…" />;
-  if (articleQuery.isError || !articleQuery.data)
-    return (
-      <div className="stack">
-        <LearningState
-          state="error"
-          label="This article could not be loaded."
-          onRetry={() => void articleQuery.refetch()}
-        />
-        <button className="btn self-start" type="button" onClick={onBack}>
-          Back to Library
-        </button>
-      </div>
-    );
-  const article = articleQuery.data;
-  return (
-    <div className="stack">
-      <button
-        className="btn btn-small self-start"
-        type="button"
-        onClick={onBack}
-      >
-        <Icon name="back" className="h-4 w-4" /> Back to Library
-      </button>
-      <ArticleCard
-        article={article}
-        onComplete={() => complete.mutate({ articleId: article.id })}
-        pending={complete.isPending}
-        completed={false}
-        successMessage={
-          complete.isSuccess
-            ? `${complete.data.alreadyCompleted ? "Already completed" : "Completed"} — ${complete.data.pointsAwarded} points awarded.${complete.data.badgeAwards?.length ? ` Badge unlocked (${complete.data.badgeAwards.length}).` : ""}`
-            : undefined
-        }
-        errorMessage={
-          complete.isError
-            ? complete.error instanceof Error
-              ? complete.error.message
-              : "The article could not be completed."
-            : undefined
-        }
-      />
-    </div>
-  );
+  const quizzes = useQuizzes();
+  const toast = useGlobalToast();
+  const article = articleQuery.data ?? null;
+  const relatedQuiz = article?.relatedQuizId ? quizzes.data?.items.find((quiz) => quiz.id === article.relatedQuizId) : null;
+  const markCompleted = async () => {
+    if (!article) return;
+    try {
+      const result = await complete.mutateAsync({ articleId: article.id });
+      toast.success(result.alreadyCompleted ? "Already completed." : `Marked as completed.${result.pointsAwarded > 0 ? ` +${result.pointsAwarded} points.` : ""}`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "The article could not be completed.");
+    }
+  };
+  return <LibraryArticleDetail
+    article={article}
+    onBack={onBack}
+    onComplete={() => void markCompleted()}
+    relatedQuiz={relatedQuiz ? { id: relatedQuiz.id, title: relatedQuiz.title } : null}
+    onRelatedQuiz={onRelatedQuiz}
+    loading={articleQuery.isPending}
+    loadError={articleQuery.isError ? "This article could not be loaded." : null}
+    onRetry={() => void articleQuery.refetch()}
+    pending={complete.isPending}
+    completed={Boolean(article?.completed) || Boolean(complete.isSuccess && complete.variables?.articleId === article?.id && complete.data.completed)}
+    alreadyCompleted={Boolean(complete.isSuccess && complete.variables?.articleId === article?.id && complete.data.alreadyCompleted)}
+    errorMessage={complete.isError ? complete.error instanceof Error ? complete.error.message : "The article could not be completed." : null}
+  />;
 }
 
 function LiveRewardsPage() {
   const rewards = useRewards();
-  const redemptions = useRedemptions();
-  const request = useRequestRedemption();
   if (rewards.isPending)
     return (
       <div className="stack">
@@ -2040,7 +1941,7 @@ function LiveRewardsPage() {
         />
       </div>
     );
-  const { balance, level, redeemable, earned, badges } = rewards.data;
+  const { balance, level, catalogue, earned, badges } = rewards.data;
   return (
     <div className="stack">
       <Hero
@@ -2051,34 +1952,17 @@ function LiveRewardsPage() {
       <RewardsBalanceCard balance={balance} level={level} />
       <section className="stack">
         <SectionHeading
-          title="Rewards you can redeem"
-          detail={`${redeemable.length} available rewards`}
+          title="Rewards catalogue"
+          detail={`${catalogue.length} available rewards`}
         />
-        <RewardCatalogue
-          rewards={redeemable}
-          balance={balance.balance}
-          pendingRewardId={
-            request.isPending ? Number(request.variables?.rewardId) : undefined
-          }
-          onRedeem={(reward) => request.mutate({ rewardId: reward.id })}
-        />
-        {request.isError && (
-          <p
-            className="rounded-xl border border-pink/30 bg-pink/10 p-3 text-sm text-[#d6336c]"
-            role="alert"
-          >
-            {request.error instanceof Error
-              ? request.error.message
-              : "The redemption could not be created."}
-          </p>
-        )}
+        <RewardCatalogue rewards={catalogue} />
       </section>
       <section className="stack">
         <SectionHeading
           title="Earned recognition"
           detail="Milestones you have unlocked"
         />
-        <RewardCatalogue rewards={earned} balance={balance.balance} />
+        <RewardCatalogue rewards={earned} />
       </section>
       <section className="stack">
         <SectionHeading
@@ -2086,28 +1970,6 @@ function LiveRewardsPage() {
           detail="Recognition for the moments that move ideas forward"
         />
         <BadgeProgressList badges={badges} />
-      </section>
-      <section className="stack">
-        <SectionHeading
-          title="Redemption history"
-          detail="Your requests and fulfilment status"
-        />
-        {redemptions.isPending ? (
-          <RewardsState state="loading" />
-        ) : redemptions.isError ? (
-          <RewardsState
-            state="error"
-            label="Redemption history could not be loaded."
-            onRetry={() => void redemptions.refetch()}
-          />
-        ) : (
-          <RedemptionHistory
-            redemptions={redemptions.data?.items ?? []}
-            hasNextPage={Boolean(redemptions.hasNextPage)}
-            isLoadingMore={redemptions.isFetchingNextPage}
-            onLoadMore={() => void redemptions.fetchNextPage()}
-          />
-        )}
       </section>
     </div>
   );
@@ -2245,34 +2107,61 @@ function isProtectedViewProps(
 export default function Home(props: unknown) {
   const protectedView = isProtectedViewProps(props);
   const [signedIn, setSignedIn] = useState(protectedView);
+  const [adminPortalRole, setAdminPortalRole] = useState<"back_office" | "business_owner" | null>(null);
   const [page, setPage] = useState<Page>("community");
   const [selectedIdeaId, setSelectedIdeaId] = useState<number | null>(null);
+  const [selectedAnnouncementId, setSelectedAnnouncementId] = useState<number | null>(null);
+  const [selectedRecommendationTopic, setSelectedRecommendationTopic] = useState<string | null>(null);
   const [selectedArticleId, setSelectedArticleId] = useState<number | null>(
     null,
   );
+  const [selectedRelatedQuizId, setSelectedRelatedQuizId] = useState<number | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const mainRef = useRef<HTMLElement>(null);
+  const focusAfterNotification = useRef(false);
   const notificationsQuery = useEmployeeNotifications(signedIn);
-  const rewardsSummaryQuery = useRewards(signedIn);
+  const rewardsSummaryQuery = usePointsSummary(signedIn);
   const setNotificationRead = useSetEmployeeNotificationRead();
 
   useEffect(() => {
     if (protectedView) setSignedIn(true);
   }, [protectedView]);
-  const enter = async (details: { name: string; department: string }) => {
-    const response = await fetch("/api/demo/session", {
-      method: "POST",
-      credentials: "same-origin",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(details),
-    });
-    if (!response.ok)
-      throw new Error(
-        response.status === 403
-          ? "Demo entry is unavailable."
-          : "Unable to create a demo session. Please try again.",
-      );
-    window.location.assign("/private");
+  useEffect(() => {
+    if (!protectedView) return;
+    void getSession().then((session) => {
+      const role = session?.user?.role;
+      setAdminPortalRole(role === "back_office" || role === "business_owner" ? role : null);
+    }).catch(() => setAdminPortalRole(null));
+  }, [protectedView]);
+  useEffect(() => {
+    const restoreNotificationLocation = () => {
+      const destination = notificationLocation(window.location.search);
+      switch (destination.kind) {
+        case "idea": setSelectedIdeaId(destination.id); setPage("idea"); break;
+        case "announcement": setSelectedAnnouncementId(destination.id); setPage("announcement"); break;
+        case "feedback": setPage("feedback"); break;
+        case "recommendation": setSelectedRecommendationTopic(destination.topic); setPage("recommendation"); break;
+        default: setPage("community");
+      }
+    };
+    restoreNotificationLocation();
+    window.addEventListener("popstate", restoreNotificationLocation);
+    return () => window.removeEventListener("popstate", restoreNotificationLocation);
+  }, []);
+  const authenticate = async ({ email, password }: { email: string; password: string }) => {
+    const result = await signIn("credentials", { email, password, redirect: false });
+    if (!result || result.error || !result.ok) throw new Error("Invalid email or password.");
+    const refresh = await fetch("/api/auth/refresh", { method: "POST", credentials: "same-origin" });
+    if (!refresh.ok) throw new Error("Unable to establish a secure session.");
+    const session = await getSession();
+    if (!session?.user?.role) throw new Error("Unable to verify your account. Please sign in again.");
+    if (session?.user?.mustChangePassword) {
+      window.location.assign("/change-password");
+      return;
+    }
+    const destination = session?.user?.role === "employee" ? "/private" : "/private/admin";
+    window.location.assign(destination);
   };
   const signOut = async () => {
     await fetch("/api/auth/refresh", {
@@ -2281,7 +2170,8 @@ export default function Home(props: unknown) {
     });
     await authSignOut({ callbackUrl: "/login" });
   };
-  const navigate = (next: Page) => {
+  const navigate = (next: Page, preserveNotificationUrl = false) => {
+    if (!preserveNotificationUrl && window.location.search) window.history.pushState({}, "", window.location.pathname);
     setPage(next);
     setMenuOpen(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -2290,7 +2180,27 @@ export default function Home(props: unknown) {
     setSelectedIdeaId(id);
     navigate("idea");
   };
-  if (!signedIn) return <AuthLoginScreen onEnter={enter} />;
+  const openNotification = (notification: Notification) => {
+    const destination = notificationDestination(notification.target);
+    if (destination.kind === "none") return;
+    focusAfterNotification.current = true;
+    const fromDialog = notificationsOpen;
+    setNotificationsOpen(false);
+    if (!notification.isRead) setNotificationRead.mutate({ id: notification.id, read: true });
+    switch (destination.kind) {
+      case "idea": setSelectedIdeaId(destination.id); navigate("idea", true); break;
+      case "announcement": setSelectedAnnouncementId(destination.id); navigate("announcement", true); break;
+      case "feedback": navigate("feedback", true); break;
+      case "recommendation": setSelectedRecommendationTopic(destination.topic); navigate("recommendation", true); break;
+    }
+    if (notification.target.path) window.history.pushState({}, "", notification.target.path);
+    if (fromDialog) {
+      window.setTimeout(() => { if (focusAfterNotification.current) { mainRef.current?.focus(); focusAfterNotification.current = false; } }, 220);
+    } else {
+      requestAnimationFrame(() => { mainRef.current?.focus(); focusAfterNotification.current = false; });
+    }
+  };
+  if (!signedIn) return <AuthLoginScreen onCredentials={authenticate} />;
   const points = rewardsSummaryQuery.data?.balance.balance ?? 0;
   const pageContent =
     page === "community" ? (
@@ -2302,7 +2212,7 @@ export default function Home(props: unknown) {
     ) : page === "new" ? (
       <EmployeeIdeaSubmissionPage onOpenIdea={openIdea} />
     ) : page === "learn" ? (
-      <LiveLearnPage />
+      <LiveLearnPage key="learn" onArticle={(id) => { setSelectedArticleId(id); navigate("article"); }} />
     ) : page === "library" ? (
       <LiveLibraryPage
         onArticle={(id) => {
@@ -2314,18 +2224,25 @@ export default function Home(props: unknown) {
       <LiveArticlePage
         articleId={selectedArticleId}
         onBack={() => navigate("library")}
+        onRelatedQuiz={(quizId) => { setSelectedRelatedQuizId(quizId); navigate("quiz"); }}
       />
     ) : page === "idea" && selectedIdeaId ? (
       <EmployeeIdeaDetailPage
         ideaId={selectedIdeaId}
         onBack={() => navigate("community")}
       />
+    ) : page === "announcement" && selectedAnnouncementId ? (
+      <NotificationAnnouncementDetail id={selectedAnnouncementId} onBack={() => navigate("community")} />
+    ) : page === "feedback" ? (
+      <NotificationFeedbackDetail onBack={() => navigate("community")} />
+    ) : page === "recommendation" && selectedRecommendationTopic ? (
+      <NotificationRecommendationDetail topic={selectedRecommendationTopic} onArticle={(id) => { setSelectedArticleId(id); navigate("article"); }} onBack={() => navigate("library")} />
     ) : page === "rewards" ? (
       <LiveRewardsPage />
     ) : page === "me" ? (
       <AccountPage onNavigate={navigate} />
     ) : page === "quiz" ? (
-      <LiveLearnPage />
+      <LiveLearnPage key={`related-quiz-${selectedRelatedQuizId ?? "all"}`} relatedQuizId={selectedRelatedQuizId} onArticle={(id) => { setSelectedArticleId(id); navigate("article"); }} />
     ) : (
       <EmployeeCommunityPage
         points={points}
@@ -2333,15 +2250,17 @@ export default function Home(props: unknown) {
         onOpenIdea={openIdea}
       />
     );
+  const activeNavPage: Page = page === "feedback" ? "me" : page === "recommendation" ? "library" : page === "announcement" ? "community" : page;
   return (
     <div className="app-background min-h-screen">
-      <div className="grid min-h-screen lg:grid-cols-[240px_1fr]">
+      <div className="grid min-h-screen lg:grid-cols-[300px_1fr]">
         <SideNav
-          page={page}
+          page={activeNavPage}
           open={menuOpen}
           onClose={() => setMenuOpen(false)}
           onNavigate={navigate}
           onSignOut={signOut}
+          adminPortalRole={adminPortalRole}
         />
         <div className="min-w-0">
           <TopBar
@@ -2351,13 +2270,16 @@ export default function Home(props: unknown) {
             onMenu={() => setMenuOpen(true)}
             onNavigate={navigate}
             onNotifications={() => setNotificationsOpen(true)}
+            notificationsOpen={notificationsOpen}
           />
-          <main className="mx-auto w-full max-w-[1040px] px-3.5 pb-28 pt-[18px] sm:px-7 sm:pb-[70px] sm:pt-7">
-            {pageContent}
-          </main>
+          <NotificationNavigationProvider onOpen={openNotification}>
+            <main ref={mainRef} tabIndex={-1} className="mx-auto w-full max-w-[1230px] px-3.5 pb-28 pt-[18px] outline-none sm:px-7 sm:pb-[70px] sm:pt-9">
+              {pageContent}
+            </main>
+          </NotificationNavigationProvider>
         </div>
       </div>
-      <MobileNav page={page} onNavigate={navigate} />
+      <MobileNav page={activeNavPage} onNavigate={navigate} />
       <Notifications
         open={notificationsOpen}
         onClose={() => setNotificationsOpen(false)}
@@ -2372,6 +2294,8 @@ export default function Home(props: unknown) {
         onMarkAllRead={() =>
           setNotificationRead.mutate({ all: true, read: true })
         }
+        onMarkRead={(id) => setNotificationRead.mutate({ id, read: true })}
+        onOpenNotification={openNotification}
       />
       <div
         className="fixed inset-0 z-40 bg-navy/50 lg:hidden"

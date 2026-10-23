@@ -26,6 +26,10 @@ async function fixture() {
   const session = db.insert(refreshTokens).values({ userId: user.id, tokenHash: crypto.randomUUID(), expiresAt: new Date(Date.now() + 60000) }).returning().get();
   return { userId: user.id, sessionId: session.id };
 }
+test('accounts without an explicit forced-change policy default to not forced', async () => {
+  const actor = await fixture();
+  assert.equal(db.select().from(users).where(eq(users.id, actor.userId)).get()!.mustChangePassword, false);
+});
 test('wrong current password leaves hash and sessions intact, records failure', async () => {
   const actor = await fixture();
   await assert.rejects(changePassword(actor, { currentPassword: 'WrongPass1', newPassword: 'DifferentPass2' }), /incorrect/);
@@ -33,6 +37,19 @@ test('wrong current password leaves hash and sessions intact, records failure', 
   assert.equal(await verifyPassword(user.passwordHash, 'CurrentPass1'), true);
   assert.equal(user.failedLoginAttempts, 1);
   assert.equal(db.select().from(refreshTokens).where(eq(refreshTokens.id, actor.sessionId)).get()!.revokedAt, null);
+});
+test('successful authenticated password change transactionally clears a forced-change flag', async () => {
+  const actor = await fixture();
+  db.update(users).set({ mustChangePassword: true }).where(eq(users.id, actor.userId)).run();
+  await changePassword(actor, { currentPassword: 'CurrentPass1', newPassword: 'DifferentPass2' });
+  assert.equal(db.select().from(users).where(eq(users.id, actor.userId)).get()!.mustChangePassword, false);
+  assert.ok(db.select().from(refreshTokens).where(eq(refreshTokens.userId, actor.userId)).all().every(s => s.revokedAt));
+});
+test('failed password change leaves the forced-change flag set', async () => {
+  const actor = await fixture();
+  db.update(users).set({ mustChangePassword: true }).where(eq(users.id, actor.userId)).run();
+  await assert.rejects(changePassword(actor, { currentPassword: 'WrongPass1', newPassword: 'DifferentPass2' }), /incorrect/);
+  assert.equal(db.select().from(users).where(eq(users.id, actor.userId)).get()!.mustChangePassword, true);
 });
 test('change hashes password, revokes every session, audits without secrets and blocks replay', async () => {
   const actor = await fixture();

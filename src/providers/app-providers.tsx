@@ -6,6 +6,7 @@ import { Provider } from "react-redux";
 import { SessionProvider } from "next-auth/react";
 import { createQueryClient } from "../lib/query/query-client";
 import { makeStore } from "../store";
+import { GlobalToastProvider } from "../components/ui/global-toast";
 
 export function AppProviders({ children }: { children: ReactNode }) {
   // Instance-local lazy initialization isolates SSR requests and survives rerenders.
@@ -14,7 +15,8 @@ export function AppProviders({ children }: { children: ReactNode }) {
 
   return createElement(SessionProvider, null,
     createElement(Provider, { store, children:
-      createElement(QueryClientProvider, { client: queryClient }, children),
+      createElement(QueryClientProvider, { client: queryClient },
+        createElement(GlobalToastProvider, null, children)),
     }),
   );
 }

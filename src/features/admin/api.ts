@@ -6,7 +6,6 @@ import type {
   AdminFeedbackResponse,
   AdminIdea,
   AdminQuiz,
-  AdminRedemption,
   AdminReward,
   AdminSettings,
   AdminUser,
@@ -24,39 +23,17 @@ export function listAdminChallenges() {
 }
 
 export async function listAdminRewards() {
-  const response = await apiFetch<AdminReward[] | ListResponse<AdminReward>>(
-    "/api/admin/rewards",
-  );
+  const response = await apiFetch<AdminReward[] | ListResponse<AdminReward>>("/api/admin/rewards");
   return Array.isArray(response) ? response : response.items;
 }
-export type AdminRewardInput = Pick<
-  AdminReward,
-  "name" | "description" | "kind" | "cost" | "emoji" | "active"
-> & { reason: string };
+export type AdminRewardInput = Pick<AdminReward, "name" | "description" | "kind" | "cost" | "emoji" | "active"> & { reason: string };
 export function createAdminReward(input: AdminRewardInput) {
-  return apiFetch<{ reward: AdminReward; version: unknown }>(
-    "/api/admin/rewards",
-    {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(input),
-    },
-  );
+  return apiFetch<{ reward: AdminReward; version: unknown }>("/api/admin/rewards", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(input) });
 }
 export function updateAdminReward(id: number, input: AdminRewardInput) {
-  return apiFetch<{ reward: AdminReward; version: unknown }>(
-    `/api/admin/rewards/${id}`,
-    {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(input),
-    },
-  );
+  return apiFetch<{ reward: AdminReward; version: unknown }>(`/api/admin/rewards/${id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(input) });
 }
 
-export function listAdminRedemptions() {
-  return apiFetch<Paginated<AdminRedemption>>("/api/admin/rewards/redemptions");
-}
 export function listAdminUsers() {
   return apiFetch<{ items: AdminUser[]; nextAfter: number | null }>(
     "/api/admin/users?limit=50",
@@ -89,6 +66,7 @@ export function getAdminAnalytics() {
     usersByState: Array<{ state: string; count: number }>;
     ideasByStatus: Array<{ status: string; count: number }>;
     ideasByPriority: Array<{ band: string | null; count: number }>;
+    ideasByDepartment: Array<{ department: string; count: number }>;
     usersByDepartment: Array<{ department: string; count: number }>;
     points: { total: number; events: number };
     learning: {
@@ -109,14 +87,32 @@ export function adminExportUrl(
   params.set("limit", "1000");
   return `/api/admin/${kind}/export?${params}`;
 }
-export function listAdminScreening() {
-  return apiFetch<{ items: AdminIdea[]; nextAfter: number | null }>(
-    "/api/admin/governance/queues/screening?limit=50",
+export function listAdminScreening(limit = 50, after: number | null = null) {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (after !== null) params.set("after", String(after));
+  return apiFetch<{ items: AdminIdea[]; nextAfter: number | null; total: number }>(
+    `/api/admin/governance/queues/screening?${params}`,
   );
 }
-export function listAdminTransformation() {
+export function listAdminTransformation(limit = 50, after: number | null = null) {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (after !== null) params.set("after", String(after));
+  return apiFetch<{ items: AdminIdea[]; nextAfter: number | null; total: number }>(
+    `/api/admin/governance/queues/transformation?${params}`,
+  );
+}
+export function listAdminDelivery(after: number | null = null) {
+  const params = new URLSearchParams({ limit: "10" });
+  if (after !== null) params.set("after", String(after));
   return apiFetch<{ items: AdminIdea[]; nextAfter: number | null }>(
-    "/api/admin/governance/queues/transformation?limit=50",
+    `/api/admin/governance/queues/delivery?${params}`,
+  );
+}
+export function listAdminBusinessOwners(limit = 100, after: number | null = null) {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (after !== null) params.set("after", String(after));
+  return apiFetch<{ items: Array<{ id: number; name: string; department: string }>; nextAfter: number | null }>(
+    `/api/admin/governance/owners?${params}`,
   );
 }
 export function getAdminSettings() {
@@ -151,19 +147,23 @@ export type GovernanceAction =
   | "return"
   | "reject"
   | "defer"
+  | "accept"
   | "approve"
   | "not_recommended"
-  | "confirm";
+  | "confirm"
+  | "start_implementation"
+  | "mark_implemented";
 export function decideAdminIdea(
   ideaId: number,
   action: GovernanceAction,
   reason: string,
   businessOwnerId?: number,
+  controlName?: string,
 ) {
   return apiFetch(`/api/admin/governance/ideas/${ideaId}/decision`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ action, reason, businessOwnerId }),
+    body: JSON.stringify({ action, reason, businessOwnerId, controlName }),
   });
 }
 export type EvaluationAction = "approve" | "return" | "not_recommended";
@@ -171,38 +171,22 @@ export function decideAdminEvaluation(
   ideaId: number,
   action: EvaluationAction,
   reason: string,
+  controlName?: string,
 ) {
-  return decideAdminIdea(ideaId, action, reason);
+  return decideAdminIdea(ideaId, action, reason, undefined, controlName);
 }
-export type RedemptionAction = "fulfill" | "cancel";
-export function actOnAdminRedemption(
-  id: number,
-  action: RedemptionAction,
-  reason: string,
-  idempotencyKey: string,
-) {
-  return apiFetch(`/api/admin/rewards/redemptions/${id}/${action}`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "Idempotency-Key": idempotencyKey,
-    },
-    body: JSON.stringify({ reason }),
-  });
-}
-
 export const adminQueryKeys = {
   all: ["admin"] as const,
   quizzes: ["admin", "quizzes"] as const,
   challenges: ["admin", "challenges"] as const,
   rewards: ["admin", "rewards"] as const,
-  redemptions: ["admin", "rewards", "redemptions"] as const,
   users: ["admin", "users"] as const,
   audit: (filters: AdminAuditFilters = {}) =>
     ["admin", "audit", filters] as const,
   analytics: ["admin", "analytics"] as const,
   screening: ["admin", "governance", "screening"] as const,
   transformation: ["admin", "governance", "transformation"] as const,
+  delivery: ["admin", "governance", "delivery"] as const,
   settings: ["admin", "settings"] as const,
   evaluations: ["admin", "governance", "evaluations"] as const,
   evaluation: (ideaId: number) =>

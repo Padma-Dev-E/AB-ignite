@@ -1,9 +1,9 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { completeArticle, getArticle, getArticleInsight, getQuizAttempt, joinChallenge, listArticles, listChallenges, listJourney, listQuizzes, listRankings, redeemableRecommendations, startQuizAttempt, submitQuizAttempt } from "./api";
+import { completeArticle, getArticle, getArticleInsight, getQuizAttempt, joinChallenge, listArticles, listChallenges, listJourney, listQuizzes, listRankings, recommendedArticles, startQuizAttempt, submitQuizAttempt } from "./api";
 import type { QuizAnswer } from "./types";
-import { refreshEmployeeRewards } from "../rewards/hooks";
+import { refreshPointsSummary } from "../points/hooks";
 
 export const learningQueryKeys = {
   all: ["learning"] as const,
@@ -20,7 +20,7 @@ export const learningQueryKeys = {
 export function useQuizzes() { return useQuery({ queryKey: learningQueryKeys.quizzes(), queryFn: listQuizzes }); }
 export function useLearningJourney() { return useQuery({ queryKey: learningQueryKeys.journey(), queryFn: listJourney }); }
 export function useArticles(category?: string) { return useQuery({ queryKey: learningQueryKeys.articles(category), queryFn: () => listArticles({ category }) }); }
-export function useLearningRecommendations() { return useQuery({ queryKey: learningQueryKeys.recommendations(), queryFn: redeemableRecommendations }); }
+export function useLearningRecommendations() { return useQuery({ queryKey: learningQueryKeys.recommendations(), queryFn: recommendedArticles }); }
 export function useLearningRankings(scope: "bank" | "department") { return useQuery({ queryKey: learningQueryKeys.rankings(scope), queryFn: () => listRankings(scope) }); }
 export function useLearningChallenges() { return useQuery({ queryKey: learningQueryKeys.challenges(), queryFn: listChallenges }); }
 export function useLearningArticle(id: number, enabled = true) { return useQuery({ queryKey: learningQueryKeys.article(id), queryFn: () => getArticle(id), enabled: enabled && id > 0 }); }
@@ -41,16 +41,21 @@ export function useStartQuizAttempt() {
 }
 export function useSubmitQuizAttempt() {
   const client = useQueryClient();
-  return useMutation({ mutationFn: ({ attemptId, answers }: { attemptId: number; answers: QuizAnswer[] }) => submitQuizAttempt(attemptId, answers), onSuccess: (_data, variables) => { void client.invalidateQueries({ queryKey: learningQueryKeys.attempt(variables.attemptId) }); void client.invalidateQueries({ queryKey: learningQueryKeys.journey() }); void refreshEmployeeRewards(client); } });
+  return useMutation({ mutationFn: ({ attemptId, answers }: { attemptId: number; answers: QuizAnswer[] }) => submitQuizAttempt(attemptId, answers), onSuccess: (data, variables) => {
+    client.setQueryData<import("./types").AttemptResponse>(learningQueryKeys.attempt(variables.attemptId), (current) => current ? { ...current, attempt: { ...current.attempt, status: data.result.status }, result: data.result } : current);
+    void client.invalidateQueries({ queryKey: learningQueryKeys.attempt(variables.attemptId) });
+    void client.invalidateQueries({ queryKey: learningQueryKeys.journey() });
+    void refreshPointsSummary(client);
+  } });
 }
 export function useCompleteArticle() {
   const client = useQueryClient();
   return useMutation({
     mutationFn: ({ articleId, idempotencyKey = createIdempotencyKey("article-read", articleId) }: { articleId: number; idempotencyKey?: string }) => completeArticle(articleId, idempotencyKey),
-    onSuccess: (_data, variables) => { void client.invalidateQueries({ queryKey: learningQueryKeys.article(variables.articleId) }); void client.invalidateQueries({ queryKey: learningQueryKeys.recommendations() }); void client.invalidateQueries({ queryKey: learningQueryKeys.journey() }); void refreshEmployeeRewards(client); },
+    onSuccess: (_data, variables) => { void client.invalidateQueries({ queryKey: learningQueryKeys.article(variables.articleId) }); void client.invalidateQueries({ queryKey: learningQueryKeys.recommendations() }); void client.invalidateQueries({ queryKey: learningQueryKeys.journey() }); void refreshPointsSummary(client); },
   });
 }
 export function useJoinChallenge() {
   const client = useQueryClient();
-  return useMutation({ mutationFn: ({ challengeId, idempotencyKey = createIdempotencyKey("challenge", challengeId) }: { challengeId: number; idempotencyKey?: string }) => joinChallenge(challengeId, idempotencyKey), onSuccess: () => { void client.invalidateQueries({ queryKey: learningQueryKeys.challenges() }); void client.invalidateQueries({ queryKey: ["rewards"] }); void client.invalidateQueries({ queryKey: learningQueryKeys.journey() }); } });
+  return useMutation({ mutationFn: ({ challengeId, idempotencyKey = createIdempotencyKey("challenge", challengeId) }: { challengeId: number; idempotencyKey?: string }) => joinChallenge(challengeId, idempotencyKey), onSuccess: () => { void client.invalidateQueries({ queryKey: learningQueryKeys.challenges() }); void client.invalidateQueries({ queryKey: ["rewards"] }); void client.invalidateQueries({ queryKey: learningQueryKeys.journey() }); void refreshPointsSummary(client); } });
 }

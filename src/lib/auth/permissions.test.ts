@@ -2,55 +2,20 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   CAPABILITIES,
-  capabilitiesForProfile,
-  profileHasCapability,
+  capabilitiesForRole,
+  hasCapability,
 } from "./permissions";
 
-test("six profiles grant only their intended server capabilities", () => {
-  assert.deepEqual(capabilitiesForProfile("employee"), [
+test("three account roles grant only their intended server capabilities", () => {
+  assert.deepEqual(capabilitiesForRole("employee"), [
     CAPABILITIES.IDEAS_READ,
     CAPABILITIES.IDEAS_WRITE,
     CAPABILITIES.PROFILE_READ,
   ]);
-  assert.equal(
-    profileHasCapability("reviewer", CAPABILITIES.GOVERNANCE_MANAGE),
-    true,
-  );
-  assert.equal(
-    profileHasCapability("business_owner", CAPABILITIES.GOVERNANCE_MANAGE),
-    true,
-  );
-  assert.equal(
-    profileHasCapability("control", CAPABILITIES.GOVERNANCE_MANAGE),
-    true,
-  );
-  assert.equal(
-    profileHasCapability("management", CAPABILITIES.GOVERNANCE_MANAGE),
-    false,
-  );
-  assert.equal(
-    profileHasCapability("management", CAPABILITIES.REWARDS_MANAGE),
-    true,
-  );
-  assert.equal(
-    profileHasCapability("management", CAPABILITIES.AUDIT_EXPORT),
-    true,
-  );
-  for (const profile of [
-    "employee",
-    "reviewer",
-    "business_owner",
-    "control",
-    "management",
-  ] as const) {
-    assert.equal(
-      profileHasCapability(profile, CAPABILITIES.USERS_MANAGE),
-      false,
-    );
-    assert.equal(
-      profileHasCapability(profile, CAPABILITIES.SETTINGS_MANAGE),
-      false,
-    );
-  }
-  assert.equal(profileHasCapability("admin", CAPABILITIES.USERS_MANAGE), true);
+  assert.equal(hasCapability("business_owner", CAPABILITIES.GOVERNANCE_MANAGE), true);
+  assert.equal(hasCapability("business_owner", CAPABILITIES.USERS_MANAGE), false);
+  assert.equal(hasCapability("employee", CAPABILITIES.GOVERNANCE_MANAGE), false);
+  assert.equal(hasCapability("back_office", CAPABILITIES.USERS_MANAGE), true);
+  assert.equal(hasCapability("back_office", CAPABILITIES.SETTINGS_MANAGE), true);
+  assert.deepEqual(capabilitiesForRole("back_office"), Object.values(CAPABILITIES));
 });

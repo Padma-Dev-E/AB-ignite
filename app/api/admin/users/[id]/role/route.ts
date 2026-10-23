@@ -6,7 +6,7 @@ import { changeUserRole } from "../../../../../../src/lib/admin/service";
 import { requestAuditMetadata } from "../../../../../../src/lib/rewards/http";
 import { ok, requestId } from "../../../../../../src/lib/http/errors";
 
-const inputSchema = z.strictObject({ role: z.enum(["employee", "reviewer", "business_owner", "control", "management", "admin"]), reason: z.unknown() });
+const inputSchema = z.strictObject({ role: z.enum(["employee", "back_office", "business_owner"]), reason: z.unknown() });
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const id = requestId(request);

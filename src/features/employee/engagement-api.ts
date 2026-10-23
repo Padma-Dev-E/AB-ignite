@@ -24,6 +24,12 @@ export type Notification = {
   title: string;
   body: string;
   link: string | null;
+  target: {
+    type: "idea" | "announcement" | "feedback" | "learning" | "none";
+    id: number | null;
+    path: string | null;
+    available: boolean;
+  };
   isRead: boolean;
   createdAt: string;
 };
@@ -34,6 +40,14 @@ export type NotificationListResponse = {
   total: number;
   totalPages: number;
   unreadCount: number;
+  nextCursor: string | null;
+};
+
+export type NotificationAnnouncement = {
+  id: number;
+  title: string;
+  body: string;
+  publishedAt: string;
 };
 
 export function getFeedbackCampaign() {
@@ -53,10 +67,16 @@ export function submitFeedback(input: {
     body: JSON.stringify(input),
   });
 }
-export function getNotifications(page = 1, pageSize = 20) {
+export function getNotifications(page = 1, pageSize = 20, cursor?: string) {
+  const query = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+  if (cursor) query.set("cursor", cursor);
   return apiFetch<NotificationListResponse>(
-    `/api/notifications?page=${page}&pageSize=${pageSize}`,
+    `/api/notifications?${query}`,
   );
+}
+
+export function getNotificationAnnouncement(id: number) {
+  return apiFetch<NotificationAnnouncement>(`/api/announcements/${id}`);
 }
 export function updateNotificationRead(input: {
   id?: number;

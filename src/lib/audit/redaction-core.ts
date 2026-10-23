@@ -14,6 +14,7 @@ const ALLOWED_METADATA_KEYS = new Set([
   "reasonCode",
   "resourceType",
   "resourceId",
+  "controlName",
   "permission",
   "provider",
   "requestId",

@@ -16,7 +16,7 @@ const announcementSchema = z.strictObject({ title: z.string().trim().min(1).max(
 function verify(tx: Tx, actor: Actor, now: Date) {
   const user = tx.select().from(users).where(eq(users.id, actor.userId)).get();
   const session = tx.select().from(refreshTokens).where(eq(refreshTokens.id, actor.sessionId)).get();
-  if (!user || (user.role !== "admin" && user.profile !== "admin") || !user.isActive || !session || session.userId !== user.id || !isSessionActive(session, user, now)) throw new AuthorizationError("Administrator session is no longer valid.");
+  if (!user || user.role !== "back_office" || !user.isActive || !session || session.userId !== user.id || !isSessionActive(session, user, now)) throw new AuthorizationError("Administrator session is no longer valid.");
 }
 function mutate<T extends { id: number }>(actor: Actor, action: string, id: number | null, key: string, data: unknown, change: (tx: Tx, now: Date) => T) {
   const reason = requirePrivilegedReason(actor.reason);
@@ -58,7 +58,7 @@ export function setAnnouncementPinned(actor: Actor, announcementId: number, pinn
     if (row.pinned === pinned) return row;
     if (pinned) tx.update(announcements).set({ pinned: false, updatedAt: now }).where(and(eq(announcements.pinned, true), sql`${announcements.id} <> ${announcementId}`)).run();
     const changed = tx.update(announcements).set({ pinned, updatedAt: now }).where(eq(announcements.id, announcementId)).returning().get();
-    if (pinned) for (const user of tx.select({ id: users.id }).from(users).where(and(eq(users.profile, "employee"), eq(users.isActive, true))).all()) tx.insert(notifications).values({ userId: user.id, type: "announcement_published", title: changed.title, body: changed.body, link: `/announcements/${changed.id}`, createdAt: now, updatedAt: now }).run();
+    if (pinned) for (const user of tx.select({ id: users.id }).from(users).where(and(eq(users.role, "employee"), eq(users.isActive, true))).all()) tx.insert(notifications).values({ userId: user.id, type: "announcement_published", title: changed.title, body: changed.body, link: `/announcements/${changed.id}`, createdAt: now, updatedAt: now }).run();
     return changed;
   });
 }
@@ -67,11 +67,11 @@ export function setCampaignActive(actor: Actor, campaignId: number, active: bool
   return mutate(actor, "campaign.lifecycle", campaignId, key, { active }, (tx, now) => {
     const row = tx.select().from(feedbackCampaigns).where(eq(feedbackCampaigns.id, campaignId)).get();
     if (!row) throw new AdminNotFoundError("Campaign not found.");
-    if (!active && row.active && row.pinned) tx.update(feedbackCampaigns).set({ active: false, pinned: false, updatedAt: now }).where(eq(feedbackCampaigns.id, campaignId)).run();
-    else if (active && row.endsAt && row.endsAt <= now) throw new AdminConflictError("Expired campaign cannot be opened.");
-    else tx.update(feedbackCampaigns).set({ active, updatedAt: now }).where(eq(feedbackCampaigns.id, campaignId)).run();
+    if (active && row.endsAt && row.endsAt <= now) throw new AdminConflictError("Expired campaign cannot be opened.");
+    if (active) tx.update(feedbackCampaigns).set({ pinned: false, updatedAt: now }).where(and(eq(feedbackCampaigns.pinned, true), sql`${feedbackCampaigns.id} <> ${campaignId}`)).run();
+    tx.update(feedbackCampaigns).set({ active, pinned: active, updatedAt: now }).where(eq(feedbackCampaigns.id, campaignId)).run();
     const result = tx.select().from(feedbackCampaigns).where(eq(feedbackCampaigns.id, campaignId)).get()!;
-    if (row.active !== active && active) for (const user of tx.select({ id: users.id }).from(users).where(and(eq(users.profile, "employee"), eq(users.isActive, true))).all()) tx.insert(notifications).values({ userId: user.id, type: "feedback_campaign_opened", title: "A feedback campaign is open", body: result.title, link: "/private/feedback", createdAt: now, updatedAt: now }).run();
+    if (row.active !== active && active) for (const user of tx.select({ id: users.id }).from(users).where(and(eq(users.role, "employee"), eq(users.isActive, true))).all()) tx.insert(notifications).values({ userId: user.id, type: "feedback_campaign_opened", title: "A feedback campaign is open", body: result.title, link: "/private/feedback", createdAt: now, updatedAt: now }).run();
     return result;
   });
 }

@@ -10,11 +10,11 @@ export const users = sqliteTable("users", {
   id: integer().primaryKey({ autoIncrement: true }),
   name: text().notNull(),
   email: text().notNull(),
-  role: text({ enum: ["admin", "user"] }).notNull().default("user"),
-  profile: text({ enum: ["employee", "reviewer", "business_owner", "control", "management", "admin"] }).notNull().default("employee"),
+  role: text({ enum: ["employee", "back_office", "business_owner"] }).notNull().default("employee"),
   department: text().notNull().default("Other"),
   jobTitle: text(),
   passwordHash: text().notNull(),
+  mustChangePassword: integer({ mode: "boolean" }).notNull().default(false),
   isActive: integer({ mode: "boolean" }).notNull().default(true),
   failedLoginAttempts: integer().notNull().default(0),
   lockedUntil: integer({ mode: "timestamp_ms" }),
@@ -78,10 +78,10 @@ export const ideas = sqliteTable("ideas", {
   benefits: text(),
   risks: text(),
   category: text().notNull(),
-  status: text({ enum: ["screening", "returned", "business_review", "control_review", "decision", "poc", "implementation", "implemented", "rejected", "deferred"] }).notNull().default("screening"),
+  status: text({ enum: ["draft", "screening", "returned", "business_review", "control_review", "decision", "poc", "implementation", "implemented", "rejected", "deferred"] }).notNull().default("screening"),
   assignedUserId: integer().references(() => users.id, { onDelete: "set null" }),
   dueAt: integer({ mode: "timestamp_ms" }),
-  priorityBand: text({ enum: ["Watch", "Qualify", "Priority"] }),
+  priorityBand: text({ enum: ["Watch", "Quality", "Priority"] }),
   priorityScore: real(),
   reference: text().notNull(),
   challengeId: integer(),
@@ -124,6 +124,9 @@ export const ideaSubmissions = sqliteTable("idea_submissions", {
   score: real().notNull(),
   minimumScore: real().notNull(),
   validationPassed: integer({ mode: "boolean" }).notNull().default(false),
+  aiValidationScore: real(),
+  aiValidationAttempts: integer().notNull().default(0),
+  submittedWithLowAiScore: integer({ mode: "boolean" }).notNull().default(false),
   differentiation: text(),
   submittedAt: integer({ mode: "timestamp_ms" }),
   ...timestamps,
@@ -523,15 +526,6 @@ export const rewards = sqliteTable("rewards", {
   ...timestamps,
 });
 
-export const userRewards = sqliteTable("user_rewards", {
-  id: integer().primaryKey({ autoIncrement: true }),
-  userId: integer().notNull().references(() => users.id, { onDelete: "cascade" }),
-  rewardId: integer().notNull().references(() => rewards.id, { onDelete: "cascade" }),
-  status: text().notNull().default("earned"),
-  redeemedAt: integer({ mode: "timestamp_ms" }),
-  ...timestamps,
-}, (table) => [uniqueIndex("user_rewards_user_reward_unique").on(table.userId, table.rewardId)]);
-
 export const pointRules = sqliteTable("point_rules", {
   id: integer().primaryKey({ autoIncrement: true }),
   code: text().notNull(),
@@ -565,7 +559,6 @@ export const pointsBalances = sqliteTable("points_balances", {
   userId: integer().primaryKey().references(() => users.id, { onDelete: "cascade" }),
   balance: integer().notNull().default(0),
   totalEarned: integer().notNull().default(0),
-  totalSpent: integer().notNull().default(0),
   updatedAt: integer({ mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
 });
 
@@ -605,6 +598,17 @@ export const userBadges = sqliteTable("user_badges", {
   index("user_badges_user_awarded_idx").on(table.userId, table.awardedAt),
 ]);
 
+export const badgeAdminOperations = sqliteTable("badge_admin_operations", {
+  id: integer().primaryKey({ autoIncrement: true }),
+  keyHash: text().notNull(),
+  actorUserId: integer().notNull().references(() => users.id, { onDelete: "restrict" }),
+  badgeId: integer().notNull().references(() => badges.id, { onDelete: "restrict" }),
+  action: text({ enum: ["create", "update"] }).notNull(),
+  requestHash: text().notNull(),
+  responseJson: text().notNull(),
+  createdAt: integer({ mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
+}, (table) => [uniqueIndex("badge_admin_operations_key_unique").on(table.keyHash)]);
+
 export const rewardVersions = sqliteTable("reward_versions", {
   id: integer().primaryKey({ autoIncrement: true }),
   rewardId: integer().notNull().references(() => rewards.id, { onDelete: "cascade" }),
@@ -622,50 +626,12 @@ export const rewardVersions = sqliteTable("reward_versions", {
   index("reward_versions_reward_created_idx").on(table.rewardId, table.createdAt),
 ]);
 
-export const redemptions = sqliteTable("redemptions", {
-  id: integer().primaryKey({ autoIncrement: true }),
-  userId: integer().notNull().references(() => users.id, { onDelete: "cascade" }),
-  rewardId: integer().notNull().references(() => rewards.id, { onDelete: "restrict" }),
-  rewardVersionId: integer().notNull().references(() => rewardVersions.id, { onDelete: "restrict" }),
-  rewardName: text().notNull(),
-  rewardDescription: text(),
-  cost: integer().notNull(),
-  status: text({ enum: ["requested", "fulfilled", "cancelled"] }).notNull().default("requested"),
-  idempotencyKey: text().notNull(),
-  requestedAt: integer({ mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
-  fulfilledAt: integer({ mode: "timestamp_ms" }),
-  cancelledAt: integer({ mode: "timestamp_ms" }),
-  handledBy: integer().references(() => users.id, { onDelete: "set null" }),
-  cancellationReason: text(),
-  ...timestamps,
-}, (table) => [
-  uniqueIndex("redemptions_idempotency_unique").on(table.idempotencyKey),
-  index("redemptions_user_created_idx").on(table.userId, table.createdAt),
-  index("redemptions_status_created_idx").on(table.status, table.createdAt),
-]);
-
-export const rewardEvents = sqliteTable("reward_events", {
-  id: integer().primaryKey({ autoIncrement: true }),
-  redemptionId: integer().notNull().references(() => redemptions.id, { onDelete: "cascade" }),
-  actorUserId: integer().references(() => users.id, { onDelete: "set null" }),
-  eventType: text().notNull(),
-  fromStatus: text(),
-  toStatus: text(),
-  idempotencyKey: text().notNull(),
-  metadataJson: text(),
-  createdAt: integer({ mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
-}, (table) => [
-  uniqueIndex("reward_events_idempotency_unique").on(table.idempotencyKey),
-  index("reward_events_redemption_created_idx").on(table.redemptionId, table.createdAt),
-]);
-
 export const usersRelations = relations(users, ({ many }) => ({
   ideas: many(ideas),
   ideaVersions: many(ideaVersions),
   comments: many(ideaComments),
   notifications: many(notifications),
   supports: many(ideaSupports),
-  rewards: many(userRewards),
   refreshTokens: many(refreshTokens),
   auditEvents: many(auditEvents),
   aiRuns: many(aiRuns),
@@ -748,11 +714,6 @@ export const notificationsRelations = relations(notifications, ({ one }) => ({
   user: one(users, { fields: [notifications.userId], references: [users.id] }),
 }));
 
-export const userRewardsRelations = relations(userRewards, ({ one }) => ({
-  user: one(users, { fields: [userRewards.userId], references: [users.id] }),
-  reward: one(rewards, { fields: [userRewards.rewardId], references: [rewards.id] }),
-}));
-
 export const pointRulesRelations = relations(pointRules, () => ({}));
 
 export const pointsLedgerRelations = relations(pointsLedger, ({ one }) => ({
@@ -774,23 +735,9 @@ export const userBadgesRelations = relations(userBadges, ({ one }) => ({
   badge: one(badges, { fields: [userBadges.badgeId], references: [badges.id] }),
 }));
 
-export const rewardVersionsRelations = relations(rewardVersions, ({ one, many }) => ({
+export const rewardVersionsRelations = relations(rewardVersions, ({ one }) => ({
   reward: one(rewards, { fields: [rewardVersions.rewardId], references: [rewards.id] }),
   creator: one(users, { fields: [rewardVersions.createdBy], references: [users.id] }),
-  redemptions: many(redemptions),
-}));
-
-export const redemptionsRelations = relations(redemptions, ({ one, many }) => ({
-  user: one(users, { fields: [redemptions.userId], references: [users.id] }),
-  reward: one(rewards, { fields: [redemptions.rewardId], references: [rewards.id] }),
-  rewardVersion: one(rewardVersions, { fields: [redemptions.rewardVersionId], references: [rewardVersions.id] }),
-  handler: one(users, { fields: [redemptions.handledBy], references: [users.id] }),
-  events: many(rewardEvents),
-}));
-
-export const rewardEventsRelations = relations(rewardEvents, ({ one }) => ({
-  redemption: one(redemptions, { fields: [rewardEvents.redemptionId], references: [redemptions.id] }),
-  actor: one(users, { fields: [rewardEvents.actorUserId], references: [users.id] }),
 }));
 
 export const quizCategoriesRelations = relations(quizCategories, ({ many }) => ({
@@ -885,22 +832,19 @@ export const schema = {
   quizChallenges,
   quizChallengeParticipants,
   rewards,
-  userRewards,
   pointRules,
   pointsLedger,
   pointsBalances,
   levels,
   badges,
   userBadges,
+  badgeAdminOperations,
   rewardVersions,
-  redemptions,
-  rewardEvents,
 };
 
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
-export type UserRole = "admin" | "user";
-export type UserProfile = "employee" | "reviewer" | "business_owner" | "control" | "management" | "admin";
+export type UserRole = "employee" | "back_office" | "business_owner";
 export type AuditEvent = typeof auditEvents.$inferSelect;
 export type Idea = typeof ideas.$inferSelect;
 export type NewIdea = typeof ideas.$inferInsert;
@@ -921,8 +865,6 @@ export type Level = typeof levels.$inferSelect;
 export type Badge = typeof badges.$inferSelect;
 export type UserBadge = typeof userBadges.$inferSelect;
 export type RewardVersion = typeof rewardVersions.$inferSelect;
-export type Redemption = typeof redemptions.$inferSelect;
-export type RewardEvent = typeof rewardEvents.$inferSelect;
 export type QuizCategory = typeof quizCategories.$inferSelect;
 export type QuizVersion = typeof quizVersions.$inferSelect;
 export type QuizQuestion = typeof quizQuestions.$inferSelect;

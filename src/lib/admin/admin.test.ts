@@ -10,6 +10,14 @@ test("page parsing rejects unbounded and malformed requests", () => {
   assert.throws(() => parsePage(new URL("https://example.test/?after=1x"), 100));
 });
 
+test("directory query accepts bounded search and rejects blank or excessive text", async () => {
+  const { directoryQuery } = await import("./query");
+  assert.equal(directoryQuery(new URL("https://example.test/?q=Alice%20Smith")), "Alice Smith");
+  assert.equal(directoryQuery(new URL("https://example.test/")), null);
+  assert.throws(() => directoryQuery(new URL("https://example.test/?q=%20%20")));
+  assert.throws(() => directoryQuery(new URL(`https://example.test/?q=${"a".repeat(121)}`)));
+});
+
 test("audit CSV escapes formulas, quotes, and line breaks", () => {
   const csv = csvForAudit([{ id: 1, createdAt: new Date("2026-10-23T12:00:00Z"), actorUserId: 2, sessionId: 3, action: "=SUM(1)", targetType: "user", targetId: "4", reason: "a\"b\nnext", metadata: { status: "ok" }, ipHash: "deadbeef" }]);
   assert.match(csv, /^id,createdAt,actorUserId,sessionId,action,targetType,targetId,reason,metadata,ipHash\r\n/);

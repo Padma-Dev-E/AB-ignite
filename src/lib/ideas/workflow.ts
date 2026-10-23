@@ -5,13 +5,13 @@ import { getAiJob } from "../ai/registry";
 import { getAiConfig } from "../ai/config-core";
 import "../ai/jobs";
 import type { AiActor } from "../ai/types";
-import type { UserProfile } from "../auth/permissions";
+import type { UserRole } from "../auth/permissions";
 import { appendIdeaEvent, createAiRun, getAuthorizedIdeaSnapshot } from "./repository";
 
 export type IdeaStatus = "screening" | "returned" | "business_review" | "control_review" | "decision" | "poc" | "implementation" | "implemented" | "rejected" | "deferred";
 
 const transitions: Record<IdeaStatus, IdeaStatus[]> = {
-  screening: ["returned", "business_review", "control_review"],
+  screening: ["returned", "business_review", "control_review", "poc"],
   returned: ["screening", "business_review"],
   business_review: ["returned", "control_review", "decision"],
   control_review: ["returned", "decision"],
@@ -23,16 +23,14 @@ const transitions: Record<IdeaStatus, IdeaStatus[]> = {
   deferred: ["screening", "decision"],
 };
 
-export type IdeaWorkflowActor = { kind: "admin" | "user" | "system" | "ai" | UserProfile; id?: string };
+export type IdeaWorkflowActor = { kind: "system" | "ai" | UserRole; id?: string };
 
 export function canTransitionIdeaStatus(actor: IdeaWorkflowActor, from: IdeaStatus, to: IdeaStatus) {
-  if (["ai", "user", "employee", "management"].includes(actor.kind)) return false;
+  if (["ai", "employee"].includes(actor.kind)) return false;
   if (!transitions[from]?.includes(to)) return false;
   if (actor.kind === "system") return from === "screening" && ["returned", "business_review", "control_review"].includes(to);
-  if (actor.kind === "admin") return true;
-  if (actor.kind === "reviewer") return ["screening", "business_review", "control_review", "decision", "poc", "implementation", "deferred"].includes(from);
+  if (actor.kind === "back_office") return ["screening", "control_review", "decision", "poc", "implementation", "deferred"].includes(from);
   if (actor.kind === "business_owner") return from === "business_review" && ["returned", "control_review", "decision"].includes(to);
-  if (actor.kind === "control") return from === "control_review" && ["returned", "decision"].includes(to);
   return false;
 }
 
@@ -41,10 +39,10 @@ export async function transitionIdeaStatus(actor: IdeaWorkflowActor, ideaId: num
   const [idea] = await db.select().from(ideas).where(eq(ideas.id, ideaId)).limit(1).all();
   if (!idea) throw new Error("Idea not found");
   const from = idea.status as IdeaStatus;
-  const [user] = actor.id ? await db.select({ profile: users.profile, role: users.role }).from(users).where(eq(users.id, Number(actor.id))).limit(1).all() : [];
-  const effectiveActor: IdeaWorkflowActor = actor.kind === "system" || actor.kind === "ai" ? actor : { ...actor, kind: actor.kind === "admin" && !user ? "admin" : user?.role === "admin" ? "admin" : user?.profile ?? "employee" };
+  const [user] = actor.id ? await db.select({ role: users.role }).from(users).where(eq(users.id, Number(actor.id))).limit(1).all() : [];
+  const effectiveActor: IdeaWorkflowActor = actor.kind === "system" || actor.kind === "ai" ? actor : { ...actor, kind: user?.role ?? "employee" };
   if (!canTransitionIdeaStatus(effectiveActor, from, to)) throw new Error("Actor is not authorized for this workflow transition");
-  if (effectiveActor.kind === "business_owner" || effectiveActor.kind === "control") {
+  if (effectiveActor.kind === "business_owner") {
     const [assigned] = await db.select({ assignedUserId: ideas.assignedUserId }).from(ideas).where(eq(ideas.id, ideaId)).limit(1).all();
     if (assigned?.assignedUserId !== Number(actor.id)) throw new Error("Idea is not assigned to this governance workspace member");
   }
@@ -53,7 +51,7 @@ export async function transitionIdeaStatus(actor: IdeaWorkflowActor, ideaId: num
   if (!updated) throw new Error("Idea status changed before this transition could be applied");
   await appendIdeaEvent({
     ideaId,
-    actorType: (actor.kind === "reviewer" || actor.kind === "business_owner" || actor.kind === "control" || actor.kind === "management" || actor.kind === "employee") ? "admin" : actor.kind as "admin" | "user" | "system" | "ai",
+    actorType: actor.kind === "employee" ? "user" : actor.kind === "system" || actor.kind === "ai" ? actor.kind : "admin",
     actorId: actor.id ? Number(actor.id) : null,
     eventType: "status_changed",
     fromStatus: from,
@@ -77,7 +75,6 @@ export async function runIdeaScreeningWorkflow(ideaId: number, versionId: number
   const version = snapshot?.versions.find((candidate) => candidate.id === versionId);
   if (!snapshot || !version) throw new Error("Idea version not found or not authorized");
   const job = getAiJob("idea.preflight", "1");
-  await db.update(ideas).set({ status: "screening", updatedAt: new Date() }).where(eq(ideas.id, ideaId)).run();
   const run = await createAiRun({
     ideaId,
     ideaVersionId: version.id,

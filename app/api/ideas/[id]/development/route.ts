@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { auth } from "../../../../../auth";
 import { db } from "../../../../../src/db/connection";
@@ -68,7 +68,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         const [latest] = tx.select().from(ideaVersions).where(eq(ideaVersions.ideaId, state.ideaId!)).orderBy(desc(ideaVersions.version)).limit(1).all();
         const [preflight] = tx.select({ id: aiRuns.id }).from(aiRuns).where(and(eq(aiRuns.ideaId, state.ideaId!), eq(aiRuns.jobKey, "idea.preflight"))).limit(1).all();
         if (!latest || latest.id !== version.id || preflight) return null;
-        const [idea] = tx.update(ideas).set({ ...input.input, updatedAt: new Date() }).where(and(eq(ideas.id, state.ideaId!), eq(ideas.authorId, state.userId!), eq(ideas.status, "screening"))).returning().all();
+        const [idea] = tx.update(ideas).set({ ...input.input, updatedAt: new Date() }).where(and(eq(ideas.id, state.ideaId!), eq(ideas.authorId, state.userId!), inArray(ideas.status, ["draft", "screening"]))).returning().all();
         if (!idea) return null;
         const [newVersion] = tx.insert(ideaVersions).values({ ...next, ideaId: state.ideaId!, authorId: state.userId!, version: version.version + 1, contentHash }).returning().all();
         return { idea, versionId: newVersion.id };
