@@ -5,7 +5,7 @@ import { actOnAdminRedemption, adminQueryKeys, decideAdminIdea, getAdminSettings
 
 export function useAdminGovernanceDecision() {
   const client = useQueryClient();
-  return useMutation({ mutationFn: ({ ideaId, action, reason }: { ideaId: number; action: GovernanceAction; reason: string }) => decideAdminIdea(ideaId, action, reason), onSuccess: () => Promise.all([client.invalidateQueries({ queryKey: adminQueryKeys.screening }), client.invalidateQueries({ queryKey: adminQueryKeys.transformation })]) });
+  return useMutation({ mutationFn: ({ ideaId, action, reason, businessOwnerId }: { ideaId: number; action: GovernanceAction; reason: string; businessOwnerId?: number }) => decideAdminIdea(ideaId, action, reason, businessOwnerId), onSuccess: () => Promise.all([client.invalidateQueries({ queryKey: adminQueryKeys.screening }), client.invalidateQueries({ queryKey: adminQueryKeys.transformation })]) });
 }
 
 export function useAdminRedemptionAction() {

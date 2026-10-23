@@ -26,8 +26,8 @@ export function listAdminTransformation() { return apiFetch<{ items: AdminIdea[]
 export function getAdminSettings() { return apiFetch<AdminSettings>("/api/admin/settings"); }
 
 export type GovernanceAction = "route" | "return" | "reject" | "defer" | "approve" | "not_recommended" | "confirm";
-export function decideAdminIdea(ideaId: number, action: GovernanceAction, reason: string) {
-  return apiFetch(`/api/admin/governance/ideas/${ideaId}/decision`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action, reason }) });
+export function decideAdminIdea(ideaId: number, action: GovernanceAction, reason: string, businessOwnerId?: number) {
+  return apiFetch(`/api/admin/governance/ideas/${ideaId}/decision`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action, reason, businessOwnerId }) });
 }
 export type RedemptionAction = "fulfill" | "cancel";
 export function actOnAdminRedemption(id: number, action: RedemptionAction, reason: string) {
