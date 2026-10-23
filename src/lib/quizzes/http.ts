@@ -2,6 +2,7 @@ import type { Session } from "next-auth";
 import { loadAuthorizationContext, AuthorizationError } from "../auth/authorization";
 import { apiError, handleApiError } from "../http/errors";
 import { QuizError } from "./errors";
+import type { QuizAuditContext } from "./service";
 
 function sessionIds(session: Session | null) {
   const userId = Number(session?.user?.id);
@@ -33,4 +34,11 @@ export function requestIdempotencyKey(request: Request, bodyValue?: unknown) {
   const header = request.headers.get("idempotency-key")?.trim();
   if (header) return header;
   return typeof bodyValue === "string" ? bodyValue.trim() : "";
+}
+
+export function requestAuditMetadata(request: Request): Pick<QuizAuditContext, "ipAddress" | "userAgent"> {
+  return {
+    ipAddress: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? request.headers.get("x-real-ip"),
+    userAgent: request.headers.get("user-agent"),
+  };
 }

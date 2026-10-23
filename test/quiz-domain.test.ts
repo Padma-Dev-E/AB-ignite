@@ -5,7 +5,9 @@ import { db } from "../src/db/connection";
 import {
   auditEvents,
   notifications,
+  pointRules,
   pointsLedger,
+  refreshTokens,
   quizAttemptAnswers,
   quizAttempts,
   quizCategories,
@@ -33,6 +35,10 @@ import {
 let userId = 0;
 let departmentPeerId = 0;
 let otherDepartmentId = 0;
+let retryUserId = 0;
+let awardRetryUserId = 0;
+let auditSessionId = 0;
+let auditPeerSessionId = 0;
 let quizId = 0;
 let versionId = 0;
 let challengeId = 0;
@@ -43,10 +49,32 @@ before(async () => {
     { name: "Quiz Domain User", email: `quiz-domain-${Date.now()}@example.test`, role: "user", department: "Technology", passwordHash: "test-hash" },
     { name: "Quiz Department Peer", email: `quiz-peer-${Date.now()}@example.test`, role: "user", department: "Technology", passwordHash: "test-hash" },
     { name: "Quiz Other Department", email: `quiz-other-${Date.now()}@example.test`, role: "user", department: "Banking", passwordHash: "test-hash" },
+    { name: "Quiz Retry User", email: `quiz-retry-${Date.now()}@example.test`, role: "user", department: "Technology", passwordHash: "test-hash" },
+    { name: "Quiz Award Retry User", email: `quiz-award-retry-${Date.now()}@example.test`, role: "user", department: "Technology", passwordHash: "test-hash" },
   ]).returning({ id: users.id }).all();
   userId = usersCreated[0].id;
   departmentPeerId = usersCreated[1].id;
   otherDepartmentId = usersCreated[2].id;
+  retryUserId = usersCreated[3].id;
+  awardRetryUserId = usersCreated[4].id;
+  const [session] = await db.insert(refreshTokens).values({
+    userId,
+    tokenHash: `quiz-session-${Date.now()}`,
+    expiresAt: new Date(Date.now() + 3_600_000),
+    idleExpiresAt: new Date(Date.now() + 3_600_000),
+    absoluteExpiresAt: new Date(Date.now() + 3_600_000),
+    sessionVersion: 0,
+  }).returning({ id: refreshTokens.id }).all();
+  auditSessionId = session.id;
+  const [peerSession] = await db.insert(refreshTokens).values({
+    userId: departmentPeerId,
+    tokenHash: `quiz-peer-session-${Date.now()}`,
+    expiresAt: new Date(Date.now() + 3_600_000),
+    idleExpiresAt: new Date(Date.now() + 3_600_000),
+    absoluteExpiresAt: new Date(Date.now() + 3_600_000),
+    sessionVersion: 0,
+  }).returning({ id: refreshTokens.id }).all();
+  auditPeerSessionId = peerSession.id;
 
   const [category] = await db.insert(quizCategories).values({ code: `banking-${Date.now()}`, name: "Banking", sortOrder: 1, active: true }).returning().all();
   const [quiz] = await db.insert(quizzes).values({
@@ -98,7 +126,9 @@ after(async () => {
   if (quizId) await db.delete(quizAttempts).where(eq(quizAttempts.quizId, quizId));
   if (versionId) await db.delete(quizVersions).where(eq(quizVersions.id, versionId));
   if (quizId) await db.delete(quizzes).where(eq(quizzes.id, quizId));
-  if (userId) await db.update(users).set({ isActive: false, updatedAt: new Date() }).where(inArray(users.id, [userId, departmentPeerId, otherDepartmentId]));
+  if (auditSessionId) await db.update(refreshTokens).set({ revokedAt: new Date(), revocationReason: "quiz-test-cleanup", updatedAt: new Date() }).where(eq(refreshTokens.id, auditSessionId));
+  if (auditPeerSessionId) await db.update(refreshTokens).set({ revokedAt: new Date(), revocationReason: "quiz-test-cleanup", updatedAt: new Date() }).where(eq(refreshTokens.id, auditPeerSessionId));
+  if (userId) await db.update(users).set({ isActive: false, updatedAt: new Date() }).where(inArray(users.id, [userId, departmentPeerId, otherDepartmentId, retryUserId, awardRetryUserId]));
 });
 
 test("quiz details redact answer keys while preserving selectable options", async () => {
@@ -110,24 +140,30 @@ test("quiz details redact answer keys while preserving selectable options", asyn
 
 test("timed attempts grade on server time and replay the immutable result", async () => {
   const startedAt = new Date("2026-01-01T00:00:00.000Z");
-  const attempt = await startQuizAttempt(departmentPeerId, quizId, `attempt-idem-1-${Date.now()}`, startedAt);
+  const attempt = await startQuizAttempt(departmentPeerId, quizId, `attempt-idem-1-${Date.now()}`, startedAt, { sessionId: auditPeerSessionId, ipAddress: "10.20.30.40", userAgent: "quiz-test-agent", requestId: "quiz-test-request" });
   const expired = await submitQuizAttempt(departmentPeerId, attempt.attempt.id, [
     { questionId: questionIds[0], optionKey: "a" },
-  ], new Date(startedAt.getTime() + 61_000));
+  ], new Date(startedAt.getTime() + 61_000), { sessionId: auditPeerSessionId, ipAddress: "10.20.30.40", userAgent: "quiz-test-agent", requestId: "quiz-test-request" });
   assert.equal(expired.result.status, "expired");
   assert.equal(expired.result.passed, false);
   const replay = await submitQuizAttempt(departmentPeerId, attempt.attempt.id, [], new Date(startedAt.getTime() + 62_000));
   assert.deepEqual(replay.result, expired.result);
   assert.equal((await db.select().from(quizAttemptAnswers).where(eq(quizAttemptAnswers.attemptId, attempt.attempt.id)).all()).length, 0);
   assert.equal((await db.select().from(auditEvents).where(and(eq(auditEvents.action, "quiz.attempt.expired"), eq(auditEvents.targetId, String(attempt.attempt.id)))).all()).length, 1);
+  const [audit] = await db.select().from(auditEvents).where(and(eq(auditEvents.action, "quiz.attempt.started"), eq(auditEvents.targetId, String(attempt.attempt.id)))).all();
+  assert.equal(audit.sessionId, auditPeerSessionId);
+  assert.ok(audit.ipHash);
+  assert.ok(audit.userAgentHash);
+  assert.doesNotMatch(audit.metadataJson ?? "", /10\.20\.30\.40|quiz-test-agent/);
 });
 
 test("first attempt awards points once and retakes compare against the previous result", async () => {
-  const first = await startQuizAttempt(userId, quizId, `attempt-idem-2-${Date.now()}`, new Date("2026-02-01T00:00:00.000Z"));
+  const auditContext = { sessionId: auditSessionId, ipAddress: "10.20.30.41", userAgent: "quiz-award-agent", requestId: "quiz-award-request" };
+  const first = await startQuizAttempt(userId, quizId, `attempt-idem-2-${Date.now()}`, new Date("2026-02-01T00:00:00.000Z"), auditContext);
   const firstResult = await submitQuizAttempt(userId, first.attempt.id, [
     { questionId: questionIds[0], optionKey: "a" },
     { questionId: questionIds[1], optionKey: "b" },
-  ], new Date("2026-02-01T00:00:10.000Z"));
+  ], new Date("2026-02-01T00:00:10.000Z"), auditContext);
   assert.equal(firstResult.result.scorePercent, 50);
   assert.equal(firstResult.result.pointsAwarded, 10);
 
@@ -140,9 +176,41 @@ test("first attempt awards points once and retakes compare against the previous 
   assert.equal(retakeResult.result.pointsAwarded, 0);
   assert.equal(retakeResult.result.previousScorePercent, 50);
   assert.equal((await getQuizAttempt(userId, retake.attempt.id)).result?.scorePercent, 100);
+  const laterRetake = await startQuizAttempt(userId, quizId, `attempt-idem-4-${Date.now()}`, new Date("2026-02-03T00:00:00.000Z"));
+  await submitQuizAttempt(userId, laterRetake.attempt.id, [{ questionId: questionIds[0], optionKey: "a" }], new Date("2026-02-03T00:00:10.000Z"));
+  assert.equal((await getQuizAttempt(userId, retake.attempt.id)).result?.previousScorePercent, 50);
   assert.equal((await db.select().from(pointsLedger).where(and(eq(pointsLedger.userId, userId), eq(pointsLedger.eventType, "quiz_correct"))).all()).length, 1);
+  const [ledger] = await db.select().from(pointsLedger).where(and(eq(pointsLedger.userId, userId), eq(pointsLedger.eventType, "quiz_correct"))).all();
+  const [pointsAudit] = await db.select().from(auditEvents).where(and(eq(auditEvents.action, "points.ledger.appended"), eq(auditEvents.targetId, String(ledger.id)))).all();
+  assert.equal(pointsAudit.sessionId, auditSessionId);
+  assert.ok(pointsAudit.ipHash);
+  assert.ok(pointsAudit.userAgentHash);
   assert.equal((await db.select().from(auditEvents).where(and(eq(auditEvents.action, "quiz.attempt.started"), eq(auditEvents.actorUserId, userId))).all()).length >= 2, true);
   assert.equal((await db.select().from(auditEvents).where(and(eq(auditEvents.action, "quiz.attempt.submitted"), eq(auditEvents.targetId, String(first.attempt.id)))).all()).length, 1);
+});
+
+test("an abandoned attempt does not consume the first completed-attempt reward", async () => {
+  const abandoned = await startQuizAttempt(retryUserId, quizId, `abandoned-${Date.now()}`, new Date("2026-03-01T00:00:00.000Z"));
+  const completed = await startQuizAttempt(retryUserId, quizId, `completed-${Date.now()}`, new Date("2026-03-01T00:01:00.000Z"));
+  const result = await submitQuizAttempt(retryUserId, completed.attempt.id, questionIds.map((questionId) => ({ questionId, optionKey: "a" })), new Date("2026-03-01T00:01:10.000Z"));
+  assert.equal(abandoned.attempt.status, "in_progress");
+  assert.equal(result.result.firstAttempt, true);
+  assert.equal(result.result.pointsAwarded, 20);
+});
+
+test("quiz point awards remain pending after policy failure and retry on replay", async () => {
+  const [rule] = await db.select().from(pointRules).where(eq(pointRules.code, "quiz_correct")).limit(1).all();
+  assert.ok(rule);
+  await db.update(pointRules).set({ active: false, updatedAt: new Date() }).where(eq(pointRules.id, rule.id));
+  const attempt = await startQuizAttempt(awardRetryUserId, quizId, `award-retry-${Date.now()}`, new Date("2026-04-01T00:00:00.000Z"));
+  await assert.rejects(() => submitQuizAttempt(awardRetryUserId, attempt.attempt.id, [{ questionId: questionIds[0], optionKey: "a" }], new Date("2026-04-01T00:00:10.000Z")), /points policy/i);
+  const [pending] = await db.select().from(quizAttempts).where(eq(quizAttempts.id, attempt.attempt.id)).all();
+  assert.equal(pending.status, "submitted");
+  assert.equal(pending.pointsStatus, "failed");
+  await db.update(pointRules).set({ active: true, updatedAt: new Date() }).where(eq(pointRules.id, rule.id));
+  const replay = await submitQuizAttempt(awardRetryUserId, attempt.attempt.id, [], new Date("2026-04-01T00:01:00.000Z"));
+  assert.equal(replay.result.pointsAwarded, 10);
+  assert.equal((await db.select().from(quizAttempts).where(eq(quizAttempts.id, attempt.attempt.id)).all())[0].pointsStatus, "awarded");
 });
 
 test("low topic scores create an open recommendation and notification", async () => {
@@ -150,6 +218,7 @@ test("low topic scores create an open recommendation and notification", async ()
   assert.ok(journey.topics.some((topic) => topic.topic === "authentication" && topic.scorePercent < 70));
   assert.ok(journey.recommendations.some((recommendation) => recommendation.status === "open"));
   assert.ok((await db.select().from(notifications).where(eq(notifications.userId, userId)).all()).some((notification) => notification.type === "learning_recommendation"));
+  assert.equal((await db.select().from(quizRecommendations).where(and(eq(quizRecommendations.userId, userId), eq(quizRecommendations.topic, "authentication"), eq(quizRecommendations.status, "open"))).all()).length, 1);
 });
 
 test("rankings support whole-bank and department views", async () => {
@@ -157,7 +226,8 @@ test("rankings support whole-bank and department views", async () => {
   await db.insert(pointsLedger).values({ userId: otherDepartmentId, amount: 90, eventType: "manual_test", sourceType: "test", idempotencyKey: `ranking-other-${Date.now()}` });
   const bank = await getRankings(userId, "bank");
   const department = await getRankings(userId, "department");
-  assert.ok(bank.some((entry) => entry.userId === otherDepartmentId));
+  assert.ok(bank.some((entry) => entry.name === "Quiz Other Department"));
+  assert.ok(bank.every((entry) => !Object.hasOwn(entry, "userId")));
   assert.ok(department.every((entry) => entry.department === "Technology"));
 });
 
@@ -172,4 +242,18 @@ test("challenge listing and joining award twenty points exactly once", async () 
   assert.equal(replay.pointsAwarded, 0);
   assert.equal((await db.select().from(quizChallengeParticipants).where(and(eq(quizChallengeParticipants.userId, userId), eq(quizChallengeParticipants.challengeId, challengeId))).all()).length, 1);
   assert.equal((await db.select().from(auditEvents).where(and(eq(auditEvents.action, "quiz.challenge.joined"), eq(auditEvents.targetId, String(challengeId)))).all()).length, 1);
+});
+
+test("challenge rewards retry after a failed award and reject mismatched displayed points", async () => {
+  const [rule] = await db.select().from(pointRules).where(eq(pointRules.code, "challenge_join")).limit(1).all();
+  assert.ok(rule);
+  await db.update(quizChallenges).set({ points: rule.points + 1, updatedAt: new Date() }).where(eq(quizChallenges.id, challengeId));
+  await assert.rejects(() => joinChallenge(retryUserId, challengeId, `challenge-mismatch-${Date.now()}`), /points policy|points/i);
+  await db.update(quizChallenges).set({ points: rule.points, updatedAt: new Date() }).where(eq(quizChallenges.id, challengeId));
+  await db.update(pointRules).set({ active: false, updatedAt: new Date() }).where(eq(pointRules.id, rule.id));
+  const idempotencyKey = `challenge-retry-${Date.now()}`;
+  await assert.rejects(() => joinChallenge(retryUserId, challengeId, idempotencyKey), /points policy/i);
+  await db.update(pointRules).set({ active: true, updatedAt: new Date() }).where(eq(pointRules.id, rule.id));
+  const replay = await joinChallenge(retryUserId, challengeId, idempotencyKey);
+  assert.equal(replay.pointsAwarded, rule.points);
 });

@@ -33,8 +33,11 @@ test("quiz mutations use bounded validation and idempotency", async () => {
   const submit = await source("app/api/quizzes/attempts/[id]/submit/route.ts");
   const join = await source("app/api/challenges/[id]/join/route.ts");
   assert.match(start, /idempotencySchema/);
+  assert.match(start, /requestAuditMetadata/);
   assert.match(submit, /submitAnswersSchema/);
+  assert.match(submit, /requestAuditMetadata/);
   assert.match(join, /idempotencySchema/);
+  assert.match(join, /requestAuditMetadata/);
   assert.match(submit, /submitQuizAttempt/);
   assert.doesNotMatch(submit, /isCorrect/);
 });

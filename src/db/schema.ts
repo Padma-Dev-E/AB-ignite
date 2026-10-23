@@ -313,6 +313,8 @@ export const quizAttempts = sqliteTable("quiz_attempts", {
   totalQuestions: integer().notNull(),
   passed: integer({ mode: "boolean" }),
   pointsAwarded: integer().notNull().default(0),
+  pointsStatus: text({ enum: ["not_applicable", "pending", "awarded", "failed"] }).notNull().default("not_applicable"),
+  previousScorePercent: integer(),
   firstAttempt: integer({ mode: "boolean" }).notNull().default(false),
   idempotencyKey: text().notNull(),
   ...timestamps,
@@ -392,6 +394,7 @@ export const quizChallengeParticipants = sqliteTable("quiz_challenge_participant
   userId: integer().notNull().references(() => users.id, { onDelete: "cascade" }),
   idempotencyKey: text().notNull(),
   pointsAwarded: integer().notNull().default(0),
+  pointsStatus: text({ enum: ["pending", "awarded", "failed"] }).notNull().default("pending"),
   joinedAt: integer({ mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
 }, (table) => [
   uniqueIndex("quiz_challenge_participants_unique").on(table.challengeId, table.userId),

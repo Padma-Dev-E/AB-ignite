@@ -16,6 +16,7 @@ const ALLOWED_METADATA_KEYS = new Set([
   "resourceId",
   "permission",
   "provider",
+  "requestId",
 ]);
 
 export function hashAuditValue(value: string | null | undefined): string | null {
