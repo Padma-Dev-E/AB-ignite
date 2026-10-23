@@ -40,13 +40,13 @@ export function useStartQuizAttempt() {
 }
 export function useSubmitQuizAttempt() {
   const client = useQueryClient();
-  return useMutation({ mutationFn: ({ attemptId, answers }: { attemptId: number; answers: QuizAnswer[] }) => submitQuizAttempt(attemptId, answers), onSuccess: (_data, variables) => { void client.invalidateQueries({ queryKey: learningQueryKeys.attempt(variables.attemptId) }); void client.invalidateQueries({ queryKey: learningQueryKeys.journey() }); } });
+  return useMutation({ mutationFn: ({ attemptId, answers }: { attemptId: number; answers: QuizAnswer[] }) => submitQuizAttempt(attemptId, answers), onSuccess: (_data, variables) => { void client.invalidateQueries({ queryKey: learningQueryKeys.attempt(variables.attemptId) }); void client.invalidateQueries({ queryKey: learningQueryKeys.journey() }); void client.invalidateQueries({ queryKey: ["rewards"] }); } });
 }
 export function useCompleteArticle() {
   const client = useQueryClient();
   return useMutation({
     mutationFn: ({ articleId, idempotencyKey = createIdempotencyKey("article-read", articleId) }: { articleId: number; idempotencyKey?: string }) => completeArticle(articleId, idempotencyKey),
-    onSuccess: (_data, variables) => { void client.invalidateQueries({ queryKey: learningQueryKeys.article(variables.articleId) }); void client.invalidateQueries({ queryKey: learningQueryKeys.recommendations() }); void client.invalidateQueries({ queryKey: learningQueryKeys.journey() }); },
+    onSuccess: (_data, variables) => { void client.invalidateQueries({ queryKey: learningQueryKeys.article(variables.articleId) }); void client.invalidateQueries({ queryKey: learningQueryKeys.recommendations() }); void client.invalidateQueries({ queryKey: learningQueryKeys.journey() }); void client.invalidateQueries({ queryKey: ["rewards"] }); },
   });
 }
 export function useJoinChallenge() {

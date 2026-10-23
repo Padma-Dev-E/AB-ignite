@@ -42,7 +42,8 @@ export type IdeaCreateInput = {
   differentiation?: string;
 };
 export type IdeaCreateResponse = { idea: Idea; versionId: number };
-export type IdeaSubmitResponse = { ideaId: number; versionId: number; runId?: number | null; status: string; submitted?: boolean; reference?: string; minimumScore?: number; confirmation?: string };
+export type IdeaPriorityBreakdown = { key: "turnaround" | "volume" | "value"; score: number; weight: number; contribution: number };
+export type IdeaSubmitResponse = { ideaId: number; versionId: number; runId?: number | null; status: string; submitted?: boolean; reference?: string; minimumScore?: number; confirmation?: string; score?: number; priorityBand?: "Watch" | "Qualify" | "Priority"; category?: string; breakdown?: IdeaPriorityBreakdown[] };
 export type IdeaAiStatusResponse = { idea: Pick<Idea, "id" | "status" | "reference">; runs: Array<{ id: number; jobKey: string; status: string; attemptCount: number; createdAt: string; updatedAt: string; completedAt: string | null }>; events: Array<{ id: number; eventType: string; createdAt: string }>; reviews: unknown[] };
 export type IdeaEnrichment = { suggestedTitle: string; conciseSummary: string; problemStatement: string; valueStatement: string; tags: string[]; taxonomy: string[]; affectedTeams: string[]; assumptions: string[] };
 export type IdeaValidation = { decision: string; confidence: number; overallScore: number; strengths: string[]; gaps: string[]; assumptions: string[]; questions: Array<{ question: string; reason: string }>; risks: Array<{ severity: string; description: string }>; nextActions: Array<{ action: string; ownerRole: string }> };

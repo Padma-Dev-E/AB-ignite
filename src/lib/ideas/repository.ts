@@ -397,7 +397,13 @@ export async function submitIdea(actor: IdeaActor, ideaId: number) {
     if (!idea) throw new Error("Idea not found or not authorized");
     const [submission] = tx.select().from(ideaSubmissions).where(eq(ideaSubmissions.ideaId, ideaId)).limit(1).all();
     if (!submission) throw new Error("Five answers and all three impact metrics are required before submission");
-    if (submission.submittedAt) return { idea, reference: idea.reference, score: submission.score, minimumScore: submission.minimumScore, breakdown: { turnaround: 30, volume: 30, value: 40 } };
+    const metrics = JSON.parse(submission.metricsJson) as { turnaround: number; volume: number; value: number };
+    const breakdown = [
+      { key: "turnaround", score: metrics.turnaround, weight: 0.3, contribution: Math.round(metrics.turnaround * 30) / 100 },
+      { key: "volume", score: metrics.volume, weight: 0.3, contribution: Math.round(metrics.volume * 30) / 100 },
+      { key: "value", score: metrics.value, weight: 0.4, contribution: Math.round(metrics.value * 40) / 100 },
+    ] as const;
+    if (submission.submittedAt) return { idea, reference: idea.reference, score: submission.score, minimumScore: submission.minimumScore, priorityBand: idea.priorityBand, category: idea.category, breakdown };
     const [preflight] = tx.select().from(aiRuns).where(and(eq(aiRuns.ideaId, ideaId), eq(aiRuns.jobKey, "idea.preflight"), eq(aiRuns.status, "succeeded"))).orderBy(desc(aiRuns.createdAt)).limit(1).all();
     let safe = false;
     try { const result = JSON.parse(preflight?.resultJson ?? "{}"); safe = result.decision === "allow" && result.safeToProcess === true; } catch { safe = false; }
@@ -419,7 +425,7 @@ export async function submitIdea(actor: IdeaActor, ideaId: number) {
     tx.insert(ideaEvents).values({ ideaId, actorType: actor.kind, actorId: userId, eventType: "submitted", toStatus: "screening", metadataJson: JSON.stringify({ score: submission.score, minimum, breakdown: { turnaround: 0.3, volume: 0.3, value: 0.4 } }) }).run();
     tx.insert(notifications).values({ userId, type: "idea_submitted", title: "Idea submitted", body: `${reference} has been submitted for review.`, link: `/ideas/${ideaId}` }).run();
     tx.insert(auditEvents).values({ actorUserId: userId, action: "ideas.submitted", targetType: "idea", targetId: String(ideaId), metadataJson: JSON.stringify({ status: "submitted", result: submission.score }), createdAt: new Date() }).run();
-    return { idea: updated, reference, score: submission.score, minimumScore: minimum, breakdown: { turnaround: 30, volume: 30, value: 40 } };
+    return { idea: updated, reference, score: submission.score, minimumScore: minimum, priorityBand: updated.priorityBand, category: updated.category, breakdown };
   });
   await awardPoints({ userId, amount: 50, eventType: "idea_submission", sourceType: "idea", sourceId: String(ideaId), idempotencyKey: `idea:${ideaId}:submission:points` });
   return result;
