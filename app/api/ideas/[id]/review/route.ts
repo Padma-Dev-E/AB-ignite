@@ -15,11 +15,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   try {
     const session = await auth();
     if (!session?.user?.id || session.isValid === false) return apiError("unauthorized", "Authentication required.", 401, id);
-    if (session.user.role !== "admin") return apiError("forbidden", "Reviewer access required.", 403, id);
+    const profile = session.user.role === "admin" ? "admin" : session.user.profile;
+    if (!session.user.id || !["admin", "reviewer", "business_owner", "control"].includes(profile)) return apiError("forbidden", "Governance reviewer access required.", 403, id);
     const ideaId = Number((await params).id);
     const input = reviewSchema.parse(await request.json());
-    const target = input.decision === "approved" ? "decision" : input.decision;
-    const updated = await transitionIdeaStatus({ kind: "admin", id: session.user.id }, ideaId, target, input.reason);
+    const target = input.decision === "approved" ? (profile === "business_owner" ? "control_review" : "decision") : input.decision;
+    const updated = await transitionIdeaStatus({ kind: profile as "admin" | "reviewer" | "business_owner" | "control", id: session.user.id }, ideaId, target, input.reason);
     const review = await recordHumanReview({ ideaId, reviewerId: Number(session.user.id), decision: input.decision, reason: input.reason, conflictAcknowledged: input.conflictAcknowledged });
     return ok({ idea: updated, review }, 201, id);
   } catch (error) {

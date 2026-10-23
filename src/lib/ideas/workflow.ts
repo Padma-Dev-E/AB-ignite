@@ -1,10 +1,11 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "../../db/connection";
-import { aiRuns, ideaVersions, ideas, notifications } from "../../db/schema";
+import { aiRuns, ideaVersions, ideas, notifications, users } from "../../db/schema";
 import { getAiJob } from "../ai/registry";
 import { getAiConfig } from "../ai/config-core";
 import "../ai/jobs";
 import type { AiActor } from "../ai/types";
+import type { UserProfile } from "../auth/permissions";
 import { appendIdeaEvent, createAiRun, getAuthorizedIdeaSnapshot } from "./repository";
 
 export type IdeaStatus = "screening" | "returned" | "business_review" | "control_review" | "decision" | "poc" | "implementation" | "implemented" | "rejected" | "deferred";
@@ -22,25 +23,37 @@ const transitions: Record<IdeaStatus, IdeaStatus[]> = {
   deferred: ["screening", "decision"],
 };
 
-export function canTransitionIdeaStatus(actor: AiActor, from: IdeaStatus, to: IdeaStatus) {
-  if (actor.kind === "ai" || actor.kind === "user") return false;
+export type IdeaWorkflowActor = { kind: "admin" | "user" | "system" | "ai" | UserProfile; id?: string };
+
+export function canTransitionIdeaStatus(actor: IdeaWorkflowActor, from: IdeaStatus, to: IdeaStatus) {
+  if (["ai", "user", "employee", "management"].includes(actor.kind)) return false;
   if (!transitions[from]?.includes(to)) return false;
   if (actor.kind === "system") return from === "screening" && ["returned", "business_review", "control_review"].includes(to);
-  return actor.kind === "admin";
+  if (actor.kind === "admin") return true;
+  if (actor.kind === "reviewer") return ["screening", "business_review", "control_review", "decision", "poc", "implementation", "deferred"].includes(from);
+  if (actor.kind === "business_owner") return from === "business_review" && ["returned", "control_review", "decision"].includes(to);
+  if (actor.kind === "control") return from === "control_review" && ["returned", "decision"].includes(to);
+  return false;
 }
 
-export async function transitionIdeaStatus(actor: AiActor, ideaId: number, to: IdeaStatus, reason: string) {
+export async function transitionIdeaStatus(actor: IdeaWorkflowActor, ideaId: number, to: IdeaStatus, reason: string) {
   if (!reason.trim()) throw new Error("A reason is required for every workflow transition");
   const [idea] = await db.select().from(ideas).where(eq(ideas.id, ideaId)).limit(1).all();
   if (!idea) throw new Error("Idea not found");
   const from = idea.status as IdeaStatus;
-  if (!canTransitionIdeaStatus(actor, from, to)) throw new Error("Actor is not authorized for this workflow transition");
+  const [user] = actor.id ? await db.select({ profile: users.profile, role: users.role }).from(users).where(eq(users.id, Number(actor.id))).limit(1).all() : [];
+  const effectiveActor: IdeaWorkflowActor = actor.kind === "system" || actor.kind === "ai" ? actor : { ...actor, kind: actor.kind === "admin" && !user ? "admin" : user?.role === "admin" ? "admin" : user?.profile ?? "employee" };
+  if (!canTransitionIdeaStatus(effectiveActor, from, to)) throw new Error("Actor is not authorized for this workflow transition");
+  if (effectiveActor.kind === "business_owner" || effectiveActor.kind === "control") {
+    const [assigned] = await db.select({ assignedUserId: ideas.assignedUserId }).from(ideas).where(eq(ideas.id, ideaId)).limit(1).all();
+    if (assigned?.assignedUserId !== Number(actor.id)) throw new Error("Idea is not assigned to this governance workspace member");
+  }
   const now = new Date();
   const [updated] = await db.update(ideas).set({ status: to, updatedAt: now }).where(and(eq(ideas.id, ideaId), eq(ideas.status, from))).returning().all();
   if (!updated) throw new Error("Idea status changed before this transition could be applied");
   await appendIdeaEvent({
     ideaId,
-    actorType: actor.kind,
+    actorType: (actor.kind === "reviewer" || actor.kind === "business_owner" || actor.kind === "control" || actor.kind === "management" || actor.kind === "employee") ? "admin" : actor.kind as "admin" | "user" | "system" | "ai",
     actorId: actor.id ? Number(actor.id) : null,
     eventType: "status_changed",
     fromStatus: from,
@@ -48,13 +61,14 @@ export async function transitionIdeaStatus(actor: AiActor, ideaId: number, to: I
     metadataJson: JSON.stringify({ reason }),
   });
   const accepted = to === "poc";
+  const stageLabels: Record<IdeaStatus, string> = { screening: "Submitted", returned: "Returned for improvement", business_review: "Business review", control_review: "Control review", decision: "Transformation confirmation", poc: "Proof of concept", implementation: "Implementation", implemented: "Impact", rejected: "Rejected", deferred: "Deferred" };
   await db.insert(notifications).values({
     userId: updated.authorId,
     type: accepted ? "idea_accepted" : "idea_status_changed",
     title: accepted ? "Idea accepted for proof of concept" : "Idea workflow updated",
-    body: accepted ? `Congratulations, ${updated.reference} has been accepted.` : `${updated.reference} moved to ${to.replaceAll("_", " ")}.`,
+    body: accepted ? `Congratulations, ${updated.reference} has been accepted (${to}).` : `${updated.reference} moved to ${stageLabels[to]} (${to.replaceAll("_", " ")}).`,
     link: `/ideas/${ideaId}`,
-  }).run();
+  }).onConflictDoNothing().run();
   return updated;
 }
 
@@ -76,5 +90,5 @@ export async function runIdeaScreeningWorkflow(ideaId: number, versionId: number
     requestedBy: actor.id ? Number(actor.id) : null,
     inputHash: version.contentHash,
   });
-  await appendIdeaEvent({ ideaId, ideaVersionId: version.id, actorType: actor.kind, actorId: actor.id ? Number(actor.id) : null, eventType: "screening_queued", correlationId: run.correlationId, metadataJson: JSON.stringify({ runId: run.id }) });
+  await appendIdeaEvent({ ideaId, ideaVersionId: version.id, actorType: actor.kind === "system" || actor.kind === "ai" ? actor.kind : actor.kind === "admin" ? "admin" : "user", actorId: actor.id ? Number(actor.id) : null, eventType: "screening_queued", correlationId: run.correlationId, metadataJson: JSON.stringify({ runId: run.id }) });
 }

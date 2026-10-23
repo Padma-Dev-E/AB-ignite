@@ -364,11 +364,9 @@ export async function saveIdeaSubmission(actor: IdeaActor, ideaId: number, input
   if (idea.status !== "screening" && idea.status !== "returned") throw new Error("Submission details cannot be changed at this workflow stage");
   const [existing] = await db.select().from(ideaSubmissions).where(eq(ideaSubmissions.ideaId, ideaId)).limit(1).all();
   if (existing?.submittedAt) throw new Error("Submitted idea details are locked");
-  let originalAuthorId: number | null = null;
   if (input.buildsOnId) {
     const [original] = await db.select().from(ideas).where(eq(ideas.id, input.buildsOnId)).limit(1).all();
     if (!original || original.authorId === userId || input.buildsOnId === ideaId) throw new Error("Selected original idea is invalid");
-    originalAuthorId = original.authorId;
     await db.update(ideas).set({ buildsOnId: input.buildsOnId }).where(eq(ideas.id, ideaId)).run();
   }
   const minimumScore = await getIdeaMinimumScore();
@@ -386,8 +384,21 @@ export async function saveIdeaSubmission(actor: IdeaActor, ideaId: number, input
     set: { answersJson: JSON.stringify(input.answers), metricsJson: JSON.stringify(input.metrics), score, minimumScore, differentiation: input.differentiation ?? null, updatedAt: new Date() },
   }).returning().all();
   if (!submission) throw new Error("Idea submission details were not saved");
-  if (originalAuthorId !== null) await db.insert(notifications).values({ userId: originalAuthorId, type: "idea_builds_on", title: "A colleague built on your idea", body: `A colleague registered a related idea based on your contribution.`, link: `/ideas/${input.buildsOnId}` }).run();
   return submission;
+}
+
+export async function creditOriginalIdea(actor: IdeaActor, ideaId: number, originalIdeaId: number) {
+  const authorId = actorUserId(actor);
+  return db.transaction((tx) => {
+    const [idea] = tx.select().from(ideas).where(and(eq(ideas.id, ideaId), eq(ideas.authorId, authorId))).limit(1).all();
+    const [original] = tx.select().from(ideas).where(eq(ideas.id, originalIdeaId)).limit(1).all();
+    if (!idea || !original || original.authorId === authorId || originalIdeaId === ideaId) throw new Error("Selected original idea is invalid");
+    if (idea.buildsOnId === originalIdeaId) return { originalAuthorId: original.authorId, credited: true };
+    if (idea.buildsOnId) throw new Error("This idea already credits a different original");
+    tx.update(ideas).set({ buildsOnId: originalIdeaId, updatedAt: new Date() }).where(eq(ideas.id, ideaId)).run();
+    tx.insert(notifications).values({ userId: original.authorId, type: "idea_builds_on", title: "A colleague built on your idea", body: `${original.reference} has been credited as the basis for a related idea.`, link: `/ideas/${ideaId}` }).run();
+    return { originalAuthorId: original.authorId, credited: true };
+  });
 }
 
 export async function submitIdea(actor: IdeaActor, ideaId: number) {
@@ -404,6 +415,11 @@ export async function submitIdea(actor: IdeaActor, ideaId: number) {
       { key: "value", score: metrics.value, weight: 0.4, contribution: Math.round(metrics.value * 40) / 100 },
     ] as const;
     if (submission.submittedAt) return { idea, reference: idea.reference, score: submission.score, minimumScore: submission.minimumScore, priorityBand: idea.priorityBand, category: idea.category, breakdown };
+    const [latestVersion] = tx.select({ id: ideaVersions.id }).from(ideaVersions).where(eq(ideaVersions.ideaId, ideaId)).orderBy(desc(ideaVersions.version)).limit(1).all();
+    const [validationRun] = tx.select().from(aiRuns).where(and(eq(aiRuns.ideaId, ideaId), eq(aiRuns.jobKey, "idea.validate"), eq(aiRuns.ideaVersionId, latestVersion?.id ?? -1))).orderBy(desc(aiRuns.createdAt)).limit(1).all();
+    let validationPassed = false;
+    try { validationPassed = validationRun?.status === "succeeded" && JSON.parse(validationRun.resultJson ?? "{}").decision === "accept"; } catch { validationPassed = false; }
+    if (!validationPassed) throw new Error("Idea validation must pass for the current draft before submission");
     const [preflight] = tx.select().from(aiRuns).where(and(eq(aiRuns.ideaId, ideaId), eq(aiRuns.jobKey, "idea.preflight"), eq(aiRuns.status, "succeeded"))).orderBy(desc(aiRuns.createdAt)).limit(1).all();
     let safe = false;
     try { const result = JSON.parse(preflight?.resultJson ?? "{}"); safe = result.decision === "allow" && result.safeToProcess === true; } catch { safe = false; }

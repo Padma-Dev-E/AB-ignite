@@ -2,13 +2,15 @@ import assert from "node:assert/strict";
 import test, { after, before } from "node:test";
 import { eq } from "drizzle-orm";
 import { db } from "../src/db/connection";
-import { ideaComments, ideaSupports, ideaVersions, ideas, users } from "../src/db/schema";
+import { ideaComments, ideaSubmissions, ideaSupports, ideaVersions, ideas, notifications, users } from "../src/db/schema";
 import {
   createIdeaComment,
   listIdeaComments,
   listIdeas,
   supportIdea,
+  submitIdea,
   updateReturnedIdea,
+  creditOriginalIdea,
 } from "../src/lib/ideas/repository";
 import { calculateIdeaPriority, IdeaInputSchema, IdeaListQuerySchema, IdeaUpdateSchema } from "../src/lib/ideas/schemas";
 import { getIdeaMinimumScore, getIdeaSubmissionDetails, saveIdeaSubmission, setIdeaMinimumScore } from "../src/lib/ideas/repository";
@@ -158,4 +160,26 @@ test("minimum submission score is configurable and rejects out of range values",
     await assert.rejects(setIdeaMinimumScore({ kind: "user", id: String(ownerId) }, 1));
     await assert.rejects(setIdeaMinimumScore({ kind: "admin", id: String(ownerId) }, 4));
   } finally { await setIdeaMinimumScore({ kind: "admin", id: String(ownerId) }, before); }
+});
+
+test("building on an original credits and notifies its author exactly once", async () => {
+  const [original] = await db.insert(ideas).values({ authorId: otherUserId, title: "Original credit", summary: "The original contribution that deserves visible credit.", category: "Operations", reference: `ORIG-${Date.now()}` }).returning().all();
+  const [related] = await db.insert(ideas).values({ authorId: ownerId, title: "Related credit", summary: "A related proposal that builds on the original contribution.", category: "Operations", reference: `REL-${Date.now()}` }).returning().all();
+  try {
+    const countBefore = (await db.select().from(notifications).where(eq(notifications.userId, otherUserId)).all()).length;
+    const result = await creditOriginalIdea({ kind: "user", id: String(ownerId) }, related.id, original.id);
+    assert.equal(result.originalAuthorId, otherUserId);
+    assert.equal((await db.select().from(notifications).where(eq(notifications.userId, otherUserId)).all()).length, countBefore + 1);
+  } finally {
+    await db.delete(ideas).where(eq(ideas.id, related.id));
+    await db.delete(ideas).where(eq(ideas.id, original.id));
+  }
+});
+
+test("failed or missing AI validation blocks server-side submission", async () => {
+  const [idea] = await db.insert(ideas).values({ authorId: ownerId, title: "Validation gate idea", summary: "An idea whose validation must pass before it can be submitted.", category: "Operations", reference: `GATE-${Date.now()}` }).returning().all();
+  try {
+    await db.insert(ideaSubmissions).values({ ideaId: idea.id, answersJson: JSON.stringify({ beneficiaries: "Customers", currentProcess: "Manual", needed: "Automation", risks: "Errors", successMeasure: "Faster" }), metricsJson: JSON.stringify({ turnaround: 3, volume: 3, value: 3 }), score: 3, minimumScore: 2, validationPassed: false });
+    await assert.rejects(submitIdea({ kind: "user", id: String(ownerId) }, idea.id), /validation must pass/i);
+  } finally { await db.delete(ideas).where(eq(ideas.id, idea.id)); }
 });

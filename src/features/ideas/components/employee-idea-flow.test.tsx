@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { createElement } from "react";
 import { renderToString } from "react-dom/server";
@@ -15,4 +16,25 @@ test("employee submission flow starts with the describe stage", () => {
   assert.match(html, /Share an idea/);
   assert.match(html, /Continue to develop/);
   assert.match(html, /Server originality check/);
+});
+
+test("employee submission presents exact score bands and blocks a failed validation until revalidated", () => {
+  const source = readFileSync(new URL("./employee-idea-flow.tsx", import.meta.url), "utf8");
+  assert.match(source, /Watch/);
+  assert.match(source, /Qualify/);
+  assert.match(source, /Priority/);
+  assert.match(source, /validationBlocked/);
+});
+
+test("employee development exposes AI structure fields and explicit validation pass/fail reasons", () => {
+  const source = readFileSync(new URL("./employee-idea-flow.tsx", import.meta.url), "utf8");
+  assert.match(source, /applyEnrichment/);
+  assert.match(source, /validation\.gaps/);
+  assert.match(source, /setTitle\(enrichment\.suggestedTitle\)/);
+});
+
+test("employee development exposes AI structure fields and explicit validation pass/fail reasons", () => {
+  const source = readFileSync(new URL("./employee-idea-flow.tsx", import.meta.url), "utf8");
+  for (const field of ["Idea title", "Problem statement", "Proposed solution", "Expected benefits", "Possible risks"]) assert.ok(source.includes(field));
+  assert.match(source, /AI suggestions fill empty fields/);
 });

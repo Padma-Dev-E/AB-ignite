@@ -32,7 +32,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const submission = await submitIdea(actor, ideaId);
     return ok({ ...submission, minimumScore: await getIdeaMinimumScore(), confirmation: `Congratulations, ${submission.reference} has been submitted.` }, 201, id);
   } catch (error) {
-    if (error instanceof Error && /below the minimum|must pass validation|answers and all three|current status/i.test(error.message)) return apiError("submission_rejected", error.message, 422, id);
+    if (error instanceof Error && /below the minimum|must pass validation|validation must pass|answers and all three|current status/i.test(error.message)) return apiError("submission_rejected", error.message, 422, id);
     return handleApiError(error, id);
   }
 }
