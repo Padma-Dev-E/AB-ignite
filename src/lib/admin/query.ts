@@ -56,6 +56,7 @@ export type AuditCsvRow = {
   targetId: string | null;
   reason: string | null;
   metadata: Record<string, string | number | boolean | null>;
+  ipHash?: string | null;
 };
 
 function csvCell(value: unknown) {

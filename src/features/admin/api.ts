@@ -27,7 +27,11 @@ export function listAdminRedemptions() {
   return apiFetch<Paginated<AdminRedemption>>("/api/admin/rewards/redemptions");
 }
 export function listAdminUsers() { return apiFetch<{ items: AdminUser[]; nextAfter: number | null }>("/api/admin/users?limit=50"); }
-export function listAdminAudit() { return apiFetch<{ items: AdminAuditEvent[]; nextAfter: number | null }>("/api/admin/audit?limit=50"); }
+export type AdminAuditFilters = { actorUserId?: number; action?: string; targetType?: string; targetId?: string; from?: string; to?: string; ipHash?: string };
+function filterQuery(filters: AdminAuditFilters = {}) { const params = new URLSearchParams({ limit: "50" }); for (const [key, value] of Object.entries(filters)) if (value !== undefined && value !== "") params.set(key, String(value)); return params.toString(); }
+export function listAdminAudit(filters: AdminAuditFilters = {}) { return apiFetch<{ items: AdminAuditEvent[]; nextAfter: number | null }>(`/api/admin/audit?${filterQuery(filters)}`); }
+export function getAdminAnalytics() { return apiFetch<{ periodDays: number; generatedAt: string; usersByState: Array<{ state: string; count: number }>; auditByAction: Array<{ action: string; count: number }> }>("/api/admin/analytics"); }
+export function adminExportUrl(kind: "audit" | "users", filters: AdminAuditFilters = {}) { const params = new URLSearchParams(filterQuery(filters)); params.set("limit", "1000"); return `/api/admin/${kind}/export?${params}`; }
 export function listAdminScreening() { return apiFetch<{ items: AdminIdea[]; nextAfter: number | null }>("/api/admin/governance/queues/screening?limit=50"); }
 export function listAdminTransformation() { return apiFetch<{ items: AdminIdea[]; nextAfter: number | null }>("/api/admin/governance/queues/transformation?limit=50"); }
 export function getAdminSettings() { return apiFetch<AdminSettings>("/api/admin/settings"); }
@@ -58,7 +62,8 @@ export const adminQueryKeys = {
   rewards: ["admin", "rewards"] as const,
   redemptions: ["admin", "rewards", "redemptions"] as const,
   users: ["admin", "users"] as const,
-  audit: ["admin", "audit"] as const,
+  audit: (filters: AdminAuditFilters = {}) => ["admin", "audit", filters] as const,
+  analytics: ["admin", "analytics"] as const,
   screening: ["admin", "governance", "screening"] as const,
   transformation: ["admin", "governance", "transformation"] as const,
   settings: ["admin", "settings"] as const,

@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { actOnAdminRedemption, adminQueryKeys, createAdminReward, decideAdminEvaluation, decideAdminIdea, getAdminEvaluation, getAdminSettings, listAdminAudit, listAdminChallenges, listAdminFeedback, listAdminQuizCatalogue, listAdminRedemptions, listAdminRewards, listAdminRoutedEvaluations, listAdminScreening, listAdminTransformation, listAdminUsers, respondToAdminFeedback, updateAdminReward, type AdminRewardInput, type EvaluationAction, type GovernanceAction, type RedemptionAction } from "./api";
+import { getAdminAnalytics } from "./api";
 
 export function useAdminGovernanceDecision() {
   const client = useQueryClient();
@@ -39,7 +40,8 @@ export function useAdminRedemptions(enabled = true) {
   return useQuery({ queryKey: adminQueryKeys.redemptions, queryFn: listAdminRedemptions, enabled });
 }
 export function useAdminUsers(enabled = true) { return useQuery({ queryKey: adminQueryKeys.users, queryFn: listAdminUsers, enabled }); }
-export function useAdminAudit(enabled = true) { return useQuery({ queryKey: adminQueryKeys.audit, queryFn: listAdminAudit, enabled }); }
+export function useAdminAudit(enabled = true, filters: Parameters<typeof listAdminAudit>[0] = {}) { return useQuery({ queryKey: adminQueryKeys.audit(filters), queryFn: () => listAdminAudit(filters), enabled }); }
+export function useAdminAnalytics(enabled = true) { return useQuery({ queryKey: adminQueryKeys.analytics, queryFn: getAdminAnalytics, enabled }); }
 export function useAdminScreening(enabled = true) { return useQuery({ queryKey: adminQueryKeys.screening, queryFn: listAdminScreening, enabled }); }
 export function useAdminTransformation(enabled = true) { return useQuery({ queryKey: adminQueryKeys.transformation, queryFn: listAdminTransformation, enabled }); }
 export function useAdminSettings(enabled = true) { return useQuery({ queryKey: adminQueryKeys.settings, queryFn: getAdminSettings, enabled }); }

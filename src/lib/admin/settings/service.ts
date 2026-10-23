@@ -36,12 +36,17 @@ export async function updateAdminSettings(actor: Actor, input: { priority?: Part
     }
   }
   for (const rule of input.pointRules ?? []) if (!db.select({ id: pointRules.id }).from(pointRules).where(eq(pointRules.code, rule.code)).get()) throw new AdminInputError("Unknown point rule code.");
+  for (const rule of input.recommendationRules ?? []) if (!Number.isInteger(rule.thresholdPercent) || rule.thresholdPercent < 0 || rule.thresholdPercent > 100 || !rule.topic.trim() || !rule.reasonTemplate.trim()) throw new AdminInputError("Invalid recommendation rule.");
   const now = new Date();
   return db.transaction((tx) => {
     assertActor(tx, actor, now);
     for (const [key, value] of Object.entries(input.priority ?? {})) tx.insert(ideaSettings).values({ key, value: value!, updatedBy: actor.userId, updatedAt: now }).onConflictDoUpdate({ target: ideaSettings.key, set: { value: value!, updatedBy: actor.userId, updatedAt: now } }).run();
     for (const rule of input.pointRules ?? []) tx.update(pointRules).set({ points: rule.points, active: rule.active, updatedAt: now }).where(eq(pointRules.code, rule.code)).run();
-    for (const rule of input.recommendationRules ?? []) tx.insert(quizRecommendationRules).values({ ...rule, updatedAt: now }).onConflictDoUpdate({ target: quizRecommendationRules.topic, set: { thresholdPercent: rule.thresholdPercent, reasonTemplate: rule.reasonTemplate, active: rule.active, updatedAt: now } }).run();
+    for (const rule of input.recommendationRules ?? []) {
+      const existing = tx.select({ id: quizRecommendationRules.id }).from(quizRecommendationRules).where(eq(quizRecommendationRules.topic, rule.topic)).get();
+      if (existing) tx.update(quizRecommendationRules).set({ thresholdPercent: rule.thresholdPercent, reasonTemplate: rule.reasonTemplate, active: rule.active, updatedAt: now }).where(eq(quizRecommendationRules.id, existing.id)).run();
+      else tx.insert(quizRecommendationRules).values({ ...rule, updatedAt: now }).run();
+    }
     tx.insert(auditEvents).values(buildAuditRecord({ actorUserId: actor.userId, sessionId: actor.sessionId, action: "admin.settings.updated", targetType: "admin_settings", reason, metadata: { priorityKeys: Object.keys(input.priority ?? {}), pointRuleCodes: (input.pointRules ?? []).map((r) => r.code), recommendationTopics: (input.recommendationRules ?? []).map((r) => r.topic) }, ipAddress: actor.ipAddress, userAgent: actor.userAgent }, now)).run();
     return { updated: true };
   });

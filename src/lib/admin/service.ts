@@ -10,7 +10,7 @@ import { AdminConflictError, AdminNotFoundError, safeAuditMetadata } from "./que
 
 type Page = { limit: number; after: number | null };
 type Actor = { userId: number; sessionId: number };
-type AuditFilters = Page & { actorUserId?: number | null; action?: string | null; targetType?: string | null; targetId?: string | null };
+type AuditFilters = Page & { actorUserId?: number | null; action?: string | null; targetType?: string | null; targetId?: string | null; from?: Date | null; to?: Date | null; ipHash?: string | null };
 
 const userFields = {
   id: users.id, name: users.name, email: users.email, role: users.role, profile: users.profile,
@@ -161,6 +161,9 @@ export async function listAuditEvents(filters: AuditFilters) {
   if (filters.action) conditions.push(eq(auditEvents.action, filters.action));
   if (filters.targetType) conditions.push(eq(auditEvents.targetType, filters.targetType));
   if (filters.targetId) conditions.push(eq(auditEvents.targetId, filters.targetId));
+  if (filters.from) conditions.push(sql`${auditEvents.createdAt} >= ${filters.from}`);
+  if (filters.to) conditions.push(sql`${auditEvents.createdAt} < ${filters.to}`);
+  if (filters.ipHash) conditions.push(eq(auditEvents.ipHash, filters.ipHash));
   const rows = db.select({ id: auditEvents.id, createdAt: auditEvents.createdAt,
     actorUserId: auditEvents.actorUserId, sessionId: auditEvents.sessionId, action: auditEvents.action,
     targetType: auditEvents.targetType, targetId: auditEvents.targetId, reason: auditEvents.reason,
@@ -168,4 +171,11 @@ export async function listAuditEvents(filters: AuditFilters) {
   }).from(auditEvents).where(conditions.length ? and(...conditions) : undefined)
     .orderBy(desc(auditEvents.id)).limit(filters.limit + 1).all();
   return pageResult(rows.map(({ metadataJson, ...row }) => ({ ...row, metadata: safeAuditMetadata(metadataJson) })), filters.limit);
+}
+
+export async function getAdminAnalytics() {
+  const bounded = (query: any) => query.all();
+  const usersByState = bounded(db.select({ state: sql<string>`CASE WHEN ${users.isActive} = 1 THEN 'active' ELSE 'inactive' END`, count: sql<number>`count(*)` }).from(users).groupBy(users.isActive));
+  const auditByAction = db.select({ action: auditEvents.action, count: sql<number>`count(*)` }).from(auditEvents).where(sql`${auditEvents.createdAt} >= ${new Date(Date.now() - 30 * 86400000)}`).groupBy(auditEvents.action).orderBy(desc(sql`count(*)`)).limit(20).all();
+  return { periodDays: 30, generatedAt: new Date().toISOString(), usersByState, auditByAction };
 }

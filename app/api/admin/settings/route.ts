@@ -7,7 +7,7 @@ import { ok, requestId } from "../../../../src/lib/http/errors";
 
 const schema = z.strictObject({
   reason: z.unknown(),
-  priority: z.record(z.string().max(80), z.string().max(4000)).optional(),
+  priority: z.record(z.enum(["minimum_priority_score", "priority_point_rules", "priority_level_rules", "priority_recommendation_rules"]), z.string().max(4000)).optional(),
   pointRules: z.array(z.strictObject({ code: z.string().trim().min(1).max(80), points: z.number().int().min(0).max(100000), active: z.boolean() })).max(100).optional(),
   recommendationRules: z.array(z.strictObject({ topic: z.string().trim().min(1).max(120), thresholdPercent: z.number().int().min(0).max(100), reasonTemplate: z.string().trim().min(1).max(500), active: z.boolean() })).max(200).optional(),
 });

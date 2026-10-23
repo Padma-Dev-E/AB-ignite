@@ -22,6 +22,7 @@ export function AdminSettingsEditor({ className = "" }: AdminSettingsEditorProps
   const settings = useAdminSettings();
   const client = useQueryClient();
   const [minimum, setMinimum] = useState<string | null>(null);
+  const [priorityRules, setPriorityRules] = useState<Record<string, string> | null>(null);
   const [pointRules, setPointRules] = useState<PointRule[] | null>(null);
   const [recommendationRules, setRecommendationRules] = useState<RecommendationRule[] | null>(null);
   const [reason, setReason] = useState("");
@@ -43,9 +44,10 @@ export function AdminSettingsEditor({ className = "" }: AdminSettingsEditorProps
     if (!normalizedReason || normalizedReason.length > 500 || !Number.isFinite(minScore) || minScore < 0 || minScore > 3) return;
     setSaving(true); setError(""); setSuccess("");
     try {
-      await apiFetch("/api/admin/settings", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ reason: normalizedReason, priority: { minimum_priority_score: String(minScore) }, pointRules: points, recommendationRules: recommendations }) });
+      const priority = { ...(priorityRules ?? {}), minimum_priority_score: String(minScore) };
+      await apiFetch("/api/admin/settings", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ reason: normalizedReason, priority, pointRules: points, recommendationRules: recommendations }) });
       await client.invalidateQueries({ queryKey: adminQueryKeys.settings });
-      setMinimum(null); setPointRules(null); setRecommendationRules(null); setReason(""); setSuccess("Settings saved.");
+      setMinimum(null); setPriorityRules(null); setPointRules(null); setRecommendationRules(null); setReason(""); setSuccess("Settings saved.");
     } catch (cause) { setError(message(cause)); }
     finally { setSaving(false); }
   }
@@ -57,6 +59,7 @@ export function AdminSettingsEditor({ className = "" }: AdminSettingsEditorProps
     {error && <p className="mt-4 rounded-xl border border-pink/40 bg-pink/5 p-3 text-sm text-[#d6336c]" role="alert">{error}</p>}
     <form className="mt-5 space-y-5" onSubmit={submit}>
       <label className="block text-sm"><span className="field-label">Minimum priority score</span><input className="input mt-1 max-w-xs" type="number" min="0" max="3" step="0.01" required value={priorityValue} onChange={(event) => setMinimum(event.target.value)} /><span className="mt-1 block text-xs text-muted">Allowed range: 0–3.</span></label>
+      <div><h3 className="font-medium">Priority rule controls</h3><p className="mt-1 text-xs text-muted">JSON values are validated and stored with the privileged change audit.</p><div className="mt-2 space-y-3">{(["priority_point_rules", "priority_level_rules", "priority_recommendation_rules"] as const).map((key) => <label className="block text-sm" key={key}><span className="field-label">{key.replaceAll("_", " ")}</span><textarea className="input mt-1 min-h-24 font-mono text-xs" value={priorityRules?.[key] ?? settings.data.priority[key] ?? "{}"} onChange={(event) => setPriorityRules({ ...(priorityRules ?? {}), [key]: event.target.value })} /></label>)}</div></div>
       <div><h3 className="font-medium">Point rules</h3><div className="mt-2 divide-y" style={{ borderColor: "var(--line)" }}>{points.map((rule, index) => <div key={rule.code} className="flex flex-wrap items-center gap-3 py-2"><span className="min-w-32 flex-1 text-sm">{settings.data.pointRules[index]?.name ?? rule.code}</span><label className="text-sm">Points <input className="input ml-1 w-24" type="number" min="0" max="100000" step="1" value={rule.points} onChange={(event) => setPointRules(points.map((item, i) => i === index ? { ...item, points: Number(event.target.value) } : item))} /></label><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={rule.active} onChange={(event) => setPointRules(points.map((item, i) => i === index ? { ...item, active: event.target.checked } : item))} />Active</label></div>)}</div></div>
       <div><h3 className="font-medium">Recommendation rules</h3><div className="mt-2 space-y-3">{recommendations.map((rule, index) => <fieldset key={rule.topic} className="rounded-xl border p-3" style={{ borderColor: "var(--line)" }}><legend className="px-1 text-sm font-medium">{rule.topic}</legend><div className="grid gap-3 sm:grid-cols-[auto_1fr_auto] sm:items-end"><label className="text-sm">Threshold (%)<input className="input mt-1 w-full" type="number" min="0" max="100" step="1" value={rule.thresholdPercent} onChange={(event) => setRecommendationRules(recommendations.map((item, i) => i === index ? { ...item, thresholdPercent: Number(event.target.value) } : item))} /></label><label className="text-sm">Reason template<input className="input mt-1 w-full" maxLength={500} required value={rule.reasonTemplate} onChange={(event) => setRecommendationRules(recommendations.map((item, i) => i === index ? { ...item, reasonTemplate: event.target.value } : item))} /></label><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={rule.active} onChange={(event) => setRecommendationRules(recommendations.map((item, i) => i === index ? { ...item, active: event.target.checked } : item))} />Active</label></div></fieldset>)}</div></div>
       <label className="block text-sm"><span className="field-label">Privileged reason</span><textarea className="input mt-1 min-h-24" required minLength={1} maxLength={500} value={reason} onChange={(event) => setReason(event.target.value)} /><span className="mt-1 block text-xs text-muted">Required, up to 500 characters.</span></label>

@@ -34,12 +34,14 @@ export function adminApiError(error: unknown, requestId: string) {
 }
 
 export function auditFilters(url: URL, maxLimit: number) {
+  const date = (key: string) => { const value = url.searchParams.get(key); if (value === null) return null; const parsed = new Date(value); if (!Number.isFinite(parsed.getTime())) throw new AdminInputError(`Invalid ${key} date.`); return parsed; };
   return {
     ...parsePage(url, maxLimit),
     actorUserId: optionalId(url.searchParams.get("actorUserId")),
     action: boundedFilter(url.searchParams.get("action"), 120),
     targetType: boundedFilter(url.searchParams.get("targetType"), 80),
     targetId: boundedFilter(url.searchParams.get("targetId"), 120),
+    from: date("from"), to: date("to"), ipHash: boundedFilter(url.searchParams.get("ipHash"), 64),
   };
 }
 

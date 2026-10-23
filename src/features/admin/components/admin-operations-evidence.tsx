@@ -2,7 +2,8 @@
 
 import { useMemo } from "react";
 import { Card, SectionHeading, StatTile } from "../../../components/ui";
-import { useAdminAudit, useAdminChallenges, useAdminFeedback, useAdminRedemptions, useAdminScreening, useAdminTransformation, useAdminUsers } from "../hooks";
+import { useAdminAnalytics, useAdminAudit, useAdminChallenges, useAdminFeedback, useAdminRedemptions, useAdminScreening, useAdminTransformation, useAdminUsers } from "../hooks";
+import { adminExportUrl } from "../api";
 import { AdminFeedbackResponses } from "./admin-feedback-responses";
 
 type EvidenceRow = { area: string; metric: string; value: number; scope: string };
@@ -33,6 +34,7 @@ function State({ label, pending, error, count }: { label: string; pending: boole
 /** Standalone admin evidence surface. Data is limited to existing secured read endpoints. */
 export function AdminOperationsEvidence() {
   const users = useAdminUsers();
+  const analytics = useAdminAnalytics();
   const audit = useAdminAudit();
   const screening = useAdminScreening();
   const transformation = useAdminTransformation();
@@ -61,13 +63,15 @@ export function AdminOperationsEvidence() {
       <StatTile value={challenges.data?.items.length ?? "—"} label="Open challenges" />
       <StatTile value={audit.data?.items.length ?? "—"} label="Audit events in view" />
     </div>
+    {analytics.data && <Card><h2 className="text-xl font-medium">30 day analytics</h2><p className="mt-1 text-xs text-muted">Generated {new Date(analytics.data.generatedAt).toLocaleString()}</p><div className="mt-3 flex flex-wrap gap-2">{analytics.data.usersByState.map((item) => <span className="pill" key={item.state}>{item.state}: {item.count}</span>)}{analytics.data.auditByAction.map((item) => <span className="pill" key={item.action}>{item.action}: {item.count}</span>)}</div></Card>}
     <Card>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div><h2 className="text-xl font-medium">Evidence exports</h2><p className="mt-1 max-w-2xl text-sm text-muted">The summary CSV contains aggregate counts and scope labels only. The audit CSV uses the existing audited, bounded server export.</p></div>
         <div className="flex flex-wrap gap-2">
           <button type="button" className="btn" onClick={refresh}>Refresh evidence</button>
           <button type="button" className="btn-primary" disabled={!ready} onClick={() => downloadCsv(rows)}>Download summary CSV</button>
-          <a className="btn" href="/api/admin/audit/export?limit=1000">Download audit CSV</a>
+          <a className="btn" href={adminExportUrl("audit")}>Download audit CSV</a>
+          <a className="btn" href={adminExportUrl("users")}>Download users CSV</a>
         </div>
       </div>
       {!ready && <p className="mt-3 text-xs text-muted">Summary export becomes available after all bounded source queries load successfully.</p>}
