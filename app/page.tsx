@@ -1,31 +1,81 @@
 "use client";
 
-import { Dialog, DialogPanel, Transition, TransitionChild } from "@headlessui/react";
+import {
+  Dialog,
+  DialogPanel,
+  Transition,
+  TransitionChild,
+} from "@headlessui/react";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { signOut as authSignOut } from "next-auth/react";
 import { isActiveNav, NAV_ITEMS, pageTitle } from "../src/lib/navigation";
-import { Button, IconBox, SectionHeading, StatTile } from "../src/components/ui";
+import {
+  Button,
+  IconBox,
+  SectionHeading,
+  StatTile,
+} from "../src/components/ui";
 import { LoginScreen as AuthLoginScreen } from "../src/components/auth/login-screen";
-import { EmployeeCommunityPage, EmployeeIdeaDetailPage, EmployeeIdeaSubmissionPage } from "../src/features/ideas/components/employee-idea-flow";
-import { ArticleList, JourneyCard, LearningState } from "../src/features/learning/components/learning-cards";
+import {
+  EmployeeCommunityPage,
+  EmployeeIdeaDetailPage,
+  EmployeeIdeaSubmissionPage,
+} from "../src/features/ideas/components/employee-idea-flow";
+import {
+  ArticleList,
+  JourneyCard,
+  LearningState,
+} from "../src/features/learning/components/learning-cards";
 import { QuizJourney } from "../src/features/learning/components/quiz-journey";
-import { LearningChallenges, LearningRanking } from "../src/features/learning/components/learning-social";
-import { useArticles, useCompleteArticle, useLearningArticle, useLearningJourney, useLearningRecommendations } from "../src/features/learning/hooks";
+import {
+  LearningChallenges,
+  LearningRanking,
+} from "../src/features/learning/components/learning-social";
+import {
+  useArticles,
+  useCompleteArticle,
+  useLearningArticle,
+  useLearningJourney,
+  useLearningRecommendations,
+} from "../src/features/learning/hooks";
 import { ArticleCard } from "../src/features/learning/components/learning-cards";
-import { useRedemptions, useRequestRedemption, useRewards } from "../src/features/rewards/hooks";
-import { BadgeProgressList, RedemptionHistory, RewardCatalogue, RewardsBalanceCard, RewardsState } from "../src/features/rewards/components/reward-cards";
-import { useEmployeeNotifications, useSetEmployeeNotificationRead } from "../src/features/employee/engagement-hooks";
+import {
+  useRedemptions,
+  useRequestRedemption,
+  useRewards,
+} from "../src/features/rewards/hooks";
+import {
+  BadgeProgressList,
+  RedemptionHistory,
+  RewardCatalogue,
+  RewardsBalanceCard,
+  RewardsState,
+} from "../src/features/rewards/components/reward-cards";
+import {
+  useEmployeeNotifications,
+  useSetEmployeeNotificationRead,
+} from "../src/features/employee/engagement-hooks";
 import type { Notification } from "../src/features/employee/engagement-api";
 import { EmployeeProfileCard } from "../src/features/employee/employee-profile";
 
-type Page = "community" | "new" | "learn" | "library" | "rewards" | "me" | "article" | "idea" | "quiz";
+type Page =
+  | "community"
+  | "new"
+  | "learn"
+  | "library"
+  | "rewards"
+  | "me"
+  | "article"
+  | "idea"
+  | "quiz";
 type IconName = keyof typeof iconPaths;
 
 const iconPaths = {
   home: "M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z",
   flag: "M5 21V4h11l-1.5 4L16 12H5",
   plus: "M12 5v14M5 12h14",
-  trophy: "M8 4h8v5a4 4 0 0 1-8 0zM8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4M12 13v4M8 20h8",
+  trophy:
+    "M8 4h8v5a4 4 0 0 1-8 0zM8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4M12 13v4M8 20h8",
   user: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0",
   bell: "M6 16v-5a6 6 0 1 1 12 0v5l2 2H4zM10 21h4",
   menu: "M4 7h16M4 12h16M4 17h16",
@@ -35,7 +85,8 @@ const iconPaths = {
   spark: "M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z",
   bulb: "M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.7.7 1 1.5 1 2.5h6c0-1 .3-1.8 1-2.5A6 6 0 0 0 12 3z",
   bot: "M12 4v3M6 7h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2zM9 12v2M15 12v2",
-  users: "M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM2 20a7 7 0 0 1 14 0M17 4.5a3.5 3.5 0 0 1 0 6.5M18 14a6 6 0 0 1 4 6",
+  users:
+    "M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM2 20a7 7 0 0 1 14 0M17 4.5a3.5 3.5 0 0 1 0 6.5M18 14a6 6 0 0 1 4 6",
   book: "M5 4h13v14H7a2 2 0 0 0 0 4h11M5 4v16",
   gift: "M4 11h16v9H4zM3 7h18v4H3zM12 7v13M12 7c-1.5-3-5-3-5-1s3 1 5 1zm0 0c1.5-3 5-3 5-1s-3 1-5 1z",
   zap: "M13 3L5 13h6l-1 8 8-10h-6z",
@@ -45,123 +96,943 @@ const iconPaths = {
   search: "m21 21-4.3-4.3M10.8 18a7.2 7.2 0 1 1 0-14.4 7.2 7.2 0 0 1 0 14.4z",
   lock: "M6 11h12v9H6zM8 11V8a4 4 0 0 1 8 0v3",
   trend: "M3 17l6-6 4 4 8-8M15 7h6v6",
-  rocket: "M12 3c3 2 5 5.5 5 9l-2 4H9l-2-4c0-3.5 2-7 5-9zM9 16l-2 4M15 16l2 4M12 9.5v1",
-  flask: "M9 3h6M10 3v6l-5 9a2 2 0 0 0 1.8 3h10.4A2 2 0 0 0 19 18l-5-9V3M7.5 15h9",
+  rocket:
+    "M12 3c3 2 5 5.5 5 9l-2 4H9l-2-4c0-3.5 2-7 5-9zM9 16l-2 4M15 16l2 4M12 9.5v1",
+  flask:
+    "M9 3h6M10 3v6l-5 9a2 2 0 0 0 1.8 3h10.4A2 2 0 0 0 19 18l-5-9V3M7.5 15h9",
   arrow: "M5 12h14m-6-6 6 6-6 6",
 } as const;
 
-function Icon({ name, className = "h-[19px] w-[19px]" }: { name: IconName; className?: string }) {
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className={className}><path d={iconPaths[name]} /></svg>;
+function Icon({
+  name,
+  className = "h-[19px] w-[19px]",
+}: {
+  name: IconName;
+  className?: string;
+}) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className={className}
+    >
+      <path d={iconPaths[name]} />
+    </svg>
+  );
 }
 
 function Logo({ large = false }: { large?: boolean }) {
-  return <div className={`flex items-center gap-2 ${large ? "justify-center" : ""}`}>
-    <svg width={large ? 40 : 32} height={large ? 40 : 32} viewBox="0 0 24 24" aria-hidden="true">
-      <defs><linearGradient id="flame" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#FBBF24" /><stop offset="1" stopColor="#F97316" /></linearGradient></defs>
-      <path d="M12.6 2.5c3.6 3.9 6.4 7.2 6.4 11.3a7 7 0 0 1-14 0c0-2.8 1.3-5 3.1-6.7.1 2.4.9 3.7 2.2 3.9 1.3-2.1 2.3-5 2.3-8.5z" fill="url(#flame)" />
-      <path d="M12.3 12.6c1.7 1.9 3 3.5 3 5.4a3.3 3.3 0 0 1-6.6 0c0-1.3.6-2.4 1.5-3.2 0 1.1.4 1.7 1 1.9.6-1 1.1-2.4 1.1-4.1z" fill="#FDE68A" />
-    </svg>
-    <div className={`brand-wordmark ${large ? "scale-125 origin-left" : ""}`}><small>ARAB BANK</small><b>AB IGNITE</b></div>
-  </div>;
+  return (
+    <div className={`flex items-center gap-2 ${large ? "justify-center" : ""}`}>
+      <svg
+        width={large ? 40 : 32}
+        height={large ? 40 : 32}
+        viewBox="0 0 24 24"
+        aria-hidden="true"
+      >
+        <defs>
+          <linearGradient id="flame" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stopColor="#FBBF24" />
+            <stop offset="1" stopColor="#F97316" />
+          </linearGradient>
+        </defs>
+        <path
+          d="M12.6 2.5c3.6 3.9 6.4 7.2 6.4 11.3a7 7 0 0 1-14 0c0-2.8 1.3-5 3.1-6.7.1 2.4.9 3.7 2.2 3.9 1.3-2.1 2.3-5 2.3-8.5z"
+          fill="url(#flame)"
+        />
+        <path
+          d="M12.3 12.6c1.7 1.9 3 3.5 3 5.4a3.3 3.3 0 0 1-6.6 0c0-1.3.6-2.4 1.5-3.2 0 1.1.4 1.7 1 1.9.6-1 1.1-2.4 1.1-4.1z"
+          fill="#FDE68A"
+        />
+      </svg>
+      <div className={`brand-wordmark ${large ? "scale-125 origin-left" : ""}`}>
+        <small>ARAB BANK</small>
+        <b>AB IGNITE</b>
+      </div>
+    </div>
+  );
 }
 
-function Avatar({ name, size = "sm" }: { name: string | number; size?: "sm" | "md" | "lg" }) {
+function Avatar({
+  name,
+  size = "sm",
+}: {
+  name: string | number;
+  size?: "sm" | "md" | "lg";
+}) {
   const label = String(name);
-  const colors = ["#2F80ED", "#12A383", "#7C5CE0", "#E8891C", "#DB4C7F", "#0E9AD6"];
-  const color = colors[label.split("").reduce((sum, char) => sum + char.charCodeAt(0), 0) % colors.length];
-  const classes = { sm: "h-7 w-7 text-xs", md: "h-9 w-9 text-sm", lg: "h-12 w-12 text-lg" };
-  return <span className={`grid shrink-0 place-items-center rounded-full font-semibold text-white ${classes[size]}`} style={{ background: color }}>{label.trim()[0]?.toUpperCase() ?? "?"}</span>;
+  const colors = [
+    "#2F80ED",
+    "#12A383",
+    "#7C5CE0",
+    "#E8891C",
+    "#DB4C7F",
+    "#0E9AD6",
+  ];
+  const color =
+    colors[
+      label.split("").reduce((sum, char) => sum + char.charCodeAt(0), 0) %
+        colors.length
+    ];
+  const classes = {
+    sm: "h-7 w-7 text-xs",
+    md: "h-9 w-9 text-sm",
+    lg: "h-12 w-12 text-lg",
+  };
+  return (
+    <span
+      className={`grid shrink-0 place-items-center rounded-full font-semibold text-white ${classes[size]}`}
+      style={{ background: color }}
+    >
+      {label.trim()[0]?.toUpperCase() ?? "?"}
+    </span>
+  );
 }
 
-function StatusPill({ children, tone = "blue" }: { children: React.ReactNode; tone?: "blue" | "teal" | "sand" | "pink" | "muted" }) {
-  const tones = { blue: "text-blue border-blue/45", teal: "text-[#0e9f7a] border-[#0e9f7a]/50", sand: "text-sand border-sand/50", pink: "text-[#d6336c] border-[#d6336c]/50", muted: "text-muted border-[var(--line-strong)]" };
-  return <span className={`pill ${tones[tone]}`}><span className="pill-dot" />{children}</span>;
+function StatusPill({
+  children,
+  tone = "blue",
+}: {
+  children: React.ReactNode;
+  tone?: "blue" | "teal" | "sand" | "pink" | "muted";
+}) {
+  const tones = {
+    blue: "text-blue border-blue/45",
+    teal: "text-[#0e9f7a] border-[#0e9f7a]/50",
+    sand: "text-sand border-sand/50",
+    pink: "text-[#d6336c] border-[#d6336c]/50",
+    muted: "text-muted border-[var(--line-strong)]",
+  };
+  return (
+    <span className={`pill ${tones[tone]}`}>
+      <span className="pill-dot" />
+      {children}
+    </span>
+  );
 }
 
-function Tabs({ items, active, onChange }: { items: string[]; active: string; onChange: (value: string) => void }) {
-  return <div className="inline-flex max-w-full gap-0.5 overflow-x-auto rounded-xl border bg-white p-1" style={{ borderColor: "var(--line)" }}>
-    {items.map((item) => <button key={item} onClick={() => onChange(item)} className={`whitespace-nowrap rounded-[9px] px-3.5 py-2 text-[13.5px] font-medium ${active === item ? "bg-blue text-white" : "text-muted hover:bg-[var(--hover)]"}`}>{item}</button>)}
-  </div>;
+function Tabs({
+  items,
+  active,
+  onChange,
+}: {
+  items: string[];
+  active: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div
+      className="inline-flex max-w-full gap-0.5 overflow-x-auto rounded-xl border bg-white p-1"
+      style={{ borderColor: "var(--line)" }}
+    >
+      {items.map((item) => (
+        <button
+          key={item}
+          onClick={() => onChange(item)}
+          className={`whitespace-nowrap rounded-[9px] px-3.5 py-2 text-[13.5px] font-medium ${active === item ? "bg-blue text-white" : "text-muted hover:bg-[var(--hover)]"}`}
+        >
+          {item}
+        </button>
+      ))}
+    </div>
+  );
 }
 
-function SideNav({ page, open, onClose, onNavigate, onSignOut }: { page: Page; open: boolean; onClose: () => void; onNavigate: (page: Page) => void; onSignOut: () => void }) {
-  return <aside className={`fixed inset-y-0 left-0 z-50 flex w-[268px] -translate-x-[105%] flex-col gap-6 border-r p-[22px_14px] transition-transform lg:sticky lg:top-0 lg:h-screen lg:w-[240px] lg:translate-x-0 lg:bg-white/60 ${open ? "translate-x-0" : ""}`} style={{ borderColor: "var(--line)", backgroundColor: "rgba(255,255,255,.76)", backdropFilter: "blur(16px)" }}>
-    <div className="px-2"><Logo /></div>
-    <nav className="flex flex-col gap-0.5">
-      {NAV_ITEMS.map((item) => <button key={item.key} onClick={() => { onNavigate(item.key as Page); onClose(); }} className={`relative flex items-center gap-3 rounded-[10px] px-3 py-3 text-left font-normal transition ${isActiveNav(item.key, page) ? "bg-gradient-to-r from-blue/20 to-transparent font-medium text-ink before:absolute before:bottom-[9px] before:left-0 before:top-[9px] before:w-[3px] before:rounded-sm before:bg-blue" : "text-muted hover:bg-[var(--hover)] hover:text-ink"}`}><Icon name={item.icon as IconName} className="h-[19px] w-[19px] text-blue" />{item.label}</button>)}
+function SideNav({
+  page,
+  open,
+  onClose,
+  onNavigate,
+  onSignOut,
+}: {
+  page: Page;
+  open: boolean;
+  onClose: () => void;
+  onNavigate: (page: Page) => void;
+  onSignOut: () => void;
+}) {
+  return (
+    <aside
+      className={`fixed inset-y-0 left-0 z-50 flex w-[268px] -translate-x-[105%] flex-col gap-6 border-r p-[22px_14px] transition-transform lg:sticky lg:top-0 lg:h-screen lg:w-[240px] lg:translate-x-0 lg:bg-white/60 ${open ? "translate-x-0" : ""}`}
+      style={{
+        borderColor: "var(--line)",
+        backgroundColor: "rgba(255,255,255,.76)",
+        backdropFilter: "blur(16px)",
+      }}
+    >
+      <div className="px-2">
+        <Logo />
+      </div>
+      <nav className="flex flex-col gap-0.5">
+        {NAV_ITEMS.map((item) => (
+          <button
+            key={item.key}
+            onClick={() => {
+              onNavigate(item.key as Page);
+              onClose();
+            }}
+            className={`relative flex items-center gap-3 rounded-[10px] px-3 py-3 text-left font-normal transition ${isActiveNav(item.key, page) ? "bg-gradient-to-r from-blue/20 to-transparent font-medium text-ink before:absolute before:bottom-[9px] before:left-0 before:top-[9px] before:w-[3px] before:rounded-sm before:bg-blue" : "text-muted hover:bg-[var(--hover)] hover:text-ink"}`}
+          >
+            <Icon
+              name={item.icon as IconName}
+              className="h-[19px] w-[19px] text-blue"
+            />
+            {item.label}
+          </button>
+        ))}
+      </nav>
+      <div
+        className="mt-auto rounded-[14px] border p-3.5 text-[12.5px] text-muted"
+        style={{ borderColor: "var(--line)" }}
+      >
+        <b className="font-medium text-ink">padmadev</b>
+        <br />
+        Technology
+        <br />
+        <button onClick={onSignOut} className="mt-2 text-blue">
+          Sign out
+        </button>
+      </div>
+    </aside>
+  );
+}
+
+function TopBar({
+  page,
+  points,
+  unreadCount,
+  onMenu,
+  onNavigate,
+  onNotifications,
+}: {
+  page: Page;
+  points: number;
+  unreadCount: number;
+  onMenu: () => void;
+  onNavigate: (page: Page) => void;
+  onNotifications: () => void;
+}) {
+  return (
+    <header
+      className="sticky top-0 z-30 flex items-center gap-2 border-b bg-white/75 px-3 py-2.5 backdrop-blur-md sm:px-7"
+      style={{ borderColor: "var(--line)" }}
+    >
+      <button
+        className="icon-button lg:hidden"
+        onClick={onMenu}
+        aria-label="Open menu"
+      >
+        <Icon name="menu" />
+      </button>
+      <h2 className="mr-auto min-w-0 truncate text-[15px] font-medium before:mr-2.5 before:inline-block before:h-2.5 before:w-2.5 before:rounded-full before:bg-blue sm:text-base">
+        {pageTitle(page)}
+      </h2>
+      <button
+        className="btn-primary btn-small hidden sm:inline-flex"
+        onClick={() => onNavigate("new")}
+      >
+        <Icon name="spark" /> I have an idea
+      </button>
+      <button
+        className="hidden items-center gap-1.5 rounded-[11px] border px-3 py-2 text-[13.5px] font-medium sm:flex"
+        style={{ borderColor: "var(--line)" }}
+        onClick={() => onNavigate("me")}
+      >
+        <span>💡</span>
+        {points.toLocaleString("en-US")}
+      </button>
+      <button
+        className="icon-button relative"
+        onClick={onNotifications}
+        aria-label={`Notifications${unreadCount ? `, ${unreadCount} unread` : ""}`}
+      >
+        <Icon name="bell" />
+        {unreadCount > 0 && (
+          <span className="absolute -right-1 -top-1 grid h-[18px] min-w-[18px] place-items-center rounded-full bg-[#e5484d] px-1 text-[11px] font-bold text-white">
+            {unreadCount > 99 ? "99+" : unreadCount}
+          </span>
+        )}
+      </button>
+      <button onClick={() => onNavigate("me")} className="hidden sm:block">
+        <Avatar name="padmadev" />
+      </button>
+    </header>
+  );
+}
+
+function MobileNav({
+  page,
+  onNavigate,
+}: {
+  page: Page;
+  onNavigate: (page: Page) => void;
+}) {
+  const items: { key: Page; label: string; icon: IconName }[] = [
+    { key: "community", label: "Home", icon: "home" },
+    { key: "learn", label: "Learn", icon: "zap" },
+    { key: "new", label: "Idea", icon: "spark" },
+    { key: "library", label: "Library", icon: "book" },
+    { key: "me", label: "Account", icon: "user" },
+  ];
+  return (
+    <nav
+      className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t bg-white/90 px-1 pb-[calc(6px+env(safe-area-inset-bottom))] pt-1.5 backdrop-blur-md lg:hidden"
+      style={{ borderColor: "var(--line)" }}
+    >
+      {items.map((item) => (
+        <button
+          key={item.key}
+          onClick={() => onNavigate(item.key)}
+          className={`flex flex-col items-center gap-0.5 py-1.5 text-[11px] ${isActiveNav(item.key, page) ? "text-blue" : "text-[var(--dim)]"} ${item.key === "new" ? "-mt-5" : ""}`}
+        >
+          <span
+            className={
+              item.key === "new"
+                ? "grid h-11 w-11 place-items-center rounded-full bg-blue text-white shadow-[0_0_0_5px_var(--bg)]"
+                : ""
+            }
+          >
+            <Icon name={item.icon} className="h-5 w-5" />
+          </span>
+          {item.label}
+        </button>
+      ))}
     </nav>
-    <div className="mt-auto rounded-[14px] border p-3.5 text-[12.5px] text-muted" style={{ borderColor: "var(--line)" }}><b className="font-medium text-ink">padmadev</b><br />Technology<br /><button onClick={onSignOut} className="mt-2 text-blue">Sign out</button></div>
-  </aside>;
+  );
 }
 
-function TopBar({ page, points, unreadCount, onMenu, onNavigate, onNotifications }: { page: Page; points: number; unreadCount: number; onMenu: () => void; onNavigate: (page: Page) => void; onNotifications: () => void }) {
-  return <header className="sticky top-0 z-30 flex items-center gap-2 border-b bg-white/75 px-3 py-2.5 backdrop-blur-md sm:px-7" style={{ borderColor: "var(--line)" }}>
-    <button className="icon-button lg:hidden" onClick={onMenu} aria-label="Open menu"><Icon name="menu" /></button>
-    <h2 className="mr-auto min-w-0 truncate text-[15px] font-medium before:mr-2.5 before:inline-block before:h-2.5 before:w-2.5 before:rounded-full before:bg-blue sm:text-base">{pageTitle(page)}</h2>
-    <button className="btn-primary btn-small hidden sm:inline-flex" onClick={() => onNavigate("new")}><Icon name="spark" /> I have an idea</button>
-    <button className="hidden items-center gap-1.5 rounded-[11px] border px-3 py-2 text-[13.5px] font-medium sm:flex" style={{ borderColor: "var(--line)" }} onClick={() => onNavigate("me")}><span>💡</span>{points.toLocaleString("en-US")}</button>
-    <button className="icon-button relative" onClick={onNotifications} aria-label={`Notifications${unreadCount ? `, ${unreadCount} unread` : ""}`}><Icon name="bell" />{unreadCount > 0 && <span className="absolute -right-1 -top-1 grid h-[18px] min-w-[18px] place-items-center rounded-full bg-[#e5484d] px-1 text-[11px] font-bold text-white">{unreadCount > 99 ? "99+" : unreadCount}</span>}</button>
-    <button onClick={() => onNavigate("me")} className="hidden sm:block"><Avatar name="padmadev" /></button>
-  </header>;
-}
-
-function MobileNav({ page, onNavigate }: { page: Page; onNavigate: (page: Page) => void }) {
-  const items: { key: Page; label: string; icon: IconName }[] = [{ key: "community", label: "Home", icon: "home" }, { key: "learn", label: "Learn", icon: "zap" }, { key: "new", label: "Idea", icon: "spark" }, { key: "library", label: "Library", icon: "book" }, { key: "me", label: "Account", icon: "user" }];
-  return <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t bg-white/90 px-1 pb-[calc(6px+env(safe-area-inset-bottom))] pt-1.5 backdrop-blur-md lg:hidden" style={{ borderColor: "var(--line)" }}>
-    {items.map((item) => <button key={item.key} onClick={() => onNavigate(item.key)} className={`flex flex-col items-center gap-0.5 py-1.5 text-[11px] ${isActiveNav(item.key, page) ? "text-blue" : "text-[var(--dim)]"} ${item.key === "new" ? "-mt-5" : ""}`}><span className={item.key === "new" ? "grid h-11 w-11 place-items-center rounded-full bg-blue text-white shadow-[0_0_0_5px_var(--bg)]" : ""}><Icon name={item.icon} className="h-5 w-5" /></span>{item.label}</button>)}
-  </nav>;
-}
-
-function Notifications({ open, onClose, items, unreadCount, onMarkAllRead }: { open: boolean; onClose: () => void; items: Notification[]; unreadCount: number; onMarkAllRead: () => void }) {
-  return <Transition show={open} as={Fragment}><Dialog onClose={onClose} className="relative z-[70]">
-    <TransitionChild as={Fragment} enter="transition-opacity duration-150" enterFrom="opacity-0" enterTo="opacity-100" leave="transition-opacity duration-150" leaveFrom="opacity-100" leaveTo="opacity-0"><div className="fixed inset-0 bg-navy/10 lg:bg-transparent" /></TransitionChild>
-    <TransitionChild as={Fragment} enter="transition duration-150" enterFrom="opacity-0 translate-y-2" enterTo="opacity-100 translate-y-0" leave="transition duration-100" leaveFrom="opacity-100" leaveTo="opacity-0 translate-y-2"><DialogPanel className="fixed right-3 top-[62px] w-[370px] max-w-[calc(100vw-24px)] rounded-2xl border bg-white p-2 shadow-[0_24px_60px_-14px_rgba(3,10,30,.5)] sm:right-6"><div className="flex items-center justify-between px-3 py-2"><div><h3 className="font-medium">Notifications</h3><p className="text-xs text-muted">{unreadCount} unread</p></div><button className="btn btn-small" onClick={onMarkAllRead} disabled={!unreadCount}>Mark all read</button></div>{items.length === 0 ? <p className="px-3 py-8 text-center text-sm text-muted">You’re all caught up.</p> : items.map((item) => <div key={item.id} className={`flex gap-3 rounded-[10px] p-3 text-sm ${item.isRead ? "" : "bg-blue/[.06]"}`}><Icon name="bell" className="mt-0.5 h-[19px] w-[19px] shrink-0 text-blue" /><div className="min-w-0 flex-1"><b className="font-medium">{item.title}</b><div className="text-[13px] text-muted">{item.body}</div></div><time className="whitespace-nowrap text-xs text-muted" dateTime={item.createdAt}>{new Date(item.createdAt).toLocaleDateString()}</time></div>)}</DialogPanel></TransitionChild>
-  </Dialog></Transition>;
+function Notifications({
+  open,
+  onClose,
+  items,
+  unreadCount,
+  hasNextPage,
+  isFetchingNextPage,
+  isPending,
+  isError,
+  onLoadMore,
+  onRetry,
+  onMarkAllRead,
+}: {
+  open: boolean;
+  onClose: () => void;
+  items: Notification[];
+  unreadCount: number;
+  hasNextPage: boolean;
+  isFetchingNextPage: boolean;
+  isPending: boolean;
+  isError: boolean;
+  onLoadMore: () => void;
+  onRetry: () => void;
+  onMarkAllRead: () => void;
+}) {
+  return (
+    <Transition show={open} as={Fragment}>
+      <Dialog onClose={onClose} className="relative z-[70]">
+        <TransitionChild
+          as={Fragment}
+          enter="transition-opacity duration-150"
+          enterFrom="opacity-0"
+          enterTo="opacity-100"
+          leave="transition-opacity duration-150"
+          leaveFrom="opacity-100"
+          leaveTo="opacity-0"
+        >
+          <div className="fixed inset-0 bg-navy/10 lg:bg-transparent" />
+        </TransitionChild>
+        <TransitionChild
+          as={Fragment}
+          enter="transition duration-150"
+          enterFrom="opacity-0 translate-y-2"
+          enterTo="opacity-100 translate-y-0"
+          leave="transition duration-100"
+          leaveFrom="opacity-100"
+          leaveTo="opacity-0 translate-y-2"
+        >
+          <DialogPanel className="fixed right-3 top-[62px] w-[370px] max-w-[calc(100vw-24px)] rounded-2xl border bg-white p-2 shadow-[0_24px_60px_-14px_rgba(3,10,30,.5)] sm:right-6">
+            <div className="flex items-center justify-between px-3 py-2">
+              <div>
+                <h3 className="font-medium">Notifications</h3>
+                <p className="text-xs text-muted">{unreadCount} unread</p>
+              </div>
+              <button
+                className="btn btn-small"
+                onClick={onMarkAllRead}
+                disabled={!unreadCount}
+              >
+                Mark all read
+              </button>
+            </div>
+            <div className="max-h-[min(72vh,40rem)] overflow-y-auto">
+              {isPending ? (
+                <p
+                  className="px-3 py-8 text-center text-sm text-muted"
+                  role="status"
+                >
+                  Loading notifications…
+                </p>
+              ) : isError ? (
+                <div className="px-3 py-8 text-center text-sm text-muted">
+                  <p>Notifications couldn’t be loaded.</p>
+                  <button className="btn btn-small mt-3" onClick={onRetry}>
+                    Try again
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  {items.length === 0 ? (
+                    <p className="px-3 py-8 text-center text-sm text-muted">
+                      You’re all caught up.
+                    </p>
+                  ) : (
+                    items.map((item) => (
+                      <div
+                        key={item.id}
+                        className={`flex gap-3 rounded-[10px] p-3 text-sm ${item.isRead ? "" : "bg-blue/[.06]"}`}
+                      >
+                        <Icon
+                          name="bell"
+                          className="mt-0.5 h-[19px] w-[19px] shrink-0 text-blue"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <b className="font-medium">{item.title}</b>
+                          <div className="text-[13px] text-muted">
+                            {item.body}
+                          </div>
+                        </div>
+                        <time
+                          className="whitespace-nowrap text-xs text-muted"
+                          dateTime={item.createdAt}
+                        >
+                          {new Date(item.createdAt).toLocaleDateString()}
+                        </time>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+              {!isPending && !isError && hasNextPage && (
+                <button
+                  className="btn btn-small my-2 w-full"
+                  onClick={onLoadMore}
+                  disabled={isFetchingNextPage}
+                >
+                  {isFetchingNextPage ? "Loading…" : "Load more notifications"}
+                </button>
+              )}
+            </div>
+          </DialogPanel>
+        </TransitionChild>
+      </Dialog>
+    </Transition>
+  );
 }
 
 function AccountCard({ onOpen }: { onOpen: () => void }) {
-  return <button onClick={onOpen} className="hero-surface relative flex w-full flex-col justify-between overflow-hidden rounded-[18px] p-5 text-left text-white shadow-[0_18px_36px_-18px_var(--blue-deep)] sm:w-[340px] sm:aspect-[1.7]">
-    <div className="relative z-10 flex items-center justify-between text-xs"><span className="font-medium tracking-[.14em]">AB IGNITE <span className="ml-1 rounded-md border border-white/50 px-2 py-0.5 text-[10.5px] tracking-[.12em]">LEVEL 1</span></span><span>🏅 12th this season</span></div>
-    <div className="relative z-10"><div className="mb-2.5 h-[26px] w-[34px] rounded-md bg-gradient-to-br from-[#f6d98a] to-[#b98a2e]" /><div className="text-[32px] font-semibold leading-none tracking-[-.02em]">💡 0</div><div className="mt-1 text-xs text-white/80">Ignite account balance, in points</div></div>
-    <div className="relative z-10 flex justify-between text-xs"><span className="font-mono tracking-[.08em] text-white/70">ABI 0061 •••• PADMADEV</span><span>Ignite Starter</span></div>
-    <div className="pointer-events-none absolute -bottom-24 -right-16 h-64 w-64 rounded-full bg-[radial-gradient(circle,rgba(255,255,255,.4),transparent_68%)] opacity-30" />
-  </button>;
+  return (
+    <button
+      onClick={onOpen}
+      className="hero-surface relative flex w-full flex-col justify-between overflow-hidden rounded-[18px] p-5 text-left text-white shadow-[0_18px_36px_-18px_var(--blue-deep)] sm:w-[340px] sm:aspect-[1.7]"
+    >
+      <div className="relative z-10 flex items-center justify-between text-xs">
+        <span className="font-medium tracking-[.14em]">
+          AB IGNITE{" "}
+          <span className="ml-1 rounded-md border border-white/50 px-2 py-0.5 text-[10.5px] tracking-[.12em]">
+            LEVEL 1
+          </span>
+        </span>
+        <span>🏅 12th this season</span>
+      </div>
+      <div className="relative z-10">
+        <div className="mb-2.5 h-[26px] w-[34px] rounded-md bg-gradient-to-br from-[#f6d98a] to-[#b98a2e]" />
+        <div className="text-[32px] font-semibold leading-none tracking-[-.02em]">
+          💡 0
+        </div>
+        <div className="mt-1 text-xs text-white/80">
+          Ignite account balance, in points
+        </div>
+      </div>
+      <div className="relative z-10 flex justify-between text-xs">
+        <span className="font-mono tracking-[.08em] text-white/70">
+          ABI 0061 •••• PADMADEV
+        </span>
+        <span>Ignite Starter</span>
+      </div>
+      <div className="pointer-events-none absolute -bottom-24 -right-16 h-64 w-64 rounded-full bg-[radial-gradient(circle,rgba(255,255,255,.4),transparent_68%)] opacity-30" />
+    </button>
+  );
 }
 
 const ideas = [
-  { category: "Customer", tone: "blue", kind: "problem", title: "Centralized Merchant Subscription Management Portal", summary: "I have issue with managing all the merchant subscription", author: "Platform Admin", department: "Innovation Office", ref: "ABI-2026-00014", supports: 0, comments: 0, band: "Watch" },
-  { category: "Customer", tone: "blue", kind: "idea", title: "Mobile Camera Bill Scanning Feature for Arabi App", summary: "I suggest to add feature on arabi mobile to scan the bills using mobile camera instead of adding the bills manually", author: "Raghad Aljadid", department: "Technology", ref: "ABI-2026-00013", supports: 0, comments: 0, band: "Qualify" },
-  { category: "Growth", tone: "teal", kind: "idea", title: "Digital Certificate Deposits: P2P Trading Platform", summary: "Digital certificates deposit in JOD & USD, similar to tokens but with interest.", author: "Amer", department: "Other", ref: "ABI-2026-00012", supports: 0, comments: 0, band: "Qualify" },
-  { category: "Efficiency", tone: "violet", kind: "idea", title: "Automated Letter of Credit Issuance Process", summary: "I want to create automated LC issuance process in the bank.", author: "Platform Admin", department: "Innovation Office", ref: "ABI-2026-00011", supports: 1, comments: 0, band: "Priority" },
+  {
+    category: "Customer",
+    tone: "blue",
+    kind: "problem",
+    title: "Centralized Merchant Subscription Management Portal",
+    summary: "I have issue with managing all the merchant subscription",
+    author: "Platform Admin",
+    department: "Innovation Office",
+    ref: "ABI-2026-00014",
+    supports: 0,
+    comments: 0,
+    band: "Watch",
+  },
+  {
+    category: "Customer",
+    tone: "blue",
+    kind: "idea",
+    title: "Mobile Camera Bill Scanning Feature for Arabi App",
+    summary:
+      "I suggest to add feature on arabi mobile to scan the bills using mobile camera instead of adding the bills manually",
+    author: "Raghad Aljadid",
+    department: "Technology",
+    ref: "ABI-2026-00013",
+    supports: 0,
+    comments: 0,
+    band: "Qualify",
+  },
+  {
+    category: "Growth",
+    tone: "teal",
+    kind: "idea",
+    title: "Digital Certificate Deposits: P2P Trading Platform",
+    summary:
+      "Digital certificates deposit in JOD & USD, similar to tokens but with interest.",
+    author: "Amer",
+    department: "Other",
+    ref: "ABI-2026-00012",
+    supports: 0,
+    comments: 0,
+    band: "Qualify",
+  },
+  {
+    category: "Efficiency",
+    tone: "violet",
+    kind: "idea",
+    title: "Automated Letter of Credit Issuance Process",
+    summary: "I want to create automated LC issuance process in the bank.",
+    author: "Platform Admin",
+    department: "Innovation Office",
+    ref: "ABI-2026-00011",
+    supports: 1,
+    comments: 0,
+    band: "Priority",
+  },
 ];
 
-function IdeaCard({ idea, onOpen }: { idea: typeof ideas[number]; onOpen: () => void }) {
-  return <article className="app-card border-t-[3px] p-5" style={{ borderTopColor: idea.tone === "teal" ? "#12a383" : idea.tone === "violet" ? "#7c5ce0" : "#2f80ed" }}>
-    <div className="flex flex-wrap items-center justify-between gap-2"><span className={`pill ${idea.tone === "teal" ? "text-[#0e9f7a] border-[#0e9f7a]/45" : idea.tone === "violet" ? "text-[#6d4bd8] border-[#6d4bd8]/45" : "text-blue border-blue/45"}`}>{idea.category}</span><StatusPill tone={idea.band === "Priority" ? "sand" : idea.band === "Qualify" ? "teal" : "muted"}>{idea.band}</StatusPill></div>
-    <button onClick={onOpen} className="mt-3 text-left text-base font-medium leading-snug hover:text-blue">{idea.kind === "problem" ? "🔎 " : ""}{idea.title}</button>
-    <p className="mt-2 text-sm text-muted">{idea.summary}</p>
-    <div className="mt-3 flex items-center gap-2"><Avatar name={idea.author} /><span className="flex-1 text-sm"><b className="font-medium">{idea.author}</b> <span className="text-muted">{idea.department}</span></span><span className="font-mono text-xs tracking-[.08em] text-muted">{idea.ref}</span></div>
-    <div className="mt-3 flex flex-wrap gap-2"><button className="btn btn-small"><Icon name="up" className="h-4 w-4" /> {idea.supports} Support</button><button onClick={onOpen} className="btn btn-small"><Icon name="msg" className="h-4 w-4" /> {idea.comments} Discuss</button></div>
-  </article>;
+function IdeaCard({
+  idea,
+  onOpen,
+}: {
+  idea: (typeof ideas)[number];
+  onOpen: () => void;
+}) {
+  return (
+    <article
+      className="app-card border-t-[3px] p-5"
+      style={{
+        borderTopColor:
+          idea.tone === "teal"
+            ? "#12a383"
+            : idea.tone === "violet"
+              ? "#7c5ce0"
+              : "#2f80ed",
+      }}
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span
+          className={`pill ${idea.tone === "teal" ? "text-[#0e9f7a] border-[#0e9f7a]/45" : idea.tone === "violet" ? "text-[#6d4bd8] border-[#6d4bd8]/45" : "text-blue border-blue/45"}`}
+        >
+          {idea.category}
+        </span>
+        <StatusPill
+          tone={
+            idea.band === "Priority"
+              ? "sand"
+              : idea.band === "Qualify"
+                ? "teal"
+                : "muted"
+          }
+        >
+          {idea.band}
+        </StatusPill>
+      </div>
+      <button
+        onClick={onOpen}
+        className="mt-3 text-left text-base font-medium leading-snug hover:text-blue"
+      >
+        {idea.kind === "problem" ? "🔎 " : ""}
+        {idea.title}
+      </button>
+      <p className="mt-2 text-sm text-muted">{idea.summary}</p>
+      <div className="mt-3 flex items-center gap-2">
+        <Avatar name={idea.author} />
+        <span className="flex-1 text-sm">
+          <b className="font-medium">{idea.author}</b>{" "}
+          <span className="text-muted">{idea.department}</span>
+        </span>
+        <span className="font-mono text-xs tracking-[.08em] text-muted">
+          {idea.ref}
+        </span>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button className="btn btn-small">
+          <Icon name="up" className="h-4 w-4" /> {idea.supports} Support
+        </button>
+        <button onClick={onOpen} className="btn btn-small">
+          <Icon name="msg" className="h-4 w-4" /> {idea.comments} Discuss
+        </button>
+      </div>
+    </article>
+  );
 }
 
-function LegacyCommunityPage({ onNavigate, onOpenIdea }: { onNavigate: (page: Page) => void; onOpenIdea: () => void }) {
+function LegacyCommunityPage({
+  onNavigate,
+  onOpenIdea,
+}: {
+  onNavigate: (page: Page) => void;
+  onOpenIdea: () => void;
+}) {
   const [filter, setFilter] = useState("Everything");
   const [query, setQuery] = useState("");
-  const shown = useMemo(() => ideas.filter((idea) => `${idea.title} ${idea.author}`.toLowerCase().includes(query.toLowerCase())), [query]);
-  return <div className="stack">
-    <div className="flex flex-col justify-between gap-5 xl:flex-row"><div><h1 className="text-[26px] font-medium tracking-[-.02em] sm:text-[32px]">Good afternoon, padmadev <span>👋</span></h1><p className="mt-1.5 text-base text-muted">Your next idea could improve how we serve customers and each other.</p><button className="btn-primary mt-4" onClick={() => onNavigate("new")}><Icon name="spark" /> Share an idea</button></div><AccountCard onOpen={() => onNavigate("me")} /></div>
-    <section className="pinned-surface relative overflow-hidden rounded-[20px] p-6 text-white"><div className="relative z-10 flex flex-wrap items-center justify-between gap-2"><span className="text-[11.5px] font-medium uppercase tracking-[.14em] opacity-85"><Icon name="flag" className="mr-1 inline h-4 w-4" /> Pinned · Feedback campaign</span><span className="rounded-full border border-white/50 px-2.5 py-1 text-xs">Share your feedback</span></div><h2 className="mt-2 text-[22px] font-medium">Help Shape AB Ignite — Your Ideas Matter!</h2><p className="mt-2 max-w-[720px] whitespace-pre-line text-sm leading-6 text-white/90">We’re introducing AB Ignite, a platform designed to bring our people together, encourage innovation, and turn great ideas into meaningful impact.{"\n\n"}What would make this platform more valuable to you?</p><button className="btn mt-4 border-white/40 text-white hover:bg-white/10">Share Your Feedback <Icon name="arrow" className="h-4 w-4" /></button><div className="pointer-events-none absolute -right-10 -top-4 opacity-15"><svg width="270" height="150" viewBox="0 0 250 140" fill="none" stroke="currentColor"><circle cx="150" cy="62" r="46" /><circle cx="72" cy="98" r="26" /><circle cx="218" cy="112" r="18" /><circle cx="104" cy="30" r="12" /></svg></div></section>
-    <div className="grid gap-[18px] xl:grid-cols-2"><section className="app-card"><h2 className="text-xl font-medium">Happening now</h2><div className="mt-2"><div className="feed-item"><div className="icon-box"><Icon name="flag" /></div><div className="min-w-0 flex-1"><b className="font-medium">Challenge of the month</b><p className="text-sm text-muted">How might we eliminate unnecessary manual activities across the bank?</p><button className="btn btn-small mt-2" onClick={() => onNavigate("new")}>Share an idea for it</button></div></div><div className="feed-item"><div className="icon-box" style={{ color: "var(--sand)", background: "rgba(217,119,6,.12)" }}><Icon name="book" /></div><div className="min-w-0 flex-1"><b className="font-medium">Grow your knowledge</b><p className="text-sm text-muted">Banking foundations (Foundation, Banking Excellence). Find out where you stand.</p><button className="btn btn-small mt-2" onClick={() => onNavigate("learn")}>Take the quiz</button></div></div><div className="feed-item"><div className="icon-box" style={{ color: "var(--sand)", background: "rgba(217,119,6,.12)" }}><Icon name="trophy" /></div><div className="min-w-0 flex-1"><b className="font-medium">Season ranking</b><p className="text-sm text-muted">You are 🏅 12th across the bank.</p><button className="btn btn-small mt-2" onClick={() => onNavigate("learn")}>See the ranking</button></div></div></div></section><section className="app-card"><h2 className="text-xl font-medium">What’s new</h2><div className="mt-2"><div className="feed-item"><div className="icon-box" style={{ color: "var(--sand)", background: "rgba(217,119,6,.12)" }}><Icon name="flag" /></div><div><b className="font-medium">New quest launched</b><p className="text-sm text-muted">Zero Manual Work is open for ideas.</p><span className="mt-1 block text-xs text-muted">13 Oct 2026</span></div></div><div className="feed-item"><div className="icon-box" style={{ color: "var(--sand)", background: "rgba(217,119,6,.12)" }}><Icon name="book" /></div><div><b className="font-medium">Ignite Your Knowledge is live</b><p className="text-sm text-muted">Twelve quizzes across banking, transformation and technology.</p><span className="mt-1 block text-xs text-muted">13 Oct 2026</span></div></div><div className="feed-item"><div className="icon-box" style={{ color: "var(--sand)", background: "rgba(217,119,6,.12)" }}><Icon name="msg" /></div><div><b className="font-medium">Welcome to AB Ignite</b><p className="text-sm text-muted">Share an idea, support a colleague, take a quiz.</p><span className="mt-1 block text-xs text-muted">13 Oct 2026</span></div></div></div></section></div>
-    <SectionHeading title="Ideas from across the bank" detail="14 shared, 0 implemented" />
-    <div className="flex flex-wrap items-center gap-3"><Tabs items={["Everything", "Ideas", "Problems", "Mine"]} active={filter} onChange={setFilter} /><label className="flex min-w-[220px] flex-1 items-center gap-2"><span className="sr-only">Search ideas</span><span className="relative flex-1"><Icon name="search" className="absolute left-3 top-3 h-4 w-4 text-muted" /><input className="input pl-9" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search ideas, people or references" /></span><button className="btn">Search</button></label></div>
-    <p className="-mt-3 flex items-center gap-2 text-sm text-muted"><Icon name="lock" className="h-4 w-4" />Every idea is registered to its author. You support colleagues’ ideas, not your own.</p>
-    <div className="grid gap-[18px] xl:grid-cols-2">{shown.map((idea) => <IdeaCard key={idea.ref} idea={idea} onOpen={onOpenIdea} />)}</div>
-  </div>;
+  const shown = useMemo(
+    () =>
+      ideas.filter((idea) =>
+        `${idea.title} ${idea.author}`
+          .toLowerCase()
+          .includes(query.toLowerCase()),
+      ),
+    [query],
+  );
+  return (
+    <div className="stack">
+      <div className="flex flex-col justify-between gap-5 xl:flex-row">
+        <div>
+          <h1 className="text-[26px] font-medium tracking-[-.02em] sm:text-[32px]">
+            Good afternoon, padmadev <span>👋</span>
+          </h1>
+          <p className="mt-1.5 text-base text-muted">
+            Your next idea could improve how we serve customers and each other.
+          </p>
+          <button
+            className="btn-primary mt-4"
+            onClick={() => onNavigate("new")}
+          >
+            <Icon name="spark" /> Share an idea
+          </button>
+        </div>
+        <AccountCard onOpen={() => onNavigate("me")} />
+      </div>
+      <section className="pinned-surface relative overflow-hidden rounded-[20px] p-6 text-white">
+        <div className="relative z-10 flex flex-wrap items-center justify-between gap-2">
+          <span className="text-[11.5px] font-medium uppercase tracking-[.14em] opacity-85">
+            <Icon name="flag" className="mr-1 inline h-4 w-4" /> Pinned ·
+            Feedback campaign
+          </span>
+          <span className="rounded-full border border-white/50 px-2.5 py-1 text-xs">
+            Share your feedback
+          </span>
+        </div>
+        <h2 className="mt-2 text-[22px] font-medium">
+          Help Shape AB Ignite — Your Ideas Matter!
+        </h2>
+        <p className="mt-2 max-w-[720px] whitespace-pre-line text-sm leading-6 text-white/90">
+          We’re introducing AB Ignite, a platform designed to bring our people
+          together, encourage innovation, and turn great ideas into meaningful
+          impact.{"\n\n"}What would make this platform more valuable to you?
+        </p>
+        <button className="btn mt-4 border-white/40 text-white hover:bg-white/10">
+          Share Your Feedback <Icon name="arrow" className="h-4 w-4" />
+        </button>
+        <div className="pointer-events-none absolute -right-10 -top-4 opacity-15">
+          <svg
+            width="270"
+            height="150"
+            viewBox="0 0 250 140"
+            fill="none"
+            stroke="currentColor"
+          >
+            <circle cx="150" cy="62" r="46" />
+            <circle cx="72" cy="98" r="26" />
+            <circle cx="218" cy="112" r="18" />
+            <circle cx="104" cy="30" r="12" />
+          </svg>
+        </div>
+      </section>
+      <div className="grid gap-[18px] xl:grid-cols-2">
+        <section className="app-card">
+          <h2 className="text-xl font-medium">Happening now</h2>
+          <div className="mt-2">
+            <div className="feed-item">
+              <div className="icon-box">
+                <Icon name="flag" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <b className="font-medium">Challenge of the month</b>
+                <p className="text-sm text-muted">
+                  How might we eliminate unnecessary manual activities across
+                  the bank?
+                </p>
+                <button
+                  className="btn btn-small mt-2"
+                  onClick={() => onNavigate("new")}
+                >
+                  Share an idea for it
+                </button>
+              </div>
+            </div>
+            <div className="feed-item">
+              <div
+                className="icon-box"
+                style={{
+                  color: "var(--sand)",
+                  background: "rgba(217,119,6,.12)",
+                }}
+              >
+                <Icon name="book" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <b className="font-medium">Grow your knowledge</b>
+                <p className="text-sm text-muted">
+                  Banking foundations (Foundation, Banking Excellence). Find out
+                  where you stand.
+                </p>
+                <button
+                  className="btn btn-small mt-2"
+                  onClick={() => onNavigate("learn")}
+                >
+                  Take the quiz
+                </button>
+              </div>
+            </div>
+            <div className="feed-item">
+              <div
+                className="icon-box"
+                style={{
+                  color: "var(--sand)",
+                  background: "rgba(217,119,6,.12)",
+                }}
+              >
+                <Icon name="trophy" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <b className="font-medium">Season ranking</b>
+                <p className="text-sm text-muted">
+                  You are 🏅 12th across the bank.
+                </p>
+                <button
+                  className="btn btn-small mt-2"
+                  onClick={() => onNavigate("learn")}
+                >
+                  See the ranking
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+        <section className="app-card">
+          <h2 className="text-xl font-medium">What’s new</h2>
+          <div className="mt-2">
+            <div className="feed-item">
+              <div
+                className="icon-box"
+                style={{
+                  color: "var(--sand)",
+                  background: "rgba(217,119,6,.12)",
+                }}
+              >
+                <Icon name="flag" />
+              </div>
+              <div>
+                <b className="font-medium">New quest launched</b>
+                <p className="text-sm text-muted">
+                  Zero Manual Work is open for ideas.
+                </p>
+                <span className="mt-1 block text-xs text-muted">
+                  13 Oct 2026
+                </span>
+              </div>
+            </div>
+            <div className="feed-item">
+              <div
+                className="icon-box"
+                style={{
+                  color: "var(--sand)",
+                  background: "rgba(217,119,6,.12)",
+                }}
+              >
+                <Icon name="book" />
+              </div>
+              <div>
+                <b className="font-medium">Ignite Your Knowledge is live</b>
+                <p className="text-sm text-muted">
+                  Twelve quizzes across banking, transformation and technology.
+                </p>
+                <span className="mt-1 block text-xs text-muted">
+                  13 Oct 2026
+                </span>
+              </div>
+            </div>
+            <div className="feed-item">
+              <div
+                className="icon-box"
+                style={{
+                  color: "var(--sand)",
+                  background: "rgba(217,119,6,.12)",
+                }}
+              >
+                <Icon name="msg" />
+              </div>
+              <div>
+                <b className="font-medium">Welcome to AB Ignite</b>
+                <p className="text-sm text-muted">
+                  Share an idea, support a colleague, take a quiz.
+                </p>
+                <span className="mt-1 block text-xs text-muted">
+                  13 Oct 2026
+                </span>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+      <SectionHeading
+        title="Ideas from across the bank"
+        detail="14 shared, 0 implemented"
+      />
+      <div className="flex flex-wrap items-center gap-3">
+        <Tabs
+          items={["Everything", "Ideas", "Problems", "Mine"]}
+          active={filter}
+          onChange={setFilter}
+        />
+        <label className="flex min-w-[220px] flex-1 items-center gap-2">
+          <span className="sr-only">Search ideas</span>
+          <span className="relative flex-1">
+            <Icon
+              name="search"
+              className="absolute left-3 top-3 h-4 w-4 text-muted"
+            />
+            <input
+              className="input pl-9"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search ideas, people or references"
+            />
+          </span>
+          <button className="btn">Search</button>
+        </label>
+      </div>
+      <p className="-mt-3 flex items-center gap-2 text-sm text-muted">
+        <Icon name="lock" className="h-4 w-4" />
+        Every idea is registered to its author. You support colleagues’ ideas,
+        not your own.
+      </p>
+      <div className="grid gap-[18px] xl:grid-cols-2">
+        {shown.map((idea) => (
+          <IdeaCard key={idea.ref} idea={idea} onOpen={onOpenIdea} />
+        ))}
+      </div>
+    </div>
+  );
 }
 
-function Hero({ art, title, subtitle, children }: { art: "submit" | "library" | "arena" | "rewards"; title: string; subtitle: string; children?: React.ReactNode }) {
-  return <section className="hero-surface relative overflow-hidden rounded-[24px] px-5 py-6 text-white sm:px-7 sm:py-[30px]"><div className="relative z-10 max-w-[62%] sm:max-w-[65%]"><h1 className="text-[25px] font-medium leading-tight tracking-[-.02em] sm:text-[32px]">{title}</h1><p className="mt-1.5 text-sm leading-6 text-white/85 sm:text-[15px]">{subtitle}</p>{children}</div><div className="pointer-events-none absolute bottom-0 right-2 text-white/20">{art === "submit" ? <svg width="250" height="140" viewBox="0 0 250 140" fill="currentColor"><circle cx="40" cy="118" r="9" /><circle cx="82" cy="100" r="13" /><circle cx="130" cy="76" r="19" /><circle cx="190" cy="46" r="27" /></svg> : art === "library" ? <svg width="250" height="140" viewBox="0 0 250 140" fill="none" stroke="currentColor" strokeWidth="5"><rect x="34" y="52" width="26" height="88" rx="5" /><rect x="66" y="30" width="30" height="110" rx="5" /><rect x="102" y="64" width="22" height="76" rx="5" /><rect x="130" y="20" width="34" height="120" rx="5" /><rect x="170" y="48" width="24" height="92" rx="5" /><rect x="200" y="72" width="28" height="68" rx="5" transform="rotate(14 214 140)" /></svg> : art === "arena" ? <svg width="250" height="140" viewBox="0 0 250 140" fill="none" stroke="currentColor" strokeWidth="5"><rect x="34" y="84" width="60" height="56" rx="6" /><rect x="100" y="50" width="60" height="90" rx="6" /><rect x="166" y="104" width="60" height="36" rx="6" /><circle cx="130" cy="24" r="14" /></svg> : <svg width="250" height="140" viewBox="0 0 250 140" fill="none" stroke="currentColor" strokeWidth="5"><rect x="70" y="72" width="120" height="68" rx="8" /><rect x="58" y="46" width="144" height="30" rx="8" /><circle cx="112" cy="28" r="15" /><circle cx="148" cy="28" r="15" /></svg>}</div></section>;
+function Hero({
+  art,
+  title,
+  subtitle,
+  children,
+}: {
+  art: "submit" | "library" | "arena" | "rewards";
+  title: string;
+  subtitle: string;
+  children?: React.ReactNode;
+}) {
+  return (
+    <section className="hero-surface relative overflow-hidden rounded-[24px] px-5 py-6 text-white sm:px-7 sm:py-[30px]">
+      <div className="relative z-10 max-w-[62%] sm:max-w-[65%]">
+        <h1 className="text-[25px] font-medium leading-tight tracking-[-.02em] sm:text-[32px]">
+          {title}
+        </h1>
+        <p className="mt-1.5 text-sm leading-6 text-white/85 sm:text-[15px]">
+          {subtitle}
+        </p>
+        {children}
+      </div>
+      <div className="pointer-events-none absolute bottom-0 right-2 text-white/20">
+        {art === "submit" ? (
+          <svg
+            width="250"
+            height="140"
+            viewBox="0 0 250 140"
+            fill="currentColor"
+          >
+            <circle cx="40" cy="118" r="9" />
+            <circle cx="82" cy="100" r="13" />
+            <circle cx="130" cy="76" r="19" />
+            <circle cx="190" cy="46" r="27" />
+          </svg>
+        ) : art === "library" ? (
+          <svg
+            width="250"
+            height="140"
+            viewBox="0 0 250 140"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="5"
+          >
+            <rect x="34" y="52" width="26" height="88" rx="5" />
+            <rect x="66" y="30" width="30" height="110" rx="5" />
+            <rect x="102" y="64" width="22" height="76" rx="5" />
+            <rect x="130" y="20" width="34" height="120" rx="5" />
+            <rect x="170" y="48" width="24" height="92" rx="5" />
+            <rect
+              x="200"
+              y="72"
+              width="28"
+              height="68"
+              rx="5"
+              transform="rotate(14 214 140)"
+            />
+          </svg>
+        ) : art === "arena" ? (
+          <svg
+            width="250"
+            height="140"
+            viewBox="0 0 250 140"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="5"
+          >
+            <rect x="34" y="84" width="60" height="56" rx="6" />
+            <rect x="100" y="50" width="60" height="90" rx="6" />
+            <rect x="166" y="104" width="60" height="36" rx="6" />
+            <circle cx="130" cy="24" r="14" />
+          </svg>
+        ) : (
+          <svg
+            width="250"
+            height="140"
+            viewBox="0 0 250 140"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="5"
+          >
+            <rect x="70" y="72" width="120" height="68" rx="8" />
+            <rect x="58" y="46" width="144" height="30" rx="8" />
+            <circle cx="112" cy="28" r="15" />
+            <circle cx="148" cy="28" r="15" />
+          </svg>
+        )}
+      </div>
+    </section>
+  );
 }
 
 function LegacyNewIdeaPage() {
@@ -170,96 +1041,1211 @@ function LegacyNewIdeaPage() {
   const [raw, setRaw] = useState("");
   const [title, setTitle] = useState("");
   const [summary, setSummary] = useState("");
-  const fields = [{ label: "Problem statement", placeholder: "What problem are you solving?" }, { label: "Proposed solution", placeholder: "What would you change?" }, { label: "Expected benefits", placeholder: "Who benefits and how?" }, { label: "Possible risks", placeholder: "What should reviewers think about?" }];
-  return <div className="stack"><Hero art="submit" title="Share an idea" subtitle="Turn a customer or colleague insight into a clear proposal the bank can act on." /><div className="grid grid-cols-5 gap-1.5 overflow-hidden sm:gap-2">{["Describe", "Develop", "Questions", "Pass or fail", "Numbers"].map((label, index) => <div key={label} className={`flex items-center gap-2 rounded-[11px] border px-2.5 py-2.5 text-[13px] font-medium ${step === index + 1 ? "border-blue bg-blue/[.12] text-ink" : step > index + 1 ? "text-muted" : "text-[var(--dim)]"}`} style={{ borderColor: step === index + 1 ? "var(--blue)" : "var(--line)" }}><b className={`grid h-[22px] w-[22px] shrink-0 place-items-center rounded-full border text-xs ${step > index + 1 ? "border-[#0e9f7a] text-[#0e9f7a]" : step === index + 1 ? "border-blue bg-blue text-white" : ""}`} style={{ borderColor: step > index + 1 || step === index + 1 ? undefined : "var(--line-strong)" }}>{step > index + 1 ? "✓" : index + 1}</b><span className="hidden sm:inline">{label}</span></div>)}</div>
-    {step === 1 && <div className="app-card"><Tabs items={["💡 An idea", "🔎 A problem"]} active={kind === "idea" ? "💡 An idea" : "🔎 A problem"} onChange={(value) => setKind(value.startsWith("💡") ? "idea" : "problem")} /><label className="mt-5 block"><span className="field-label">{kind === "idea" ? "Your idea in your own words" : "What is slowing customers or colleagues down?"}</span><textarea className="input min-h-[124px] resize-y" value={raw} onChange={(event) => setRaw(event.target.value)} placeholder="Describe it in your own words…" /></label><div className="mt-4 flex gap-2 rounded-xl border border-dashed px-3.5 py-3 text-[13px] text-muted" style={{ borderColor: "var(--line-strong)" }}><Icon name="bot" className="mt-0.5 h-5 w-5 shrink-0 text-blue" /><span><b className="font-medium text-sand">The AI coach is connected.</b> It will check originality, structure your proposal and suggest questions reviewers may ask.</span></div><button className="btn-primary mt-4" onClick={() => setStep(2)}><Icon name="spark" /> Check originality and continue</button></div>}
-    {step === 2 && <><div className="flex gap-2 rounded-xl border border-solid px-3.5 py-3 text-[13px] text-muted" style={{ borderColor: "rgba(14,159,122,.35)", background: "rgba(14,159,122,.07)" }}><Icon name="check" className="mt-0.5 h-5 w-5 shrink-0 text-[#0e9f7a]" /><span><b className="font-medium text-[#0e9f7a]">Originality check passed.</b> No registered idea matches yours.</span></div><div className="app-card"><div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-xl font-medium">Develop your idea</h2><p className="mt-1 text-muted">Fill in the sections. The more specific you are, the better the validation.</p></div><StatusPill tone="blue">Customer</StatusPill></div><div className="mt-4 grid gap-4 sm:grid-cols-2"><label className="block sm:col-span-2"><span className="field-label">Idea title</span><input className="input" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Give your idea a clear title" /></label><label className="block sm:col-span-2"><span className="field-label">In one or two sentences</span><textarea className="input min-h-[90px]" value={summary} onChange={(event) => setSummary(event.target.value)} placeholder="Summarise the change and its value" /></label>{fields.map((field) => <label key={field.label} className="block"><span className="field-label">{field.label}</span><textarea className="input min-h-[124px]" placeholder={field.placeholder} /></label>)}</div></div><div className="flex flex-wrap gap-2"><button className="btn" onClick={() => setStep(1)}>Back</button><button className="btn-primary" onClick={() => setStep(3)}><Icon name="bot" /> Answer five questions</button></div></>}
-    {step === 3 && <div className="app-card"><div className="flex items-start gap-3"><div className="icon-box"><Icon name="bot" /></div><div><h2 className="text-xl font-medium">Questions reviewers may ask</h2><p className="mt-1 text-muted">Use these prompts to find the weak spots before you submit.</p></div></div><div className="mt-4 space-y-3"><label className="block rounded-xl border-l-2 px-3 py-1" style={{ borderColor: "var(--line-strong)" }}><span className="font-medium">Who experiences this problem today?</span><textarea className="input mt-2 min-h-[76px]" placeholder="Your answer" /></label><label className="block rounded-xl border-l-2 px-3 py-1" style={{ borderColor: "var(--line-strong)" }}><span className="font-medium">What evidence tells you it is worth solving?</span><textarea className="input mt-2 min-h-[76px]" placeholder="Your answer" /></label><label className="block rounded-xl border-l-2 px-3 py-1" style={{ borderColor: "var(--line-strong)" }}><span className="font-medium">What could make the proposal difficult?</span><textarea className="input mt-2 min-h-[76px]" placeholder="Your answer" /></label></div><div className="mt-4 flex gap-2"><button className="btn" onClick={() => setStep(2)}>Back</button><button className="btn-primary" onClick={() => setStep(4)}>Validate my idea</button></div></div>}
-    {step === 4 && <div className="app-card"><div className="flex items-start gap-3"><div className="icon-box" style={{ color: "var(--sand)", background: "rgba(217,119,6,.12)" }}><Icon name="shield" /></div><div><h2 className="text-xl font-medium">Validation passed</h2><p className="mt-1 text-muted">Your proposal has enough detail for a reviewer to assess it.</p></div></div><div className="mt-5 grid gap-3 sm:grid-cols-3">{[["Customer impact", "2.4", "Qualify"], ["Business value", "2.1", "Qualify"], ["Feasibility", "2.8", "Priority"]].map(([label, score, band]) => <div key={label} className="tile text-center"><span className="block text-sm text-muted">{label}</span><b className="my-1 block text-3xl font-semibold">{score}</b><StatusPill tone={band === "Priority" ? "sand" : "teal"}>{band}</StatusPill></div>)}</div><div className="mt-5 flex flex-wrap gap-2"><button className="btn" onClick={() => setStep(3)}>Back</button><button className="btn-primary" onClick={() => setStep(5)}>Continue to numbers</button></div></div>}
-    {step === 5 && <div className="app-card"><h2 className="text-xl font-medium">Add impact numbers</h2><p className="mt-1 text-muted">Rough estimates are enough. Reviewers will refine them later.</p><div className="mt-4 grid gap-4 sm:grid-cols-3">{[["Turnaround time", "% faster"], ["Volume", "per month"], ["Expected savings or revenue", "JOD per year"]].map(([label, unit]) => <label key={label} className="block"><span className="field-label">{label}</span><input className="input" placeholder="0" /><span className="mt-1 block text-xs text-muted">{unit}</span></label>)}</div><div className="mt-5 flex flex-wrap gap-2"><button className="btn" onClick={() => setStep(4)}>Back</button><button className="btn-primary" onClick={() => setStep(6)}>Submit idea</button></div></div>}
-    {step === 6 && <div className="app-card py-14 text-center"><div className="icon-box mx-auto mb-3" style={{ color: "var(--teal)", background: "rgba(14,159,122,.12)" }}><Icon name="check" /></div><h1 className="text-2xl font-medium">Submitted</h1><p className="mx-auto mt-2 max-w-[52ch] text-muted">Your idea is registered as <b>ABI-2026-00015</b>. An innovation reviewer screens it first, and you are notified at every step.</p><button className="btn-primary mt-5" onClick={() => setStep(1)}>Share another idea</button></div>}
-  </div>;
+  const fields = [
+    {
+      label: "Problem statement",
+      placeholder: "What problem are you solving?",
+    },
+    { label: "Proposed solution", placeholder: "What would you change?" },
+    { label: "Expected benefits", placeholder: "Who benefits and how?" },
+    {
+      label: "Possible risks",
+      placeholder: "What should reviewers think about?",
+    },
+  ];
+  return (
+    <div className="stack">
+      <Hero
+        art="submit"
+        title="Share an idea"
+        subtitle="Turn a customer or colleague insight into a clear proposal the bank can act on."
+      />
+      <div className="grid grid-cols-5 gap-1.5 overflow-hidden sm:gap-2">
+        {["Describe", "Develop", "Questions", "Pass or fail", "Numbers"].map(
+          (label, index) => (
+            <div
+              key={label}
+              className={`flex items-center gap-2 rounded-[11px] border px-2.5 py-2.5 text-[13px] font-medium ${step === index + 1 ? "border-blue bg-blue/[.12] text-ink" : step > index + 1 ? "text-muted" : "text-[var(--dim)]"}`}
+              style={{
+                borderColor: step === index + 1 ? "var(--blue)" : "var(--line)",
+              }}
+            >
+              <b
+                className={`grid h-[22px] w-[22px] shrink-0 place-items-center rounded-full border text-xs ${step > index + 1 ? "border-[#0e9f7a] text-[#0e9f7a]" : step === index + 1 ? "border-blue bg-blue text-white" : ""}`}
+                style={{
+                  borderColor:
+                    step > index + 1 || step === index + 1
+                      ? undefined
+                      : "var(--line-strong)",
+                }}
+              >
+                {step > index + 1 ? "✓" : index + 1}
+              </b>
+              <span className="hidden sm:inline">{label}</span>
+            </div>
+          ),
+        )}
+      </div>
+      {step === 1 && (
+        <div className="app-card">
+          <Tabs
+            items={["💡 An idea", "🔎 A problem"]}
+            active={kind === "idea" ? "💡 An idea" : "🔎 A problem"}
+            onChange={(value) =>
+              setKind(value.startsWith("💡") ? "idea" : "problem")
+            }
+          />
+          <label className="mt-5 block">
+            <span className="field-label">
+              {kind === "idea"
+                ? "Your idea in your own words"
+                : "What is slowing customers or colleagues down?"}
+            </span>
+            <textarea
+              className="input min-h-[124px] resize-y"
+              value={raw}
+              onChange={(event) => setRaw(event.target.value)}
+              placeholder="Describe it in your own words…"
+            />
+          </label>
+          <div
+            className="mt-4 flex gap-2 rounded-xl border border-dashed px-3.5 py-3 text-[13px] text-muted"
+            style={{ borderColor: "var(--line-strong)" }}
+          >
+            <Icon name="bot" className="mt-0.5 h-5 w-5 shrink-0 text-blue" />
+            <span>
+              <b className="font-medium text-sand">
+                The AI coach is connected.
+              </b>{" "}
+              It will check originality, structure your proposal and suggest
+              questions reviewers may ask.
+            </span>
+          </div>
+          <button className="btn-primary mt-4" onClick={() => setStep(2)}>
+            <Icon name="spark" /> Check originality and continue
+          </button>
+        </div>
+      )}
+      {step === 2 && (
+        <>
+          <div
+            className="flex gap-2 rounded-xl border border-solid px-3.5 py-3 text-[13px] text-muted"
+            style={{
+              borderColor: "rgba(14,159,122,.35)",
+              background: "rgba(14,159,122,.07)",
+            }}
+          >
+            <Icon
+              name="check"
+              className="mt-0.5 h-5 w-5 shrink-0 text-[#0e9f7a]"
+            />
+            <span>
+              <b className="font-medium text-[#0e9f7a]">
+                Originality check passed.
+              </b>{" "}
+              No registered idea matches yours.
+            </span>
+          </div>
+          <div className="app-card">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="text-xl font-medium">Develop your idea</h2>
+                <p className="mt-1 text-muted">
+                  Fill in the sections. The more specific you are, the better
+                  the validation.
+                </p>
+              </div>
+              <StatusPill tone="blue">Customer</StatusPill>
+            </div>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <label className="block sm:col-span-2">
+                <span className="field-label">Idea title</span>
+                <input
+                  className="input"
+                  value={title}
+                  onChange={(event) => setTitle(event.target.value)}
+                  placeholder="Give your idea a clear title"
+                />
+              </label>
+              <label className="block sm:col-span-2">
+                <span className="field-label">In one or two sentences</span>
+                <textarea
+                  className="input min-h-[90px]"
+                  value={summary}
+                  onChange={(event) => setSummary(event.target.value)}
+                  placeholder="Summarise the change and its value"
+                />
+              </label>
+              {fields.map((field) => (
+                <label key={field.label} className="block">
+                  <span className="field-label">{field.label}</span>
+                  <textarea
+                    className="input min-h-[124px]"
+                    placeholder={field.placeholder}
+                  />
+                </label>
+              ))}
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button className="btn" onClick={() => setStep(1)}>
+              Back
+            </button>
+            <button className="btn-primary" onClick={() => setStep(3)}>
+              <Icon name="bot" /> Answer five questions
+            </button>
+          </div>
+        </>
+      )}
+      {step === 3 && (
+        <div className="app-card">
+          <div className="flex items-start gap-3">
+            <div className="icon-box">
+              <Icon name="bot" />
+            </div>
+            <div>
+              <h2 className="text-xl font-medium">
+                Questions reviewers may ask
+              </h2>
+              <p className="mt-1 text-muted">
+                Use these prompts to find the weak spots before you submit.
+              </p>
+            </div>
+          </div>
+          <div className="mt-4 space-y-3">
+            <label
+              className="block rounded-xl border-l-2 px-3 py-1"
+              style={{ borderColor: "var(--line-strong)" }}
+            >
+              <span className="font-medium">
+                Who experiences this problem today?
+              </span>
+              <textarea
+                className="input mt-2 min-h-[76px]"
+                placeholder="Your answer"
+              />
+            </label>
+            <label
+              className="block rounded-xl border-l-2 px-3 py-1"
+              style={{ borderColor: "var(--line-strong)" }}
+            >
+              <span className="font-medium">
+                What evidence tells you it is worth solving?
+              </span>
+              <textarea
+                className="input mt-2 min-h-[76px]"
+                placeholder="Your answer"
+              />
+            </label>
+            <label
+              className="block rounded-xl border-l-2 px-3 py-1"
+              style={{ borderColor: "var(--line-strong)" }}
+            >
+              <span className="font-medium">
+                What could make the proposal difficult?
+              </span>
+              <textarea
+                className="input mt-2 min-h-[76px]"
+                placeholder="Your answer"
+              />
+            </label>
+          </div>
+          <div className="mt-4 flex gap-2">
+            <button className="btn" onClick={() => setStep(2)}>
+              Back
+            </button>
+            <button className="btn-primary" onClick={() => setStep(4)}>
+              Validate my idea
+            </button>
+          </div>
+        </div>
+      )}
+      {step === 4 && (
+        <div className="app-card">
+          <div className="flex items-start gap-3">
+            <div
+              className="icon-box"
+              style={{
+                color: "var(--sand)",
+                background: "rgba(217,119,6,.12)",
+              }}
+            >
+              <Icon name="shield" />
+            </div>
+            <div>
+              <h2 className="text-xl font-medium">Validation passed</h2>
+              <p className="mt-1 text-muted">
+                Your proposal has enough detail for a reviewer to assess it.
+              </p>
+            </div>
+          </div>
+          <div className="mt-5 grid gap-3 sm:grid-cols-3">
+            {[
+              ["Customer impact", "2.4", "Qualify"],
+              ["Business value", "2.1", "Qualify"],
+              ["Feasibility", "2.8", "Priority"],
+            ].map(([label, score, band]) => (
+              <div key={label} className="tile text-center">
+                <span className="block text-sm text-muted">{label}</span>
+                <b className="my-1 block text-3xl font-semibold">{score}</b>
+                <StatusPill tone={band === "Priority" ? "sand" : "teal"}>
+                  {band}
+                </StatusPill>
+              </div>
+            ))}
+          </div>
+          <div className="mt-5 flex flex-wrap gap-2">
+            <button className="btn" onClick={() => setStep(3)}>
+              Back
+            </button>
+            <button className="btn-primary" onClick={() => setStep(5)}>
+              Continue to numbers
+            </button>
+          </div>
+        </div>
+      )}
+      {step === 5 && (
+        <div className="app-card">
+          <h2 className="text-xl font-medium">Add impact numbers</h2>
+          <p className="mt-1 text-muted">
+            Rough estimates are enough. Reviewers will refine them later.
+          </p>
+          <div className="mt-4 grid gap-4 sm:grid-cols-3">
+            {[
+              ["Turnaround time", "% faster"],
+              ["Volume", "per month"],
+              ["Expected savings or revenue", "JOD per year"],
+            ].map(([label, unit]) => (
+              <label key={label} className="block">
+                <span className="field-label">{label}</span>
+                <input className="input" placeholder="0" />
+                <span className="mt-1 block text-xs text-muted">{unit}</span>
+              </label>
+            ))}
+          </div>
+          <div className="mt-5 flex flex-wrap gap-2">
+            <button className="btn" onClick={() => setStep(4)}>
+              Back
+            </button>
+            <button className="btn-primary" onClick={() => setStep(6)}>
+              Submit idea
+            </button>
+          </div>
+        </div>
+      )}
+      {step === 6 && (
+        <div className="app-card py-14 text-center">
+          <div
+            className="icon-box mx-auto mb-3"
+            style={{ color: "var(--teal)", background: "rgba(14,159,122,.12)" }}
+          >
+            <Icon name="check" />
+          </div>
+          <h1 className="text-2xl font-medium">Submitted</h1>
+          <p className="mx-auto mt-2 max-w-[52ch] text-muted">
+            Your idea is registered as <b>ABI-2026-00015</b>. An innovation
+            reviewer screens it first, and you are notified at every step.
+          </p>
+          <button className="btn-primary mt-5" onClick={() => setStep(1)}>
+            Share another idea
+          </button>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function LearnPage() {
   const [tab, setTab] = useState("My journey");
-  const quizzes = [["Banking foundations", "Foundation", "Banking Excellence", "Check the essentials every colleague should know about products, payments, onboarding and the control environment."], ["Innovation and improvement basics", "Foundation", "Innovation & Business Transformation", "Recognise the core tools of design thinking, lean improvement and idea evaluation."], ["Technology and AI essentials", "Foundation", "Technology & AI", "Understand the vocabulary of AI, automation, data and security as it applies to banking."]];
-  return <div className="stack"><Hero art="arena" title="Ignite Your Knowledge" subtitle="Build confidence in banking, transformation and technology — one useful question at a time."><div className="mt-4 flex items-center gap-2 text-sm"><span className="rounded-full border border-white/40 px-2.5 py-1">💡 0 points</span><span className="rounded-full border border-white/40 px-2.5 py-1">0 day streak</span></div></Hero><Tabs items={["My journey", "Quizzes", "Ranking", "Challenges"]} active={tab} onChange={setTab} />{tab === "My journey" && <><div className="grid gap-3 sm:grid-cols-3">{[["Banking Excellence", "Limited", "No quizzes yet"], ["Innovation & Business Transformation", "Limited", "No quizzes yet"], ["Technology & AI", "Limited", "No quizzes yet"]].map(([label, status, detail]) => <div className="app-card p-5" key={label}><div className="mb-3 flex items-center justify-between"><span className="icon-box"><Icon name="book" /></span><span className="text-xs text-muted">{status}</span></div><b className="font-medium">{label}</b><p className="mt-1 text-sm text-muted">{detail}</p><div className="mt-3 h-1.5 overflow-hidden rounded-full bg-blue/10"><span className="block h-full w-0 rounded-full bg-blue" /></div></div>)}</div><section className="app-card"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-xl font-medium">Your next step</h2><p className="mt-1 text-muted">Take your first quiz to see where you stand. Your results will guide the reading picked for you.</p></div><button className="btn-primary" onClick={() => setTab("Quizzes")}>Take a quiz</button></div></section></>}{tab === "Quizzes" && <section className="grid gap-[18px] xl:grid-cols-2">{quizzes.map(([title, difficulty, category, description]) => <article key={title} className="app-card"><div className="flex items-start justify-between gap-3"><div><StatusPill tone="blue">{difficulty}</StatusPill><h2 className="mt-3 text-xl font-medium">{title}</h2></div><span className="text-3xl">🧠</span></div><p className="mt-2 text-sm text-muted">{description}</p><div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-muted"><span>{category}</span><span>6 questions · 10 points each</span></div><button className="btn-primary btn-small mt-4">Start quiz</button></article>)}</section>}{tab === "Ranking" && <section className="stack"><div className="app-card"><h2 className="text-xl font-medium">Season ranking</h2><p className="mt-1 text-muted">See how colleagues across the bank are building momentum.</p><div className="mt-5 grid grid-cols-3 items-end gap-2">{[["Maya Haddad", "552", "🥇", "p1"], ["Platform Admin", "558", "🏆", "p1"], ["Omar Saleh", "314", "🥈", ""]].map(([name, points, medal, cls], index) => <div className={`rounded-t-[14px] border border-b-0 p-3 text-center ${cls ? "pb-8 pt-6" : "pb-5 pt-4"}`} style={{ borderColor: index === 1 ? "rgba(217,119,6,.5)" : "var(--line)", background: index === 1 ? "rgba(217,119,6,.08)" : "rgba(30,94,255,.05)" }} key={name}><div className="text-3xl">{medal}</div><Avatar name={name} size="md" /><b className="mt-2 block text-sm font-medium">{name.split(" ")[0]}</b><span className="block text-xs text-muted">{points} 💡</span></div>)}</div></div><div className="app-card space-y-1">{[[1, "Platform Admin", "558"], [2, "Maya Haddad", "552"], [3, "Omar Saleh", "314"], [12, "padmadev", "0"]].map(([rank, name, points]) => <div key={name} className={`flex items-center gap-3 border-b px-1.5 py-2.5 last:border-0 ${name === "padmadev" ? "rounded-[10px] bg-blue/10" : ""}`} style={{ borderColor: "var(--line)" }}><span className="w-6 text-center text-sm">{rank}</span><Avatar name={name} /><b className="flex-1 text-sm font-medium">{name}</b><span className="font-mono text-sm">{points} 💡</span></div>)}</div></section>}{tab === "Challenges" && <section className="app-card"><StatusPill tone="sand">Open challenge</StatusPill><h2 className="mt-3 text-2xl font-medium">Zero Manual Work</h2><p className="mt-2 max-w-[680px] text-muted">How might we eliminate unnecessary manual activities across the bank?</p><div className="mt-5 flex flex-wrap gap-2"><button className="btn-primary">Join the challenge</button><button className="btn">View ideas</button></div></section>}</div>;
+  const quizzes = [
+    [
+      "Banking foundations",
+      "Foundation",
+      "Banking Excellence",
+      "Check the essentials every colleague should know about products, payments, onboarding and the control environment.",
+    ],
+    [
+      "Innovation and improvement basics",
+      "Foundation",
+      "Innovation & Business Transformation",
+      "Recognise the core tools of design thinking, lean improvement and idea evaluation.",
+    ],
+    [
+      "Technology and AI essentials",
+      "Foundation",
+      "Technology & AI",
+      "Understand the vocabulary of AI, automation, data and security as it applies to banking.",
+    ],
+  ];
+  return (
+    <div className="stack">
+      <Hero
+        art="arena"
+        title="Ignite Your Knowledge"
+        subtitle="Build confidence in banking, transformation and technology — one useful question at a time."
+      >
+        <div className="mt-4 flex items-center gap-2 text-sm">
+          <span className="rounded-full border border-white/40 px-2.5 py-1">
+            💡 0 points
+          </span>
+          <span className="rounded-full border border-white/40 px-2.5 py-1">
+            0 day streak
+          </span>
+        </div>
+      </Hero>
+      <Tabs
+        items={["My journey", "Quizzes", "Ranking", "Challenges"]}
+        active={tab}
+        onChange={setTab}
+      />
+      {tab === "My journey" && (
+        <>
+          <div className="grid gap-3 sm:grid-cols-3">
+            {[
+              ["Banking Excellence", "Limited", "No quizzes yet"],
+              [
+                "Innovation & Business Transformation",
+                "Limited",
+                "No quizzes yet",
+              ],
+              ["Technology & AI", "Limited", "No quizzes yet"],
+            ].map(([label, status, detail]) => (
+              <div className="app-card p-5" key={label}>
+                <div className="mb-3 flex items-center justify-between">
+                  <span className="icon-box">
+                    <Icon name="book" />
+                  </span>
+                  <span className="text-xs text-muted">{status}</span>
+                </div>
+                <b className="font-medium">{label}</b>
+                <p className="mt-1 text-sm text-muted">{detail}</p>
+                <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-blue/10">
+                  <span className="block h-full w-0 rounded-full bg-blue" />
+                </div>
+              </div>
+            ))}
+          </div>
+          <section className="app-card">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-xl font-medium">Your next step</h2>
+                <p className="mt-1 text-muted">
+                  Take your first quiz to see where you stand. Your results will
+                  guide the reading picked for you.
+                </p>
+              </div>
+              <button className="btn-primary" onClick={() => setTab("Quizzes")}>
+                Take a quiz
+              </button>
+            </div>
+          </section>
+        </>
+      )}
+      {tab === "Quizzes" && (
+        <section className="grid gap-[18px] xl:grid-cols-2">
+          {quizzes.map(([title, difficulty, category, description]) => (
+            <article key={title} className="app-card">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <StatusPill tone="blue">{difficulty}</StatusPill>
+                  <h2 className="mt-3 text-xl font-medium">{title}</h2>
+                </div>
+                <span className="text-3xl">🧠</span>
+              </div>
+              <p className="mt-2 text-sm text-muted">{description}</p>
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-muted">
+                <span>{category}</span>
+                <span>6 questions · 10 points each</span>
+              </div>
+              <button className="btn-primary btn-small mt-4">Start quiz</button>
+            </article>
+          ))}
+        </section>
+      )}
+      {tab === "Ranking" && (
+        <section className="stack">
+          <div className="app-card">
+            <h2 className="text-xl font-medium">Season ranking</h2>
+            <p className="mt-1 text-muted">
+              See how colleagues across the bank are building momentum.
+            </p>
+            <div className="mt-5 grid grid-cols-3 items-end gap-2">
+              {[
+                ["Maya Haddad", "552", "🥇", "p1"],
+                ["Platform Admin", "558", "🏆", "p1"],
+                ["Omar Saleh", "314", "🥈", ""],
+              ].map(([name, points, medal, cls], index) => (
+                <div
+                  className={`rounded-t-[14px] border border-b-0 p-3 text-center ${cls ? "pb-8 pt-6" : "pb-5 pt-4"}`}
+                  style={{
+                    borderColor:
+                      index === 1 ? "rgba(217,119,6,.5)" : "var(--line)",
+                    background:
+                      index === 1
+                        ? "rgba(217,119,6,.08)"
+                        : "rgba(30,94,255,.05)",
+                  }}
+                  key={name}
+                >
+                  <div className="text-3xl">{medal}</div>
+                  <Avatar name={name} size="md" />
+                  <b className="mt-2 block text-sm font-medium">
+                    {name.split(" ")[0]}
+                  </b>
+                  <span className="block text-xs text-muted">{points} 💡</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="app-card space-y-1">
+            {[
+              [1, "Platform Admin", "558"],
+              [2, "Maya Haddad", "552"],
+              [3, "Omar Saleh", "314"],
+              [12, "padmadev", "0"],
+            ].map(([rank, name, points]) => (
+              <div
+                key={name}
+                className={`flex items-center gap-3 border-b px-1.5 py-2.5 last:border-0 ${name === "padmadev" ? "rounded-[10px] bg-blue/10" : ""}`}
+                style={{ borderColor: "var(--line)" }}
+              >
+                <span className="w-6 text-center text-sm">{rank}</span>
+                <Avatar name={name} />
+                <b className="flex-1 text-sm font-medium">{name}</b>
+                <span className="font-mono text-sm">{points} 💡</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+      {tab === "Challenges" && (
+        <section className="app-card">
+          <StatusPill tone="sand">Open challenge</StatusPill>
+          <h2 className="mt-3 text-2xl font-medium">Zero Manual Work</h2>
+          <p className="mt-2 max-w-[680px] text-muted">
+            How might we eliminate unnecessary manual activities across the
+            bank?
+          </p>
+          <div className="mt-5 flex flex-wrap gap-2">
+            <button className="btn-primary">Join the challenge</button>
+            <button className="btn">View ideas</button>
+          </div>
+        </section>
+      )}
+    </div>
+  );
 }
 
-const articles = [["Letters of credit: how the documentary principle protects both sides", "Why banks pay against documents rather than goods, and what makes a presentation compliant.", "Banking Excellence", "7 min", "AB"], ["Root-cause analysis: 5 Whys and fishbone, done properly", "How to get beneath symptoms to causes you can actually fix.", "Innovation & Business Transformation", "6 min", "AB"], ["Understanding responsible AI in banking", "Fairness, transparency, data minimisation and human oversight, in practical banking terms.", "Technology & AI", "6 min", "AB"], ["Making change stick: adoption, not announcement", "Why people keep the old spreadsheet, and what actually changes behaviour.", "Innovation & Business Transformation", "5 min", "HBR"]];
+const articles = [
+  [
+    "Letters of credit: how the documentary principle protects both sides",
+    "Why banks pay against documents rather than goods, and what makes a presentation compliant.",
+    "Banking Excellence",
+    "7 min",
+    "AB",
+  ],
+  [
+    "Root-cause analysis: 5 Whys and fishbone, done properly",
+    "How to get beneath symptoms to causes you can actually fix.",
+    "Innovation & Business Transformation",
+    "6 min",
+    "AB",
+  ],
+  [
+    "Understanding responsible AI in banking",
+    "Fairness, transparency, data minimisation and human oversight, in practical banking terms.",
+    "Technology & AI",
+    "6 min",
+    "AB",
+  ],
+  [
+    "Making change stick: adoption, not announcement",
+    "Why people keep the old spreadsheet, and what actually changes behaviour.",
+    "Innovation & Business Transformation",
+    "5 min",
+    "HBR",
+  ],
+];
 
 function LibraryPage({ onArticle }: { onArticle: () => void }) {
   const [tab, setTab] = useState("All");
-  return <div className="stack"><Hero art="library" title="Library" subtitle="Practical reading for better ideas, sharper decisions and stronger outcomes." /><Tabs items={["All", "Recommended", "Banking Excellence", "Innovation & Business Transformation", "Technology & AI"]} active={tab} onChange={setTab} /><div className="grid gap-[18px] xl:grid-cols-2">{articles.map(([title, summary, category, minutes, publisher]) => <article className="app-card flex gap-3 border-l-[3px] border-l-blue p-5" key={title}><span className="grid h-[46px] min-w-[46px] place-items-center rounded-[10px] bg-blue-deep px-2 font-serif text-[13px] font-bold text-white">{publisher}</span><div className="min-w-0 flex-1"><span className="text-[12.5px] font-medium text-blue">{category}</span><button onClick={onArticle} className="mt-1 block text-left text-[17px] font-medium leading-snug hover:text-blue">{title}</button><p className="mt-2 text-sm text-muted">{summary}</p><div className="mt-3 flex items-center justify-between text-xs text-muted"><span>AB Ignite Learning</span><span>{minutes} read</span></div></div></article>)}</div></div>;
+  return (
+    <div className="stack">
+      <Hero
+        art="library"
+        title="Library"
+        subtitle="Practical reading for better ideas, sharper decisions and stronger outcomes."
+      />
+      <Tabs
+        items={[
+          "All",
+          "Recommended",
+          "Banking Excellence",
+          "Innovation & Business Transformation",
+          "Technology & AI",
+        ]}
+        active={tab}
+        onChange={setTab}
+      />
+      <div className="grid gap-[18px] xl:grid-cols-2">
+        {articles.map(([title, summary, category, minutes, publisher]) => (
+          <article
+            className="app-card flex gap-3 border-l-[3px] border-l-blue p-5"
+            key={title}
+          >
+            <span className="grid h-[46px] min-w-[46px] place-items-center rounded-[10px] bg-blue-deep px-2 font-serif text-[13px] font-bold text-white">
+              {publisher}
+            </span>
+            <div className="min-w-0 flex-1">
+              <span className="text-[12.5px] font-medium text-blue">
+                {category}
+              </span>
+              <button
+                onClick={onArticle}
+                className="mt-1 block text-left text-[17px] font-medium leading-snug hover:text-blue"
+              >
+                {title}
+              </button>
+              <p className="mt-2 text-sm text-muted">{summary}</p>
+              <div className="mt-3 flex items-center justify-between text-xs text-muted">
+                <span>AB Ignite Learning</span>
+                <span>{minutes} read</span>
+              </div>
+            </div>
+          </article>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function ArticlePage({ onBack }: { onBack: () => void }) {
-  return <div className="stack"><button className="btn btn-small self-start" onClick={onBack}><Icon name="back" className="h-4 w-4" /> Back to Library</button><article className="app-card"><StatusPill tone="blue">Banking Excellence</StatusPill><h1 className="mt-3 max-w-[760px] text-[28px] font-medium leading-tight sm:text-[34px]">Letters of credit: how the documentary principle protects both sides</h1><p className="mt-3 max-w-[720px] text-base text-muted">Why banks pay against documents rather than goods, and what makes a presentation compliant.</p><div className="mt-4 flex flex-wrap gap-3 text-xs text-muted"><span>AB Ignite Learning</span><span>7 min read</span><span>Intermediate</span></div><div className="article-body mt-8"><p>A letter of credit is a promise by a bank to pay a beneficiary when the documents presented meet the terms and conditions set out in the credit.</p><p>The documentary principle separates the bank’s review from the underlying goods or service. The bank checks documents, not whether the goods are physically perfect. That separation gives each party a predictable process.</p><h2 className="mb-3 mt-8 text-xl font-medium">What reviewers look for</h2><p>Start with the applicant’s instructions, then check the description, dates, amounts, transport documents and required certificates. A discrepancy is not automatically a failure, but it does need to be identified and handled clearly.</p><div className="mt-5 rounded-xl border border-teal/30 bg-teal/10 p-3.5 text-sm"><b className="font-medium text-[#0e9f7a]">In practice:</b> Keep the documentary requirements clear enough that a colleague can review the presentation consistently.</div></div><button className="btn-primary mt-8"><Icon name="check" /> Mark as read</button></article></div>;
+  return (
+    <div className="stack">
+      <button className="btn btn-small self-start" onClick={onBack}>
+        <Icon name="back" className="h-4 w-4" /> Back to Library
+      </button>
+      <article className="app-card">
+        <StatusPill tone="blue">Banking Excellence</StatusPill>
+        <h1 className="mt-3 max-w-[760px] text-[28px] font-medium leading-tight sm:text-[34px]">
+          Letters of credit: how the documentary principle protects both sides
+        </h1>
+        <p className="mt-3 max-w-[720px] text-base text-muted">
+          Why banks pay against documents rather than goods, and what makes a
+          presentation compliant.
+        </p>
+        <div className="mt-4 flex flex-wrap gap-3 text-xs text-muted">
+          <span>AB Ignite Learning</span>
+          <span>7 min read</span>
+          <span>Intermediate</span>
+        </div>
+        <div className="article-body mt-8">
+          <p>
+            A letter of credit is a promise by a bank to pay a beneficiary when
+            the documents presented meet the terms and conditions set out in the
+            credit.
+          </p>
+          <p>
+            The documentary principle separates the bank’s review from the
+            underlying goods or service. The bank checks documents, not whether
+            the goods are physically perfect. That separation gives each party a
+            predictable process.
+          </p>
+          <h2 className="mb-3 mt-8 text-xl font-medium">
+            What reviewers look for
+          </h2>
+          <p>
+            Start with the applicant’s instructions, then check the description,
+            dates, amounts, transport documents and required certificates. A
+            discrepancy is not automatically a failure, but it does need to be
+            identified and handled clearly.
+          </p>
+          <div className="mt-5 rounded-xl border border-teal/30 bg-teal/10 p-3.5 text-sm">
+            <b className="font-medium text-[#0e9f7a]">In practice:</b> Keep the
+            documentary requirements clear enough that a colleague can review
+            the presentation consistently.
+          </div>
+        </div>
+        <button className="btn-primary mt-8">
+          <Icon name="check" /> Mark as read
+        </button>
+      </article>
+    </div>
+  );
 }
 
 function RewardsPage() {
   const [redeemed, setRedeemed] = useState(false);
-  return <div className="stack"><Hero art="rewards" title="Rewards" subtitle="Your ideas, learning and collaboration add up to Ignite Points and recognition." /><section className="app-card border-sand/40 bg-[radial-gradient(circle_at_50%_0,rgba(217,119,6,.12),transparent_65%)] text-center"><div className="mx-auto mb-3 grid h-[76px] w-[76px] place-items-center rounded-full border border-sand/60 text-4xl">🎁</div><h2 className="text-xl font-medium">Your Ignite balance</h2><div className="mt-1 text-4xl font-semibold">0 <span className="text-lg font-normal text-muted">points</span></div><p className="mt-2 text-sm text-muted">Earn points by sharing ideas, supporting colleagues and completing learning.</p></section><div className="flex flex-wrap items-baseline justify-between gap-3"><h2 className="text-xl font-medium">Rewards you can redeem</h2><span className="text-sm text-muted">0 points available</span></div><div className="grid gap-[18px] md:grid-cols-2 xl:grid-cols-3">{[["Innovation Champion recognition", "500 points", "🏆"], ["Present your idea to the COO", "750 points", "🎤"], ["Learning day experience", "1,000 points", "📚"]].map(([name, cost, emoji]) => <article className="app-card" key={name}><div className="text-4xl">{emoji}</div><h3 className="mt-3 text-lg font-medium">{name}</h3><p className="mt-1 text-sm text-muted">{cost}</p><button disabled={!redeemed} onClick={() => setRedeemed(false)} className="btn mt-4 w-full opacity-50">Redeem</button></article>)}</div><section className="app-card"><h2 className="text-xl font-medium">Badges</h2><p className="mt-1 text-sm text-muted">Keep exploring to unlock recognition for the moments that move ideas forward.</p><div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">{[["First Idea", "💡"], ["AI Explorer", "🤖"], ["Quiz Whiz", "🧠"], ["Collaborator", "🤝"]].map(([name, emoji]) => <div className="p-3 text-center opacity-55" key={name}><div className="mx-auto grid h-[54px] w-[54px] place-items-center rounded-full border text-2xl" style={{ borderColor: "var(--line-strong)" }}>{emoji}</div><b className="mt-2 block text-sm font-medium">{name}</b></div>)}</div></section></div>;
+  return (
+    <div className="stack">
+      <Hero
+        art="rewards"
+        title="Rewards"
+        subtitle="Your ideas, learning and collaboration add up to Ignite Points and recognition."
+      />
+      <section className="app-card border-sand/40 bg-[radial-gradient(circle_at_50%_0,rgba(217,119,6,.12),transparent_65%)] text-center">
+        <div className="mx-auto mb-3 grid h-[76px] w-[76px] place-items-center rounded-full border border-sand/60 text-4xl">
+          🎁
+        </div>
+        <h2 className="text-xl font-medium">Your Ignite balance</h2>
+        <div className="mt-1 text-4xl font-semibold">
+          0 <span className="text-lg font-normal text-muted">points</span>
+        </div>
+        <p className="mt-2 text-sm text-muted">
+          Earn points by sharing ideas, supporting colleagues and completing
+          learning.
+        </p>
+      </section>
+      <div className="flex flex-wrap items-baseline justify-between gap-3">
+        <h2 className="text-xl font-medium">Rewards you can redeem</h2>
+        <span className="text-sm text-muted">0 points available</span>
+      </div>
+      <div className="grid gap-[18px] md:grid-cols-2 xl:grid-cols-3">
+        {[
+          ["Innovation Champion recognition", "500 points", "🏆"],
+          ["Present your idea to the COO", "750 points", "🎤"],
+          ["Learning day experience", "1,000 points", "📚"],
+        ].map(([name, cost, emoji]) => (
+          <article className="app-card" key={name}>
+            <div className="text-4xl">{emoji}</div>
+            <h3 className="mt-3 text-lg font-medium">{name}</h3>
+            <p className="mt-1 text-sm text-muted">{cost}</p>
+            <button
+              disabled={!redeemed}
+              onClick={() => setRedeemed(false)}
+              className="btn mt-4 w-full opacity-50"
+            >
+              Redeem
+            </button>
+          </article>
+        ))}
+      </div>
+      <section className="app-card">
+        <h2 className="text-xl font-medium">Badges</h2>
+        <p className="mt-1 text-sm text-muted">
+          Keep exploring to unlock recognition for the moments that move ideas
+          forward.
+        </p>
+        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {[
+            ["First Idea", "💡"],
+            ["AI Explorer", "🤖"],
+            ["Quiz Whiz", "🧠"],
+            ["Collaborator", "🤝"],
+          ].map(([name, emoji]) => (
+            <div className="p-3 text-center opacity-55" key={name}>
+              <div
+                className="mx-auto grid h-[54px] w-[54px] place-items-center rounded-full border text-2xl"
+                style={{ borderColor: "var(--line-strong)" }}
+              >
+                {emoji}
+              </div>
+              <b className="mt-2 block text-sm font-medium">{name}</b>
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
 }
 
 function AccountPage({ onNavigate }: { onNavigate: (page: Page) => void }) {
-  return <div className="stack"><Hero art="arena" title="My account" subtitle="Your profile, idea history and Ignite journey." /><EmployeeProfileCard /><section className="app-card"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-xl font-medium">My ideas</h2><p className="mt-1 text-sm text-muted">Your submitted ideas and workflow updates appear in Community.</p></div><button className="btn-primary" onClick={() => onNavigate("new")}>Share an idea</button></div></section></div>;
+  return (
+    <div className="stack">
+      <Hero
+        art="arena"
+        title="My account"
+        subtitle="Your profile, idea history and Ignite journey."
+      />
+      <EmployeeProfileCard />
+      <section className="app-card">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-xl font-medium">My ideas</h2>
+            <p className="mt-1 text-sm text-muted">
+              Your submitted ideas and workflow updates appear in Community.
+            </p>
+          </div>
+          <button className="btn-primary" onClick={() => onNavigate("new")}>
+            Share an idea
+          </button>
+        </div>
+      </section>
+    </div>
+  );
 }
 
-function LegacyAccountPage({ onNavigate }: { onNavigate: (page: Page) => void }) {
-  return <div className="stack"><Hero art="arena" title="My account" subtitle="Your profile, idea history and Ignite journey." /><div className="grid gap-[18px] xl:grid-cols-2"><section className="app-card"><div className="flex items-center gap-3"><Avatar name="padmadev" size="lg" /><div><h2 className="text-xl font-medium">padmadev</h2><p className="text-sm text-muted">demo-padmadev-609b99@demo.abignite</p><p className="text-sm text-muted">Technology · Demo profile</p></div></div><div className="mt-5 grid grid-cols-3 gap-2"><div className="tile text-center"><b className="block text-xl font-semibold">0</b><span className="text-xs text-muted">Ideas</span></div><div className="tile text-center"><b className="block text-xl font-semibold">0</b><span className="text-xs text-muted">Points</span></div><div className="tile text-center"><b className="block text-xl font-semibold">12th</b><span className="text-xs text-muted">Ranking</span></div></div></section><section className="app-card"><h2 className="text-xl font-medium">Account</h2><p className="mt-1 text-sm text-muted">This is a demo profile created for the presentation. Its history is kept for this session on this device and is separate from real employee records.</p><details className="mt-4"><summary className="cursor-pointer font-medium text-blue">Change password</summary><div className="mt-3 space-y-3"><input className="input" type="password" placeholder="Current password" /><input className="input" type="password" placeholder="New password" /><button className="btn-primary">Save password</button></div></details><button className="btn mt-5" onClick={() => onNavigate("community")}>Back to community</button></section></div><section className="app-card"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-xl font-medium">My ideas</h2><p className="mt-1 text-sm text-muted">No ideas yet. Share your first idea to see where it stands.</p></div><button className="btn-primary" onClick={() => onNavigate("new")}>Share your first</button></div></section></div>;
+function LegacyAccountPage({
+  onNavigate,
+}: {
+  onNavigate: (page: Page) => void;
+}) {
+  return (
+    <div className="stack">
+      <Hero
+        art="arena"
+        title="My account"
+        subtitle="Your profile, idea history and Ignite journey."
+      />
+      <div className="grid gap-[18px] xl:grid-cols-2">
+        <section className="app-card">
+          <div className="flex items-center gap-3">
+            <Avatar name="padmadev" size="lg" />
+            <div>
+              <h2 className="text-xl font-medium">padmadev</h2>
+              <p className="text-sm text-muted">
+                demo-padmadev-609b99@demo.abignite
+              </p>
+              <p className="text-sm text-muted">Technology · Demo profile</p>
+            </div>
+          </div>
+          <div className="mt-5 grid grid-cols-3 gap-2">
+            <div className="tile text-center">
+              <b className="block text-xl font-semibold">0</b>
+              <span className="text-xs text-muted">Ideas</span>
+            </div>
+            <div className="tile text-center">
+              <b className="block text-xl font-semibold">0</b>
+              <span className="text-xs text-muted">Points</span>
+            </div>
+            <div className="tile text-center">
+              <b className="block text-xl font-semibold">12th</b>
+              <span className="text-xs text-muted">Ranking</span>
+            </div>
+          </div>
+        </section>
+        <section className="app-card">
+          <h2 className="text-xl font-medium">Account</h2>
+          <p className="mt-1 text-sm text-muted">
+            This is a demo profile created for the presentation. Its history is
+            kept for this session on this device and is separate from real
+            employee records.
+          </p>
+          <details className="mt-4">
+            <summary className="cursor-pointer font-medium text-blue">
+              Change password
+            </summary>
+            <div className="mt-3 space-y-3">
+              <input
+                className="input"
+                type="password"
+                placeholder="Current password"
+              />
+              <input
+                className="input"
+                type="password"
+                placeholder="New password"
+              />
+              <button className="btn-primary">Save password</button>
+            </div>
+          </details>
+          <button className="btn mt-5" onClick={() => onNavigate("community")}>
+            Back to community
+          </button>
+        </section>
+      </div>
+      <section className="app-card">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-xl font-medium">My ideas</h2>
+            <p className="mt-1 text-sm text-muted">
+              No ideas yet. Share your first idea to see where it stands.
+            </p>
+          </div>
+          <button className="btn-primary" onClick={() => onNavigate("new")}>
+            Share your first
+          </button>
+        </div>
+      </section>
+    </div>
+  );
 }
 
 function LiveLearnPage() {
   const [tab, setTab] = useState("My journey");
   const journey = useLearningJourney();
-  const journeyState = journey.isPending ? "loading" : journey.isError ? "error" : "success" as const;
-  return <div className="stack"><Hero art="arena" title="Ignite Your Knowledge" subtitle="Build confidence in banking, transformation and technology — one useful question at a time." /><Tabs items={["My journey", "Quizzes", "Ranking", "Challenges"]} active={tab} onChange={setTab} />
-    {tab === "My journey" && <>{journey.data ? <JourneyCard journey={journey.data} /> : <LearningState state={journeyState} label={journey.isError ? "Your learning journey could not be loaded." : "Loading your learning journey…"} onRetry={() => void journey.refetch()} />}<button className="btn-primary self-start" type="button" onClick={() => setTab("Quizzes")}>Take a quiz</button></>}
-    {tab === "Quizzes" && <QuizJourney />}
-    {tab === "Ranking" && <LearningRanking />}
-    {tab === "Challenges" && <LearningChallenges />}
-  </div>;
+  const journeyState = journey.isPending
+    ? "loading"
+    : journey.isError
+      ? "error"
+      : ("success" as const);
+  return (
+    <div className="stack">
+      <Hero
+        art="arena"
+        title="Ignite Your Knowledge"
+        subtitle="Build confidence in banking, transformation and technology — one useful question at a time."
+      />
+      <Tabs
+        items={["My journey", "Quizzes", "Ranking", "Challenges"]}
+        active={tab}
+        onChange={setTab}
+      />
+      {tab === "My journey" && (
+        <>
+          {journey.data ? (
+            <JourneyCard journey={journey.data} />
+          ) : (
+            <LearningState
+              state={journeyState}
+              label={
+                journey.isError
+                  ? "Your learning journey could not be loaded."
+                  : "Loading your learning journey…"
+              }
+              onRetry={() => void journey.refetch()}
+            />
+          )}
+          <button
+            className="btn-primary self-start"
+            type="button"
+            onClick={() => setTab("Quizzes")}
+          >
+            Take a quiz
+          </button>
+        </>
+      )}
+      {tab === "Quizzes" && <QuizJourney />}
+      {tab === "Ranking" && <LearningRanking />}
+      {tab === "Challenges" && <LearningChallenges />}
+    </div>
+  );
 }
 
 function LiveLibraryPage({ onArticle }: { onArticle: (id: number) => void }) {
   const [tab, setTab] = useState("All");
-  const categoryMap: Record<string, string | undefined> = { All: undefined, Recommended: undefined, Banking: "banking", Transformation: "transformation", Technology: "technology" };
+  const categoryMap: Record<string, string | undefined> = {
+    All: undefined,
+    Recommended: undefined,
+    Banking: "banking",
+    Transformation: "transformation",
+    Technology: "technology",
+  };
   const category = categoryMap[tab];
   const articlesQuery = useArticles(category);
   const recommendations = useLearningRecommendations();
   const isRecommended = tab === "Recommended";
   const query = isRecommended ? recommendations : articlesQuery;
-  const items = isRecommended ? recommendations.data?.items ?? [] : articlesQuery.data?.items ?? [];
-  return <div className="stack"><Hero art="library" title="Library" subtitle="Practical reading for better ideas, sharper decisions and stronger outcomes." /><Tabs items={["All", "Recommended", "Banking", "Transformation", "Technology"]} active={tab} onChange={setTab} />{query.isPending ? <LearningState state="loading" label="Loading the library…" /> : query.isError ? <LearningState state="error" label="The library could not be loaded." onRetry={() => void query.refetch()} /> : <ArticleList articles={items} onOpen={(article) => onArticle(article.id)} />}</div>;
+  const items = isRecommended
+    ? (recommendations.data?.items ?? [])
+    : (articlesQuery.data?.items ?? []);
+  return (
+    <div className="stack">
+      <Hero
+        art="library"
+        title="Library"
+        subtitle="Practical reading for better ideas, sharper decisions and stronger outcomes."
+      />
+      <Tabs
+        items={[
+          "All",
+          "Recommended",
+          "Banking",
+          "Transformation",
+          "Technology",
+        ]}
+        active={tab}
+        onChange={setTab}
+      />
+      {query.isPending ? (
+        <LearningState state="loading" label="Loading the library…" />
+      ) : query.isError ? (
+        <LearningState
+          state="error"
+          label="The library could not be loaded."
+          onRetry={() => void query.refetch()}
+        />
+      ) : (
+        <ArticleList
+          articles={items}
+          onOpen={(article) => onArticle(article.id)}
+        />
+      )}
+    </div>
+  );
 }
 
-function LiveArticlePage({ articleId, onBack }: { articleId: number | null; onBack: () => void }) {
+function LiveArticlePage({
+  articleId,
+  onBack,
+}: {
+  articleId: number | null;
+  onBack: () => void;
+}) {
   const articleQuery = useLearningArticle(articleId ?? 0, Boolean(articleId));
   const complete = useCompleteArticle();
-  if (articleQuery.isPending) return <LearningState state="loading" label="Loading article…" />;
-  if (articleQuery.isError || !articleQuery.data) return <div className="stack"><LearningState state="error" label="This article could not be loaded." onRetry={() => void articleQuery.refetch()} /><button className="btn self-start" type="button" onClick={onBack}>Back to Library</button></div>;
+  if (articleQuery.isPending)
+    return <LearningState state="loading" label="Loading article…" />;
+  if (articleQuery.isError || !articleQuery.data)
+    return (
+      <div className="stack">
+        <LearningState
+          state="error"
+          label="This article could not be loaded."
+          onRetry={() => void articleQuery.refetch()}
+        />
+        <button className="btn self-start" type="button" onClick={onBack}>
+          Back to Library
+        </button>
+      </div>
+    );
   const article = articleQuery.data;
-  return <div className="stack"><button className="btn btn-small self-start" type="button" onClick={onBack}><Icon name="back" className="h-4 w-4" /> Back to Library</button><ArticleCard article={article} onComplete={() => complete.mutate({ articleId: article.id })} pending={complete.isPending} completed={false} successMessage={complete.isSuccess ? `${complete.data.alreadyCompleted ? "Already completed" : "Completed"} — ${complete.data.pointsAwarded} points awarded.${complete.data.badgeAwards?.length ? ` Badge unlocked (${complete.data.badgeAwards.length}).` : ""}` : undefined} errorMessage={complete.isError ? (complete.error instanceof Error ? complete.error.message : "The article could not be completed.") : undefined} /></div>;
+  return (
+    <div className="stack">
+      <button
+        className="btn btn-small self-start"
+        type="button"
+        onClick={onBack}
+      >
+        <Icon name="back" className="h-4 w-4" /> Back to Library
+      </button>
+      <ArticleCard
+        article={article}
+        onComplete={() => complete.mutate({ articleId: article.id })}
+        pending={complete.isPending}
+        completed={false}
+        successMessage={
+          complete.isSuccess
+            ? `${complete.data.alreadyCompleted ? "Already completed" : "Completed"} — ${complete.data.pointsAwarded} points awarded.${complete.data.badgeAwards?.length ? ` Badge unlocked (${complete.data.badgeAwards.length}).` : ""}`
+            : undefined
+        }
+        errorMessage={
+          complete.isError
+            ? complete.error instanceof Error
+              ? complete.error.message
+              : "The article could not be completed."
+            : undefined
+        }
+      />
+    </div>
+  );
 }
 
 function LiveRewardsPage() {
   const rewards = useRewards();
   const redemptions = useRedemptions();
   const request = useRequestRedemption();
-  if (rewards.isPending) return <div className="stack"><Hero art="rewards" title="Rewards" subtitle="Your ideas, learning and collaboration add up to Ignite Points and recognition." /><RewardsState state="loading" /></div>;
-  if (rewards.isError || !rewards.data) return <div className="stack"><Hero art="rewards" title="Rewards" subtitle="Your ideas, learning and collaboration add up to Ignite Points and recognition." /><RewardsState state="error" label="Rewards could not be loaded." onRetry={() => void rewards.refetch()} /></div>;
+  if (rewards.isPending)
+    return (
+      <div className="stack">
+        <Hero
+          art="rewards"
+          title="Rewards"
+          subtitle="Your ideas, learning and collaboration add up to Ignite Points and recognition."
+        />
+        <RewardsState state="loading" />
+      </div>
+    );
+  if (rewards.isError || !rewards.data)
+    return (
+      <div className="stack">
+        <Hero
+          art="rewards"
+          title="Rewards"
+          subtitle="Your ideas, learning and collaboration add up to Ignite Points and recognition."
+        />
+        <RewardsState
+          state="error"
+          label="Rewards could not be loaded."
+          onRetry={() => void rewards.refetch()}
+        />
+      </div>
+    );
   const { balance, level, redeemable, earned, badges } = rewards.data;
-  return <div className="stack"><Hero art="rewards" title="Rewards" subtitle="Your ideas, learning and collaboration add up to Ignite Points and recognition." /><RewardsBalanceCard balance={balance} level={level} /><section className="stack"><SectionHeading title="Rewards you can redeem" detail={`${redeemable.length} available rewards`} /><RewardCatalogue rewards={redeemable} balance={balance.balance} pendingRewardId={request.isPending ? Number(request.variables?.rewardId) : undefined} onRedeem={(reward) => request.mutate({ rewardId: reward.id })} />{request.isError && <p className="rounded-xl border border-pink/30 bg-pink/10 p-3 text-sm text-[#d6336c]" role="alert">{request.error instanceof Error ? request.error.message : "The redemption could not be created."}</p>}</section><section className="stack"><SectionHeading title="Earned recognition" detail="Milestones you have unlocked" /><RewardCatalogue rewards={earned} balance={balance.balance} /></section><section className="stack"><SectionHeading title="Badges" detail="Recognition for the moments that move ideas forward" /><BadgeProgressList badges={badges} /></section><section className="stack"><SectionHeading title="Redemption history" detail="Your requests and fulfilment status" />{redemptions.isPending ? <RewardsState state="loading" /> : redemptions.isError ? <RewardsState state="error" label="Redemption history could not be loaded." onRetry={() => void redemptions.refetch()} /> : <RedemptionHistory redemptions={redemptions.data.items} />}</section></div>;
+  return (
+    <div className="stack">
+      <Hero
+        art="rewards"
+        title="Rewards"
+        subtitle="Your ideas, learning and collaboration add up to Ignite Points and recognition."
+      />
+      <RewardsBalanceCard balance={balance} level={level} />
+      <section className="stack">
+        <SectionHeading
+          title="Rewards you can redeem"
+          detail={`${redeemable.length} available rewards`}
+        />
+        <RewardCatalogue
+          rewards={redeemable}
+          balance={balance.balance}
+          pendingRewardId={
+            request.isPending ? Number(request.variables?.rewardId) : undefined
+          }
+          onRedeem={(reward) => request.mutate({ rewardId: reward.id })}
+        />
+        {request.isError && (
+          <p
+            className="rounded-xl border border-pink/30 bg-pink/10 p-3 text-sm text-[#d6336c]"
+            role="alert"
+          >
+            {request.error instanceof Error
+              ? request.error.message
+              : "The redemption could not be created."}
+          </p>
+        )}
+      </section>
+      <section className="stack">
+        <SectionHeading
+          title="Earned recognition"
+          detail="Milestones you have unlocked"
+        />
+        <RewardCatalogue rewards={earned} balance={balance.balance} />
+      </section>
+      <section className="stack">
+        <SectionHeading
+          title="Badges"
+          detail="Recognition for the moments that move ideas forward"
+        />
+        <BadgeProgressList badges={badges} />
+      </section>
+      <section className="stack">
+        <SectionHeading
+          title="Redemption history"
+          detail="Your requests and fulfilment status"
+        />
+        {redemptions.isPending ? (
+          <RewardsState state="loading" />
+        ) : redemptions.isError ? (
+          <RewardsState
+            state="error"
+            label="Redemption history could not be loaded."
+            onRetry={() => void redemptions.refetch()}
+          />
+        ) : (
+          <RedemptionHistory redemptions={redemptions.data.items} />
+        )}
+      </section>
+    </div>
+  );
 }
 
 function LegacyIdeaDetailPage({ onBack }: { onBack: () => void }) {
-  return <div className="stack"><button className="btn btn-small self-start" onClick={onBack}><Icon name="back" className="h-4 w-4" /> Back to Community</button><section className="app-card"><div className="flex flex-wrap items-center justify-between gap-2"><StatusPill tone="blue">Customer</StatusPill><StatusPill>Screening</StatusPill></div><h1 className="mt-4 text-[28px] font-medium leading-tight">Mobile Camera Bill Scanning Feature for Arabi App</h1><div className="mt-3 flex items-center gap-2"><Avatar name="Raghad Aljadid" /><span className="text-sm"><b className="font-medium">Raghad Aljadid</b> <span className="text-muted">Technology</span></span></div><div className="my-5 grid grid-cols-7 gap-1.5">{["Submitted", "Business review", "Control review", "Confirmation", "Proof of concept", "Implementation", "Impact"].map((stage, index) => <div key={stage} className={`text-center text-[11px] ${index === 0 ? "text-sand" : "text-[var(--dim)]"}`}><span className={`mx-auto mb-1 grid h-8 w-8 place-items-center rounded-full border ${index === 0 ? "border-sand text-sand" : ""}`} style={{ borderColor: index === 0 ? "var(--sand)" : "var(--line-strong)" }}><Icon name={index === 0 ? "bulb" : "check"} className="h-4 w-4" /></span><span className="hidden sm:block">{stage}</span></div>)}</div><div className="flex gap-2 rounded-xl border p-3 text-sm" style={{ borderColor: "var(--line-strong)" }}><Icon name="lock" className="mt-0.5 h-5 w-5 shrink-0 text-blue" /><div><b className="font-medium">Registered to Raghad Aljadid, Technology</b><p className="text-muted">Record ABI-2026-00013, registered 15 Oct 2026. Supporters and commenters are credited by name.</p></div></div><p className="mt-5 text-base">I suggest to add feature on arabi mobile to scan the bills using mobile camera instead of adding the bills manually</p><div className="mt-4 grid gap-2 sm:grid-cols-2"><div className="tile"><small className="block text-xs text-muted">Problem</small><span>Customers enter bill details manually, which takes time and creates errors.</span></div><div className="tile"><small className="block text-xs text-muted">Solution</small><span>Use the phone camera to scan and validate the bill details.</span></div><div className="tile"><small className="block text-xs text-muted">Expected benefits</small><span>Faster payments and fewer data-entry mistakes.</span></div><div className="tile"><small className="block text-xs text-muted">Risks</small><span>Needs good image quality and safe validation rules.</span></div></div><button className="btn-primary mt-4"><Icon name="up" /> 0 Support this idea</button></section><section className="app-card"><h2 className="text-xl font-medium">Discussion <span className="font-normal text-muted">(0)</span></h2><p className="mt-2 text-sm text-muted">No comments yet. Be the first.</p><div className="mt-4 flex items-end gap-2"><textarea className="input min-h-[76px]" placeholder="Add a comment or a suggestion" /><button className="btn-primary">Post</button></div></section></div>;
+  return (
+    <div className="stack">
+      <button className="btn btn-small self-start" onClick={onBack}>
+        <Icon name="back" className="h-4 w-4" /> Back to Community
+      </button>
+      <section className="app-card">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <StatusPill tone="blue">Customer</StatusPill>
+          <StatusPill>Screening</StatusPill>
+        </div>
+        <h1 className="mt-4 text-[28px] font-medium leading-tight">
+          Mobile Camera Bill Scanning Feature for Arabi App
+        </h1>
+        <div className="mt-3 flex items-center gap-2">
+          <Avatar name="Raghad Aljadid" />
+          <span className="text-sm">
+            <b className="font-medium">Raghad Aljadid</b>{" "}
+            <span className="text-muted">Technology</span>
+          </span>
+        </div>
+        <div className="my-5 grid grid-cols-7 gap-1.5">
+          {[
+            "Submitted",
+            "Business review",
+            "Control review",
+            "Confirmation",
+            "Proof of concept",
+            "Implementation",
+            "Impact",
+          ].map((stage, index) => (
+            <div
+              key={stage}
+              className={`text-center text-[11px] ${index === 0 ? "text-sand" : "text-[var(--dim)]"}`}
+            >
+              <span
+                className={`mx-auto mb-1 grid h-8 w-8 place-items-center rounded-full border ${index === 0 ? "border-sand text-sand" : ""}`}
+                style={{
+                  borderColor:
+                    index === 0 ? "var(--sand)" : "var(--line-strong)",
+                }}
+              >
+                <Icon
+                  name={index === 0 ? "bulb" : "check"}
+                  className="h-4 w-4"
+                />
+              </span>
+              <span className="hidden sm:block">{stage}</span>
+            </div>
+          ))}
+        </div>
+        <div
+          className="flex gap-2 rounded-xl border p-3 text-sm"
+          style={{ borderColor: "var(--line-strong)" }}
+        >
+          <Icon name="lock" className="mt-0.5 h-5 w-5 shrink-0 text-blue" />
+          <div>
+            <b className="font-medium">
+              Registered to Raghad Aljadid, Technology
+            </b>
+            <p className="text-muted">
+              Record ABI-2026-00013, registered 15 Oct 2026. Supporters and
+              commenters are credited by name.
+            </p>
+          </div>
+        </div>
+        <p className="mt-5 text-base">
+          I suggest to add feature on arabi mobile to scan the bills using
+          mobile camera instead of adding the bills manually
+        </p>
+        <div className="mt-4 grid gap-2 sm:grid-cols-2">
+          <div className="tile">
+            <small className="block text-xs text-muted">Problem</small>
+            <span>
+              Customers enter bill details manually, which takes time and
+              creates errors.
+            </span>
+          </div>
+          <div className="tile">
+            <small className="block text-xs text-muted">Solution</small>
+            <span>
+              Use the phone camera to scan and validate the bill details.
+            </span>
+          </div>
+          <div className="tile">
+            <small className="block text-xs text-muted">
+              Expected benefits
+            </small>
+            <span>Faster payments and fewer data-entry mistakes.</span>
+          </div>
+          <div className="tile">
+            <small className="block text-xs text-muted">Risks</small>
+            <span>Needs good image quality and safe validation rules.</span>
+          </div>
+        </div>
+        <button className="btn-primary mt-4">
+          <Icon name="up" /> 0 Support this idea
+        </button>
+      </section>
+      <section className="app-card">
+        <h2 className="text-xl font-medium">
+          Discussion <span className="font-normal text-muted">(0)</span>
+        </h2>
+        <p className="mt-2 text-sm text-muted">
+          No comments yet. Be the first.
+        </p>
+        <div className="mt-4 flex items-end gap-2">
+          <textarea
+            className="input min-h-[76px]"
+            placeholder="Add a comment or a suggestion"
+          />
+          <button className="btn-primary">Post</button>
+        </div>
+      </section>
+    </div>
+  );
 }
 
-function isProtectedViewProps(value: unknown): value is { protectedView?: boolean } {
-  return typeof value === "object" && value !== null && "protectedView" in value && (value as { protectedView?: unknown }).protectedView === true;
+function isProtectedViewProps(
+  value: unknown,
+): value is { protectedView?: boolean } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "protectedView" in value &&
+    (value as { protectedView?: unknown }).protectedView === true
+  );
 }
 
 export default function Home(props: unknown) {
@@ -267,24 +2253,137 @@ export default function Home(props: unknown) {
   const [signedIn, setSignedIn] = useState(protectedView);
   const [page, setPage] = useState<Page>("community");
   const [selectedIdeaId, setSelectedIdeaId] = useState<number | null>(null);
-  const [selectedArticleId, setSelectedArticleId] = useState<number | null>(null);
+  const [selectedArticleId, setSelectedArticleId] = useState<number | null>(
+    null,
+  );
   const [menuOpen, setMenuOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const notificationsQuery = useEmployeeNotifications(signedIn);
   const rewardsSummaryQuery = useRewards(signedIn);
   const setNotificationRead = useSetEmployeeNotificationRead();
 
-  useEffect(() => { if (protectedView) setSignedIn(true); }, [protectedView]);
+  useEffect(() => {
+    if (protectedView) setSignedIn(true);
+  }, [protectedView]);
   const enter = async (details: { name: string; department: string }) => {
-    const response = await fetch("/api/demo/session", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify(details) });
-    if (!response.ok) throw new Error(response.status === 403 ? "Demo entry is unavailable." : "Unable to create a demo session. Please try again.");
+    const response = await fetch("/api/demo/session", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(details),
+    });
+    if (!response.ok)
+      throw new Error(
+        response.status === 403
+          ? "Demo entry is unavailable."
+          : "Unable to create a demo session. Please try again.",
+      );
     window.location.assign("/private");
   };
-  const signOut = async () => { await fetch("/api/auth/refresh", { method: "DELETE", credentials: "same-origin" }); await authSignOut({ callbackUrl: "/login" }); };
-  const navigate = (next: Page) => { setPage(next); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); };
-  const openIdea = (id: number) => { setSelectedIdeaId(id); navigate("idea"); };
+  const signOut = async () => {
+    await fetch("/api/auth/refresh", {
+      method: "DELETE",
+      credentials: "same-origin",
+    });
+    await authSignOut({ callbackUrl: "/login" });
+  };
+  const navigate = (next: Page) => {
+    setPage(next);
+    setMenuOpen(false);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+  const openIdea = (id: number) => {
+    setSelectedIdeaId(id);
+    navigate("idea");
+  };
   if (!signedIn) return <AuthLoginScreen onEnter={enter} />;
   const points = rewardsSummaryQuery.data?.balance.balance ?? 0;
-  const pageContent = page === "community" ? <EmployeeCommunityPage points={points} onNavigate={navigate} onOpenIdea={openIdea} /> : page === "new" ? <EmployeeIdeaSubmissionPage onOpenIdea={openIdea} /> : page === "learn" ? <LiveLearnPage /> : page === "library" ? <LiveLibraryPage onArticle={(id) => { setSelectedArticleId(id); navigate("article"); }} /> : page === "article" ? <LiveArticlePage articleId={selectedArticleId} onBack={() => navigate("library")} /> : page === "idea" && selectedIdeaId ? <EmployeeIdeaDetailPage ideaId={selectedIdeaId} onBack={() => navigate("community")} /> : page === "rewards" ? <LiveRewardsPage /> : page === "me" ? <AccountPage onNavigate={navigate} /> : page === "quiz" ? <LiveLearnPage /> : <EmployeeCommunityPage points={points} onNavigate={navigate} onOpenIdea={openIdea} />;
-  return <div className="app-background min-h-screen"><div className="grid min-h-screen lg:grid-cols-[240px_1fr]"><SideNav page={page} open={menuOpen} onClose={() => setMenuOpen(false)} onNavigate={navigate} onSignOut={signOut} /><div className="min-w-0"><TopBar page={page} points={points} unreadCount={notificationsQuery.data?.unreadCount ?? 0} onMenu={() => setMenuOpen(true)} onNavigate={navigate} onNotifications={() => setNotificationsOpen(true)} /><main className="mx-auto w-full max-w-[1040px] px-3.5 pb-28 pt-[18px] sm:px-7 sm:pb-[70px] sm:pt-7">{pageContent}</main></div></div><MobileNav page={page} onNavigate={navigate} /><Notifications open={notificationsOpen} onClose={() => setNotificationsOpen(false)} items={notificationsQuery.data?.items ?? []} unreadCount={notificationsQuery.data?.unreadCount ?? 0} onMarkAllRead={() => setNotificationRead.mutate({ all: true, read: true })} /><div className="fixed inset-0 z-40 bg-navy/50 lg:hidden" onClick={() => setMenuOpen(false)} style={{ display: menuOpen ? "block" : "none" }} /></div>;
+  const pageContent =
+    page === "community" ? (
+      <EmployeeCommunityPage
+        points={points}
+        onNavigate={navigate}
+        onOpenIdea={openIdea}
+      />
+    ) : page === "new" ? (
+      <EmployeeIdeaSubmissionPage onOpenIdea={openIdea} />
+    ) : page === "learn" ? (
+      <LiveLearnPage />
+    ) : page === "library" ? (
+      <LiveLibraryPage
+        onArticle={(id) => {
+          setSelectedArticleId(id);
+          navigate("article");
+        }}
+      />
+    ) : page === "article" ? (
+      <LiveArticlePage
+        articleId={selectedArticleId}
+        onBack={() => navigate("library")}
+      />
+    ) : page === "idea" && selectedIdeaId ? (
+      <EmployeeIdeaDetailPage
+        ideaId={selectedIdeaId}
+        onBack={() => navigate("community")}
+      />
+    ) : page === "rewards" ? (
+      <LiveRewardsPage />
+    ) : page === "me" ? (
+      <AccountPage onNavigate={navigate} />
+    ) : page === "quiz" ? (
+      <LiveLearnPage />
+    ) : (
+      <EmployeeCommunityPage
+        points={points}
+        onNavigate={navigate}
+        onOpenIdea={openIdea}
+      />
+    );
+  return (
+    <div className="app-background min-h-screen">
+      <div className="grid min-h-screen lg:grid-cols-[240px_1fr]">
+        <SideNav
+          page={page}
+          open={menuOpen}
+          onClose={() => setMenuOpen(false)}
+          onNavigate={navigate}
+          onSignOut={signOut}
+        />
+        <div className="min-w-0">
+          <TopBar
+            page={page}
+            points={points}
+            unreadCount={notificationsQuery.data?.unreadCount ?? 0}
+            onMenu={() => setMenuOpen(true)}
+            onNavigate={navigate}
+            onNotifications={() => setNotificationsOpen(true)}
+          />
+          <main className="mx-auto w-full max-w-[1040px] px-3.5 pb-28 pt-[18px] sm:px-7 sm:pb-[70px] sm:pt-7">
+            {pageContent}
+          </main>
+        </div>
+      </div>
+      <MobileNav page={page} onNavigate={navigate} />
+      <Notifications
+        open={notificationsOpen}
+        onClose={() => setNotificationsOpen(false)}
+        items={notificationsQuery.data?.items ?? []}
+        unreadCount={notificationsQuery.data?.unreadCount ?? 0}
+        hasNextPage={Boolean(notificationsQuery.hasNextPage)}
+        isFetchingNextPage={notificationsQuery.isFetchingNextPage}
+        isPending={notificationsQuery.isPending}
+        isError={notificationsQuery.isError}
+        onLoadMore={() => void notificationsQuery.fetchNextPage()}
+        onRetry={() => void notificationsQuery.refetch()}
+        onMarkAllRead={() =>
+          setNotificationRead.mutate({ all: true, read: true })
+        }
+      />
+      <div
+        className="fixed inset-0 z-40 bg-navy/50 lg:hidden"
+        onClick={() => setMenuOpen(false)}
+        style={{ display: menuOpen ? "block" : "none" }}
+      />
+    </div>
+  );
 }

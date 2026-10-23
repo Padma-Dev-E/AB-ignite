@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../../db/connection";
 import { announcements, auditEvents, feedbackCampaigns, notifications, refreshTokens, users } from "../../../db/schema";
@@ -56,6 +56,7 @@ export function setAnnouncementPinned(actor: Actor, announcementId: number, pinn
     const row = tx.select().from(announcements).where(eq(announcements.id, announcementId)).get();
     if (!row) throw new AdminNotFoundError("Announcement not found.");
     if (row.pinned === pinned) return row;
+    if (pinned) tx.update(announcements).set({ pinned: false, updatedAt: now }).where(and(eq(announcements.pinned, true), sql`${announcements.id} <> ${announcementId}`)).run();
     const changed = tx.update(announcements).set({ pinned, updatedAt: now }).where(eq(announcements.id, announcementId)).returning().get();
     if (pinned) for (const user of tx.select({ id: users.id }).from(users).where(and(eq(users.profile, "employee"), eq(users.isActive, true))).all()) tx.insert(notifications).values({ userId: user.id, type: "announcement_published", title: changed.title, body: changed.body, link: `/announcements/${changed.id}`, createdAt: now, updatedAt: now }).run();
     return changed;

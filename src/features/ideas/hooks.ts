@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { addIdeaComment, createIdea, getIdea, getIdeaAiStatus, getIdeaDevelopment, ideaQueryKeys, listIdeaComments, listIdeas, queueIdeaDevelopment, saveIdeaSubmission, submitIdea, supportIdea, updateIdea, updateIdeaDraft } from "./api";
 import type { IdeaCreateInput, IdeaListParams, IdeaSubmissionInput, IdeaUpdateInput } from "./types";
 
-export function useIdeas(params: IdeaListParams = {}) { return useQuery({ queryKey: ideaQueryKeys.list(params), queryFn: () => listIdeas(params) }); }
+export function useIdeas(params: IdeaListParams = {}, enabled = true) { return useQuery({ queryKey: ideaQueryKeys.list(params), queryFn: () => listIdeas(params), enabled }); }
 export function useCreateIdea() {
   const client = useQueryClient();
   return useMutation({ mutationFn: (input: IdeaCreateInput) => createIdea(input), onSuccess: () => { void client.invalidateQueries({ queryKey: ideaQueryKeys.all }); } });
