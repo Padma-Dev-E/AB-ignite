@@ -28,9 +28,18 @@ before(async () => {
 
 const actor = () => ({ userId: adminId, sessionId });
 
-test("governance queues expose screening and owner-approved ideas with bounded pages", async () => {
+test("governance queues expose screening and owner-approved ideas with bounded pages and durable routing", async () => {
   assert.equal((await listScreeningQueue(1)).items.some((idea) => idea.id === ideaId), true);
-  await decideGovernance(actor(), ideaId, "route", "Route for owner review", ownerId);
+  const dueAt = new Date(Date.now() + 86_400_000);
+  const key = `route-key-${Date.now()}`;
+  const routedResult = await decideGovernance(actor(), ideaId, "route", "Route for owner review", ownerId, dueAt, key);
+  assert.deepEqual(await decideGovernance(actor(), ideaId, "route", "Route for owner review", ownerId, dueAt, key), routedResult);
+  await assert.rejects(decideGovernance(actor(), ideaId, "route", "Different request", ownerId, dueAt, key), /idempotency/i);
+  const routed = (await listScreeningQueue(1)).items.find((idea) => idea.id === ideaId);
+  assert.equal(routed, undefined);
+  const [persisted] = await db.select({ assignedUserId: ideas.assignedUserId, dueAt: ideas.dueAt }).from(ideas).where(eq(ideas.id, ideaId)).all();
+  assert.equal(persisted.assignedUserId, ownerId);
+  assert.equal(persisted.dueAt?.getTime(), dueAt.getTime());
   assert.equal((await listTransformationQueue(10)).items.some((idea) => idea.id === ideaId), false);
   assert.equal((await listRoutedEvaluations({ ...actor(), userId: ownerId }, 10)).items.some((idea) => idea.id === ideaId), true);
   assert.equal((await listRoutedEvaluations({ ...actor(), userId: authorId }, 10)).items.some((idea) => idea.id === ideaId), false);
@@ -43,9 +52,11 @@ test("evaluation includes submission breakdown and decisions notify and append a
   await decideGovernance(actor(), ideaId, "approve", "Owner approves this proposal");
   assert.equal((await listTransformationQueue(10)).items.some((idea) => idea.id === ideaId), true);
   await decideGovernance(actor(), ideaId, "confirm", "Confirm for proof of concept");
+  await decideGovernance(actor(), ideaId, "start_implementation", "Start delivery");
+  await decideGovernance(actor(), ideaId, "mark_implemented", "Delivery completed");
   const [updated] = await db.select({ status: ideas.status }).from(ideas).where(eq(ideas.id, ideaId)).all();
-  assert.equal(updated.status, "poc");
-  assert.ok((await db.select().from(notifications).where(eq(notifications.userId, authorId)).all()).length >= 1);
+  assert.equal(updated.status, "implemented");
+  assert.ok((await db.select().from(notifications).where(eq(notifications.userId, authorId)).all()).length >= 4);
   assert.ok((await db.select().from(auditEvents).where(eq(auditEvents.targetId, String(ideaId))).all()).length >= 3);
   assert.ok((await db.select().from(ideaEvents).where(eq(ideaEvents.ideaId, ideaId)).all()).length >= 3);
   assert.ok((await db.select().from(ideaReviews).where(eq(ideaReviews.ideaId, ideaId)).all()).length >= 1);

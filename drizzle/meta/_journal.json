@@ -85,6 +85,13 @@
       "when": 1792729700000,
       "tag": "0011_notification_email_deliveries",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1792730000000,
+      "tag": "0012_governance_assignment_due_dates",
+      "breakpoints": true
     }
   ]
 }

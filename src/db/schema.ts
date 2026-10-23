@@ -79,6 +79,8 @@ export const ideas = sqliteTable("ideas", {
   risks: text(),
   category: text().notNull(),
   status: text({ enum: ["screening", "returned", "business_review", "control_review", "decision", "poc", "implementation", "implemented", "rejected", "deferred"] }).notNull().default("screening"),
+  assignedUserId: integer().references(() => users.id, { onDelete: "set null" }),
+  dueAt: integer({ mode: "timestamp_ms" }),
   priorityBand: text({ enum: ["Watch", "Qualify", "Priority"] }),
   priorityScore: real(),
   reference: text().notNull(),
@@ -91,6 +93,7 @@ export const ideas = sqliteTable("ideas", {
   uniqueIndex("ideas_reference_unique").on(table.reference),
   index("ideas_author_idx").on(table.authorId),
   index("ideas_status_idx").on(table.status),
+  index("ideas_assignment_due_idx").on(table.assignedUserId, table.dueAt),
 ]);
 
 export const ideaVersions = sqliteTable("idea_versions", {
