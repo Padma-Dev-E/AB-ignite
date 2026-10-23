@@ -14,7 +14,8 @@ export default function LoginPage() {
     const refresh = await fetch("/api/auth/refresh", { method: "POST", credentials: "same-origin" });
     if (!refresh.ok) throw new Error("Unable to establish a secure session.");
     const session = await getSession();
-    router.replace(session?.user?.role === "admin" ? "/private/admin" : "/private");
+    const profile = session?.user?.profile;
+    router.replace(session?.user?.role === "admin" || ["reviewer", "business_owner", "control", "management"].includes(profile ?? "") ? "/private/admin" : "/private");
     router.refresh();
   }
 
