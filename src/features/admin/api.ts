@@ -1,5 +1,5 @@
 import { apiFetch } from "../../lib/api/client";
-import type { AdminAuditEvent, AdminChallenge, AdminIdea, AdminQuiz, AdminRedemption, AdminReward, AdminSettings, AdminUser, Paginated } from "./types";
+import type { AdminAuditEvent, AdminChallenge, AdminFeedbackResponse, AdminIdea, AdminQuiz, AdminRedemption, AdminReward, AdminSettings, AdminUser, Paginated } from "./types";
 
 type ListResponse<T> = { items: T[] };
 
@@ -24,6 +24,10 @@ export function listAdminAudit() { return apiFetch<{ items: AdminAuditEvent[]; n
 export function listAdminScreening() { return apiFetch<{ items: AdminIdea[]; nextAfter: number | null }>("/api/admin/governance/queues/screening?limit=50"); }
 export function listAdminTransformation() { return apiFetch<{ items: AdminIdea[]; nextAfter: number | null }>("/api/admin/governance/queues/transformation?limit=50"); }
 export function getAdminSettings() { return apiFetch<AdminSettings>("/api/admin/settings"); }
+export function listAdminFeedback() { return apiFetch<{ items: AdminFeedbackResponse[] }>("/api/admin/feedback"); }
+export function respondToAdminFeedback(id: number, response: string) {
+  return apiFetch<{ id: number; respondedAt: string }>(`/api/admin/feedback/${id}/respond`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ response }) });
+}
 
 export type GovernanceAction = "route" | "return" | "reject" | "defer" | "approve" | "not_recommended" | "confirm";
 export function decideAdminIdea(ideaId: number, action: GovernanceAction, reason: string, businessOwnerId?: number) {
@@ -45,4 +49,5 @@ export const adminQueryKeys = {
   screening: ["admin", "governance", "screening"] as const,
   transformation: ["admin", "governance", "transformation"] as const,
   settings: ["admin", "settings"] as const,
+  feedback: ["admin", "feedback"] as const,
 };
