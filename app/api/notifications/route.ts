@@ -9,7 +9,12 @@ import { apiError, handleApiError, ok, requestId } from "../../../src/lib/http/e
 const querySchema = z.strictObject({
   page: z.preprocess((value) => value === undefined || value === "" ? 1 : Number(value), z.number().int().min(1)),
   pageSize: z.preprocess((value) => value === undefined || value === "" ? 20 : Math.min(Number(value), 50), z.number().int().min(1)),
-  unreadOnly: z.preprocess((value) => value === true || value === "true", z.boolean().default(false)),
+  unreadOnly: z.preprocess((value) => {
+    if (value === undefined || value === "") return undefined;
+    if (value === true || value === "true") return true;
+    if (value === false || value === "false") return false;
+    return value;
+  }, z.boolean().default(false)),
 });
 const updateSchema = z.strictObject({ id: z.number().int().positive().optional(), read: z.boolean().default(true), all: z.boolean().default(false) });
 
@@ -24,7 +29,7 @@ export async function GET(request: Request) {
     const where = query.unreadOnly ? and(eq(notifications.userId, userId), eq(notifications.isRead, false)) : eq(notifications.userId, userId);
     const offset = (query.page - 1) * query.pageSize;
     const [items, countRows, unreadRows] = await Promise.all([
-      db.select().from(notifications).where(where).orderBy(desc(notifications.createdAt)).limit(query.pageSize).offset(offset).all(),
+      db.select().from(notifications).where(where).orderBy(desc(notifications.createdAt), desc(notifications.id)).limit(query.pageSize).offset(offset).all(),
       db.select({ count: sql<number>`count(*)` }).from(notifications).where(where).all(),
       db.select({ count: sql<number>`count(*)` }).from(notifications).where(and(eq(notifications.userId, userId), eq(notifications.isRead, false))).all(),
     ]);

@@ -216,7 +216,7 @@ export async function listIdeas(actor: IdeaActor, query: Pick<IdeaListQuery, "pa
   const where = filters.length ? and(...filters) : undefined;
   const { limit, offset } = pageBounds(query.page, query.pageSize);
   const [items, totalRow] = await Promise.all([
-    db.select().from(ideas).where(where).orderBy(desc(ideas.createdAt)).limit(limit).offset(offset).all(),
+    db.select().from(ideas).where(where).orderBy(desc(ideas.createdAt), desc(ideas.id)).limit(limit).offset(offset).all(),
     db.select({ count: sql<number>`count(*)` }).from(ideas).where(where).all(),
   ]);
   const total = Number(totalRow[0]?.count ?? 0);
@@ -284,7 +284,7 @@ export async function listIdeaComments(ideaId: number, query: { page: number; pa
   const [rows, totalRow] = await Promise.all([
     db.select({ comment: ideaComments, author: { id: users.id, name: users.name, department: users.department } })
       .from(ideaComments).leftJoin(users, eq(users.id, ideaComments.authorId)).where(eq(ideaComments.ideaId, ideaId))
-      .orderBy(asc(ideaComments.createdAt)).limit(limit).offset(offset).all(),
+      .orderBy(asc(ideaComments.createdAt), asc(ideaComments.id)).limit(limit).offset(offset).all(),
     db.select({ count: sql<number>`count(*)` }).from(ideaComments).where(eq(ideaComments.ideaId, ideaId)).all(),
   ]);
   const total = Number(totalRow[0]?.count ?? 0);
@@ -300,7 +300,9 @@ export async function createIdeaComment(actor: IdeaActor, ideaId: number, body: 
     if (!idea) throw new Error("Idea not found");
     const [comment] = tx.insert(ideaComments).values({ ideaId, authorId: userId, body: text }).returning().all();
     if (!comment) throw new Error("Comment was not created");
+    const [author] = tx.select({ id: users.id, name: users.name, department: users.department })
+      .from(users).where(eq(users.id, userId)).limit(1).all();
     tx.update(ideas).set({ comments: sql`${ideas.comments} + 1`, updatedAt: new Date() }).where(eq(ideas.id, ideaId)).run();
-    return comment;
+    return { ...comment, author: author ?? null };
   });
 }

@@ -13,7 +13,11 @@ export function useUpdateIdea() {
 }
 export function useAddIdeaComment() {
   const client = useQueryClient();
-  return useMutation({ mutationFn: ({ id, body }: { id: number; body: string }) => addIdeaComment(id, body), onSuccess: (_data, variables) => { void client.invalidateQueries({ queryKey: ["ideas", variables.id] }); } });
+  return useMutation({ mutationFn: ({ id, body }: { id: number; body: string }) => addIdeaComment(id, body), onSuccess: (_data, variables) => {
+    void client.invalidateQueries({ queryKey: ideaQueryKeys.detail(variables.id) });
+    void client.invalidateQueries({ queryKey: ["ideas", variables.id, "comments"] });
+    void client.invalidateQueries({ queryKey: ideaQueryKeys.all });
+  } });
 }
 export function useSupportIdea() {
   const client = useQueryClient();

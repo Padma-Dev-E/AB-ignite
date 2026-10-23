@@ -33,7 +33,12 @@ export const IdeaListQuerySchema = z.strictObject({
   search: z.string().trim().max(120).optional(),
   category: z.string().trim().min(1).max(120).optional(),
   status: z.enum(["screening", "returned", "business_review", "control_review", "decision", "poc", "implementation", "implemented", "rejected", "deferred"]).optional(),
-  mine: z.preprocess((value) => value === true || value === "true", z.boolean().default(false)),
+  mine: z.preprocess((value) => {
+    if (value === undefined || value === "") return undefined;
+    if (value === true || value === "true") return true;
+    if (value === false || value === "false") return false;
+    return value;
+  }, z.boolean().default(false)),
 });
 
 export type IdeaListQuery = z.infer<typeof IdeaListQuerySchema>;
@@ -48,6 +53,8 @@ export const IdeaUpdateSchema = z.strictObject({
   risks: z.string().trim().max(5_000).nullable().optional(),
   category: z.string().trim().min(1).max(120).optional(),
   dataClassification: z.enum(["public", "internal", "confidential", "restricted"]).optional(),
+}).refine((input) => Object.keys(input).length > 0, {
+  message: "At least one field is required.",
 });
 
 export type IdeaUpdate = z.infer<typeof IdeaUpdateSchema>;

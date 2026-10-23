@@ -69,6 +69,7 @@ test("idea list query validates filters and clamps pagination", () => {
     mine: false,
   });
   assert.throws(() => IdeaListQuerySchema.parse({ page: "0" }));
+  assert.throws(() => IdeaListQuerySchema.parse({ mine: "invalid" }));
 });
 
 test("idea list returns stable pages and total count", async () => {
@@ -112,6 +113,7 @@ test("support is idempotent for one user and increments the aggregate once", asy
 test("comments are owned by the authenticated author and update the denormalized count", async () => {
   const comment = await createIdeaComment({ kind: "user", id: String(otherUserId) }, returnedIdeaId, "A useful clarification.");
   assert.equal(comment.body, "A useful clarification.");
+  assert.equal(comment.author?.id, otherUserId);
   const listed = await listIdeaComments(returnedIdeaId, { page: 1, pageSize: 10 });
   assert.equal(listed.items.some((item) => item.id === comment.id), true);
   const [idea] = await db.select({ comments: ideas.comments }).from(ideas).where(eq(ideas.id, returnedIdeaId)).all();
@@ -122,4 +124,5 @@ test("comments are owned by the authenticated author and update the denormalized
 test("idea update schema rejects unknown fields and invalid content", () => {
   assert.throws(() => IdeaUpdateSchema.parse({ title: "x", unknown: true }));
   assert.throws(() => IdeaUpdateSchema.parse({ summary: "too short" }));
+  assert.throws(() => IdeaUpdateSchema.parse({}));
 });
