@@ -2,7 +2,7 @@
 
 Status audit for [`ab_ignite_user_stories.md`](./ab_ignite_user_stories.md).
 
-Audited against the local branch through employee engagement, quiz, idea, reward, and admin-control commits `1e3b28e`, `70ff50a`, `790b536`, `03cfec8`, and `2020d41` on 2026-10-23. A story is marked **Complete** only when its acceptance criteria are implemented end-to-end. **Partial** means code or UI exists, but one or more acceptance criteria are still missing. **Not started** means there is no functional implementation for the acceptance criteria; a static mock does not count as complete.
+Audited against the local branch through employee profile/settings, engagement, quiz, idea, reward, and admin-control commits `bce7802`, `34de060`, `71e5f33`, `1e3b28e`, `70ff50a`, `790b536`, `03cfec8`, and `2020d41` on 2026-10-23. A story is marked **Complete** only when its acceptance criteria are implemented end-to-end. **Partial** means code or UI exists, but one or more acceptance criteria are still missing. **Not started** means there is no functional implementation for the acceptance criteria; a static mock does not count as complete.
 
 ## Summary
 
@@ -56,7 +56,7 @@ Audited against the local branch through employee engagement, quiz, idea, reward
 
 | ID | Completed? | Status | Current evidence | Remaining gap |
 | :--- | :---: | :--- | :--- | :--- |
-| RW-01 | No | Partial | Ledger-backed balance projection, level/badge progress, active catalogue, and earned/redeem separation are available through secured rewards APIs. | Account/rewards frontend is not connected to the live balance and catalogue yet. |
+| RW-01 | No | Partial | Secured rewards APIs and live Rewards page expose the current balance, level, catalogue, earned recognition, and redemption history; the live account card also shows points and level. | Full earned badge presentation and browser smoke coverage remain. |
 | RW-02 | No | Partial | Transactional redemption API snapshots cost and deducts once; the employee card now uses a Headless UI confirmation dialog before mutation. | Post-confirmation balance/request success needs a full browser smoke path. |
 | RW-03 | No | Partial | Server rejects insufficient balances and enforces a non-negative projection inside the transaction. | End-to-end frontend error presentation and concurrency smoke coverage remain. |
 | RW-04 | No | Partial | Employee redemption history API returns bounded requested/fulfilled/cancelled records with ownership enforcement. | Frontend redemption history remains. |
@@ -73,7 +73,7 @@ Audited against the local branch through employee engagement, quiz, idea, reward
 | AD-04 | No | Partial | Idea scoring fields and AI schemas exist in the backend. | Reviewer UI does not show each KPI answer, score, weight, and author explanation. |
 | AD-05 | No | Partial | Admin control room consumes live users, rewards, learning, governance, and audit data with bounded audit CSV export. | Pipeline/department/learning dashboards and ideas/benefits/feedback CSV exports remain. |
 | AD-06 | No | Partial | Admin-only user directory, role changes, activation/deactivation, security reset, session revocation, and audit records are implemented; the UI lists users and lifecycle state. | The role model is still admin/user rather than the full profile set, and mutation forms/password reset UI remain. |
-| AD-07 | No | Partial | Admin settings APIs persist priority settings, point rules, and recommendation rules with reasoned, audited mutations; the admin workspace reads the live settings summary. | Full editable KPI/level/SLA/control/department/profile settings UI remains. |
+| AD-07 | No | Partial | Admin settings editor now loads and edits the minimum score, point rules, and recommendation rules with a privileged reason and audited PATCH mutation. | Full KPI hints/weights/bands, levels, SLA, controls, departments, demo access, and profiles settings UI remain. |
 | AD-08 | No | Partial | Admin learning APIs cover bounded quiz/article catalogues, unpublished quiz question edits, recommendation rules, and strict HTTPS external-link validation. | Learning-content management UI and complete quiz authoring workflow remain. |
 | AD-09 | No | Partial | Employee feedback campaign form and live notifications are connected to secured APIs; administrator response APIs persist, notify, and audit. | Campaign/announcement/challenge management and admin feedback response UI remain. |
 | AD-10 | No | Partial | Idea events and AI run records provide limited traceability. | Complete login/transition/settings/redemption audit coverage, IP detail, filtering, and CSV export are missing. |
@@ -82,7 +82,7 @@ Audited against the local branch through employee engagement, quiz, idea, reward
 
 | ID | Completed? | Status | Current evidence | Remaining gap |
 | :--- | :---: | :--- | :--- | :--- |
-| CC-01 | No | Partial | Auth.js and the existing demo UI support a demo-style employee entry concept. | Name/department profile persistence and 30-day same-name demo-session behavior are not implemented end-to-end. |
+| CC-01 | No | Partial | Demo entry UI exists, and registered profile data now loads/edits through `/api/profile`; authenticated account page uses the live profile card. | Name-only demo identity persistence and 30-day same-name demo-session behavior remain separate from registered login. |
 | CC-02 | No | Partial | Auth.js, Argon2 password hashing, refresh-token hashing, role claims, and configurable token TTLs exist. | Five-attempt lockout, 15-minute lock duration, idle timeout enforcement, and complete session policy verification are missing. |
 | CC-03 | No | Partial | Employee notification panel and top-bar unread badge now use the live notification/read APIs with polling and retry/empty states. | SMTP relay delivery and full browser smoke coverage remain. |
 | CC-04 | No | Partial | Append-only points ledger, balance projection, configured point rules, level thresholds, idempotent awards, and audited balance changes are implemented. | All idea/quiz/article event integrations and live frontend display remain. |
