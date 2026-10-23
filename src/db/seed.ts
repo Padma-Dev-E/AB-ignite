@@ -4,11 +4,13 @@ import { eq } from "drizzle-orm";
 import { db } from "./connection";
 import { users } from "./schema";
 import { hashPassword } from "../auth/password-core";
+import { ensureQuizCatalogue } from "../lib/quizzes/seed";
 
 const email = (process.env.DEFAULT_ADMIN_EMAIL ?? "admin@admin.com").trim().toLowerCase();
 const defaultAdminPassword = process.env.DEFAULT_ADMIN_PASSWORD ?? "Test@123";
 
 async function main() {
+  ensureQuizCatalogue();
   const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1);
 
   if (existing) {

@@ -243,6 +243,162 @@ export const quizzes = sqliteTable("quizzes", {
   ...timestamps,
 }, (table) => [index("quizzes_category_idx").on(table.category)]);
 
+export const quizCategories = sqliteTable("quiz_categories", {
+  id: integer().primaryKey({ autoIncrement: true }),
+  code: text().notNull(),
+  name: text().notNull(),
+  sortOrder: integer().notNull().default(0),
+  active: integer({ mode: "boolean" }).notNull().default(true),
+  ...timestamps,
+}, (table) => [
+  uniqueIndex("quiz_categories_code_unique").on(table.code),
+  index("quiz_categories_active_idx").on(table.active, table.sortOrder),
+]);
+
+export const quizVersions = sqliteTable("quiz_versions", {
+  id: integer().primaryKey({ autoIncrement: true }),
+  quizId: integer().notNull().references(() => quizzes.id, { onDelete: "cascade" }),
+  version: integer().notNull(),
+  categoryCode: text().notNull(),
+  level: text().notNull(),
+  objective: text().notNull(),
+  passMark: integer().notNull(),
+  pointsPerQuestion: integer().notNull(),
+  timeLimitSeconds: integer(),
+  published: integer({ mode: "boolean" }).notNull().default(false),
+  publishedAt: integer({ mode: "timestamp_ms" }),
+  createdBy: integer().references(() => users.id, { onDelete: "set null" }),
+  ...timestamps,
+}, (table) => [
+  uniqueIndex("quiz_versions_quiz_version_unique").on(table.quizId, table.version),
+  index("quiz_versions_catalogue_idx").on(table.categoryCode, table.level, table.published),
+]);
+
+export const quizQuestions = sqliteTable("quiz_questions", {
+  id: integer().primaryKey({ autoIncrement: true }),
+  quizVersionId: integer().notNull().references(() => quizVersions.id, { onDelete: "cascade" }),
+  topic: text().notNull(),
+  prompt: text().notNull(),
+  sortOrder: integer().notNull(),
+  points: integer().notNull().default(1),
+  ...timestamps,
+}, (table) => [
+  uniqueIndex("quiz_questions_version_order_unique").on(table.quizVersionId, table.sortOrder),
+  index("quiz_questions_version_topic_idx").on(table.quizVersionId, table.topic),
+]);
+
+export const quizOptions = sqliteTable("quiz_options", {
+  id: integer().primaryKey({ autoIncrement: true }),
+  questionId: integer().notNull().references(() => quizQuestions.id, { onDelete: "cascade" }),
+  optionKey: text().notNull(),
+  label: text().notNull(),
+  sortOrder: integer().notNull(),
+  isCorrect: integer({ mode: "boolean" }).notNull().default(false),
+}, (table) => [
+  uniqueIndex("quiz_options_question_key_unique").on(table.questionId, table.optionKey),
+  index("quiz_options_question_order_idx").on(table.questionId, table.sortOrder),
+]);
+
+export const quizAttempts = sqliteTable("quiz_attempts", {
+  id: integer().primaryKey({ autoIncrement: true }),
+  userId: integer().notNull().references(() => users.id, { onDelete: "cascade" }),
+  quizId: integer().notNull().references(() => quizzes.id, { onDelete: "restrict" }),
+  quizVersionId: integer().notNull().references(() => quizVersions.id, { onDelete: "restrict" }),
+  status: text({ enum: ["in_progress", "submitted", "expired"] }).notNull().default("in_progress"),
+  startedAt: integer({ mode: "timestamp_ms" }).notNull(),
+  expiresAt: integer({ mode: "timestamp_ms" }),
+  submittedAt: integer({ mode: "timestamp_ms" }),
+  scorePercent: integer(),
+  correctCount: integer(),
+  totalQuestions: integer().notNull(),
+  passed: integer({ mode: "boolean" }),
+  pointsAwarded: integer().notNull().default(0),
+  firstAttempt: integer({ mode: "boolean" }).notNull().default(false),
+  idempotencyKey: text().notNull(),
+  ...timestamps,
+}, (table) => [
+  uniqueIndex("quiz_attempts_idempotency_unique").on(table.idempotencyKey),
+  index("quiz_attempts_user_quiz_idx").on(table.userId, table.quizId, table.createdAt),
+  index("quiz_attempts_status_expiry_idx").on(table.status, table.expiresAt),
+]);
+
+export const quizAttemptAnswers = sqliteTable("quiz_attempt_answers", {
+  id: integer().primaryKey({ autoIncrement: true }),
+  attemptId: integer().notNull().references(() => quizAttempts.id, { onDelete: "cascade" }),
+  questionId: integer().notNull().references(() => quizQuestions.id, { onDelete: "restrict" }),
+  optionKey: text().notNull(),
+  answeredAt: integer({ mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
+}, (table) => [
+  uniqueIndex("quiz_attempt_answers_attempt_question_unique").on(table.attemptId, table.questionId),
+  index("quiz_attempt_answers_attempt_idx").on(table.attemptId),
+]);
+
+export const quizTopicResults = sqliteTable("quiz_topic_results", {
+  id: integer().primaryKey({ autoIncrement: true }),
+  attemptId: integer().notNull().references(() => quizAttempts.id, { onDelete: "cascade" }),
+  userId: integer().notNull().references(() => users.id, { onDelete: "cascade" }),
+  categoryCode: text().notNull(),
+  topic: text().notNull(),
+  correctCount: integer().notNull(),
+  totalQuestions: integer().notNull(),
+  scorePercent: integer().notNull(),
+  createdAt: integer({ mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
+}, (table) => [
+  uniqueIndex("quiz_topic_results_attempt_topic_unique").on(table.attemptId, table.topic),
+  index("quiz_topic_results_user_topic_idx").on(table.userId, table.topic, table.createdAt),
+]);
+
+export const quizRecommendationRules = sqliteTable("quiz_recommendation_rules", {
+  id: integer().primaryKey({ autoIncrement: true }),
+  topic: text().notNull(),
+  thresholdPercent: integer().notNull().default(70),
+  reasonTemplate: text().notNull(),
+  active: integer({ mode: "boolean" }).notNull().default(true),
+  ...timestamps,
+}, (table) => [
+  uniqueIndex("quiz_recommendation_rules_topic_unique").on(table.topic),
+  index("quiz_recommendation_rules_active_idx").on(table.active),
+]);
+
+export const quizRecommendations = sqliteTable("quiz_recommendations", {
+  id: integer().primaryKey({ autoIncrement: true }),
+  userId: integer().notNull().references(() => users.id, { onDelete: "cascade" }),
+  topic: text().notNull(),
+  categoryCode: text().notNull(),
+  scorePercent: integer().notNull(),
+  thresholdPercent: integer().notNull(),
+  reason: text().notNull(),
+  status: text({ enum: ["open", "completed", "dismissed"] }).notNull().default("open"),
+  sourceAttemptId: integer().notNull().references(() => quizAttempts.id, { onDelete: "cascade" }),
+  ...timestamps,
+}, (table) => [
+  uniqueIndex("quiz_recommendations_user_topic_open_unique").on(table.userId, table.topic, table.status),
+  index("quiz_recommendations_user_status_idx").on(table.userId, table.status, table.createdAt),
+]);
+
+export const quizChallenges = sqliteTable("quiz_challenges", {
+  id: integer().primaryKey({ autoIncrement: true }),
+  title: text().notNull(),
+  question: text().notNull(),
+  deadlineAt: integer({ mode: "timestamp_ms" }).notNull(),
+  points: integer().notNull().default(20),
+  active: integer({ mode: "boolean" }).notNull().default(true),
+  ...timestamps,
+}, (table) => [index("quiz_challenges_open_idx").on(table.active, table.deadlineAt)]);
+
+export const quizChallengeParticipants = sqliteTable("quiz_challenge_participants", {
+  id: integer().primaryKey({ autoIncrement: true }),
+  challengeId: integer().notNull().references(() => quizChallenges.id, { onDelete: "cascade" }),
+  userId: integer().notNull().references(() => users.id, { onDelete: "cascade" }),
+  idempotencyKey: text().notNull(),
+  pointsAwarded: integer().notNull().default(0),
+  joinedAt: integer({ mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
+}, (table) => [
+  uniqueIndex("quiz_challenge_participants_unique").on(table.challengeId, table.userId),
+  uniqueIndex("quiz_challenge_participants_idempotency_unique").on(table.idempotencyKey),
+  index("quiz_challenge_participants_challenge_idx").on(table.challengeId, table.joinedAt),
+]);
+
 export const rewards = sqliteTable("rewards", {
   id: integer().primaryKey({ autoIncrement: true }),
   name: text().notNull(),
@@ -515,6 +671,62 @@ export const rewardEventsRelations = relations(rewardEvents, ({ one }) => ({
   actor: one(users, { fields: [rewardEvents.actorUserId], references: [users.id] }),
 }));
 
+export const quizCategoriesRelations = relations(quizCategories, ({ many }) => ({
+  versions: many(quizVersions),
+}));
+
+export const quizVersionsRelations = relations(quizVersions, ({ one, many }) => ({
+  quiz: one(quizzes, { fields: [quizVersions.quizId], references: [quizzes.id] }),
+  creator: one(users, { fields: [quizVersions.createdBy], references: [users.id] }),
+  questions: many(quizQuestions),
+  attempts: many(quizAttempts),
+}));
+
+export const quizQuestionsRelations = relations(quizQuestions, ({ one, many }) => ({
+  version: one(quizVersions, { fields: [quizQuestions.quizVersionId], references: [quizVersions.id] }),
+  options: many(quizOptions),
+  answers: many(quizAttemptAnswers),
+}));
+
+export const quizOptionsRelations = relations(quizOptions, ({ one }) => ({
+  question: one(quizQuestions, { fields: [quizOptions.questionId], references: [quizQuestions.id] }),
+}));
+
+export const quizAttemptsRelations = relations(quizAttempts, ({ one, many }) => ({
+  user: one(users, { fields: [quizAttempts.userId], references: [users.id] }),
+  quiz: one(quizzes, { fields: [quizAttempts.quizId], references: [quizzes.id] }),
+  version: one(quizVersions, { fields: [quizAttempts.quizVersionId], references: [quizVersions.id] }),
+  answers: many(quizAttemptAnswers),
+  topics: many(quizTopicResults),
+  recommendations: many(quizRecommendations),
+}));
+
+export const quizAttemptAnswersRelations = relations(quizAttemptAnswers, ({ one }) => ({
+  attempt: one(quizAttempts, { fields: [quizAttemptAnswers.attemptId], references: [quizAttempts.id] }),
+  question: one(quizQuestions, { fields: [quizAttemptAnswers.questionId], references: [quizQuestions.id] }),
+}));
+
+export const quizTopicResultsRelations = relations(quizTopicResults, ({ one }) => ({
+  attempt: one(quizAttempts, { fields: [quizTopicResults.attemptId], references: [quizAttempts.id] }),
+  user: one(users, { fields: [quizTopicResults.userId], references: [users.id] }),
+}));
+
+export const quizRecommendationRulesRelations = relations(quizRecommendationRules, () => ({}));
+
+export const quizRecommendationsRelations = relations(quizRecommendations, ({ one }) => ({
+  user: one(users, { fields: [quizRecommendations.userId], references: [users.id] }),
+  attempt: one(quizAttempts, { fields: [quizRecommendations.sourceAttemptId], references: [quizAttempts.id] }),
+}));
+
+export const quizChallengesRelations = relations(quizChallenges, ({ many }) => ({
+  participants: many(quizChallengeParticipants),
+}));
+
+export const quizChallengeParticipantsRelations = relations(quizChallengeParticipants, ({ one }) => ({
+  challenge: one(quizChallenges, { fields: [quizChallengeParticipants.challengeId], references: [quizChallenges.id] }),
+  user: one(users, { fields: [quizChallengeParticipants.userId], references: [users.id] }),
+}));
+
 export const schema = {
   users,
   refreshTokens,
@@ -530,6 +742,17 @@ export const schema = {
   notifications,
   articles,
   quizzes,
+  quizCategories,
+  quizVersions,
+  quizQuestions,
+  quizOptions,
+  quizAttempts,
+  quizAttemptAnswers,
+  quizTopicResults,
+  quizRecommendationRules,
+  quizRecommendations,
+  quizChallenges,
+  quizChallengeParticipants,
   rewards,
   userRewards,
   pointRules,
@@ -567,3 +790,13 @@ export type UserBadge = typeof userBadges.$inferSelect;
 export type RewardVersion = typeof rewardVersions.$inferSelect;
 export type Redemption = typeof redemptions.$inferSelect;
 export type RewardEvent = typeof rewardEvents.$inferSelect;
+export type QuizCategory = typeof quizCategories.$inferSelect;
+export type QuizVersion = typeof quizVersions.$inferSelect;
+export type QuizQuestion = typeof quizQuestions.$inferSelect;
+export type QuizOption = typeof quizOptions.$inferSelect;
+export type QuizAttempt = typeof quizAttempts.$inferSelect;
+export type QuizAttemptAnswer = typeof quizAttemptAnswers.$inferSelect;
+export type QuizTopicResult = typeof quizTopicResults.$inferSelect;
+export type QuizRecommendation = typeof quizRecommendations.$inferSelect;
+export type QuizChallenge = typeof quizChallenges.$inferSelect;
+export type QuizChallengeParticipant = typeof quizChallengeParticipants.$inferSelect;
