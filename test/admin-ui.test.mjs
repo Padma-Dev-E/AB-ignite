@@ -6,7 +6,8 @@ const source = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8"
 
 test("admin route delegates to the reusable workspace and keeps its role guard", async () => {
   const page = await source("app/private/admin/page.tsx");
-  assert.match(page, /session\.user\.role !== "admin"/);
+  assert.match(page, /session\.user\.role === "employee"/);
+  assert.match(page, /redirect\("\/private"\)/);
   assert.match(page, /AdminWorkspace/);
   assert.match(page, /session\.user\.email/);
 });
@@ -26,16 +27,15 @@ test("admin feature owns TanStack Query wiring for available quiz and rewards AP
 
 test("admin workspace exposes safe states for unavailable operations", async () => {
   const workspace = await source("src/features/admin/components/admin-workspace.tsx");
-  assert.match(workspace, /Not configured/);
+  assert.match(workspace, /Dashboard unavailable/);
+  assert.match(workspace, /AdminQueueTable/);
+  assert.match(workspace, /AdminPeopleManagement/);
+  assert.match(workspace, /AdminSettingsEditor/);
   assert.match(workspace, /Screening/);
   assert.match(workspace, /Transformation/);
-  assert.match(workspace, /Evaluation/);
   assert.match(workspace, /Users/);
-  assert.match(workspace, /RBAC/);
-  assert.match(workspace, /Sessions/);
   assert.match(workspace, /Audit/);
   assert.match(workspace, /Settings/);
-  assert.match(workspace, /isLoading/);
   assert.match(workspace, /isError/);
 });
 
@@ -50,10 +50,13 @@ test("admin people, settings, audit, and analytics controls cover the acceptance
   assert.match(people, /Reset password/);
   assert.match(people, /Revoke/);
   assert.match(people, /fetchNextPage/);
-  for (const field of ["priority_kpis", "priority_bands", "sla_days", "required_controls", "departments", "demo_access", "profiles"]) assert.ok(settings.includes(field), `missing setting control: ${field}`);
-  assert.match(settings, /Configured levels|Ignite levels/);
-  assert.match(workspace, /Export this filtered view/);
-  assert.match(workspace, /JSON\.stringify\(event\.metadata\)/);
+  assert.match(settings, /Ignite levels/);
+  assert.match(settings, /Point rules/);
+  assert.doesNotMatch(settings, /sla_days|required_controls|demo_access/);
+  assert.match(workspace, /Badge management/);
+  assert.match(workspace, /AdminBadgeManager/);
+  assert.match(workspace, /Download filtered audit CSV/);
+  assert.match(workspace, /JSON\.stringify\(selected\.metadata/);
   for (const kind of ["ideas", "benefits", "feedback", "audit"]) assert.ok(api.includes(`"${kind}"`), `missing ${kind} export kind`);
   for (const metric of ["ideasByStatus", "ideasByPriority", "usersByDepartment", "points", "articleCompletions"]) assert.ok(evidence.includes(metric), `missing analytics measure ${metric}`);
 });

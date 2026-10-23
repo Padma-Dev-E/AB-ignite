@@ -71,5 +71,8 @@ export default async function middleware(...args: Parameters<typeof authorizeReq
 }
 
 export const config = {
-  matcher: ["/", "/login", "/change-password", "/private/:path*", "/admin/:path*", "/api/:path*"],
+  // API requests are authorized by their owning handler: Fastify for APIs and
+  // Auth.js for its sign-in/session/CSRF/sign-out protocol.
+  // Keep page protection and redirects unchanged.
+  matcher: ["/", "/login", "/change-password", "/private/:path*", "/admin/:path*"],
 };

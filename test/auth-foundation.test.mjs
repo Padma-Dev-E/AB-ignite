@@ -11,7 +11,7 @@ async function source(path) {
 
 test("auth schema has explicit roles and hashed refresh-token storage", async () => {
   const schema = await source("src/db/schema.ts");
-  assert.match(schema, /role:\s*text\(\{\s*enum:\s*\["admin",\s*"user"\]/s);
+  assert.match(schema, /role:\s*text\(\{\s*enum:\s*\["employee",\s*"back_office",\s*"business_owner"\]/s);
   assert.match(schema, /sqliteTable\("refresh_tokens"/);
   assert.match(schema, /tokenHash:\s*text\(\)\.notNull\(\)/);
   assert.match(schema, /expiresAt:\s*integer\(\{\s*mode:\s*"timestamp_ms"\s*\}\)\.notNull\(\)/s);

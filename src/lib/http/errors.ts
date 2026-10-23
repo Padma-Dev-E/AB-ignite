@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { NextResponse } from "next/server";
 import { z } from "zod";
 import { AiIdempotencyError, AiPolicyError, AiProviderError, AiSchemaValidationError, AiTimeoutError } from "../ai/errors";
 
@@ -15,7 +14,7 @@ export function requestId(request?: Request): string {
 }
 
 function response<T>(body: ApiEnvelope<T>, status: number) {
-  return NextResponse.json(body, { status, headers: { "x-request-id": body.requestId, "cache-control": "no-store" } });
+  return Response.json(body, { status, headers: { "x-request-id": body.requestId, "cache-control": "no-store" } });
 }
 
 export function ok<T>(data: T, status = 200, id: string = randomUUID()) {

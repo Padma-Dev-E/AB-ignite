@@ -1,10 +1,12 @@
 .git
+.superpowers
 .env
 .env.*
 .next
 .next-*
 node_modules
 data
+test-data
 coverage
 requirements
 docs

@@ -1,13 +1,10 @@
 name: ab-ignite-local
 
-x-app: &app
-  image: ab-ignite-local:production
+x-backend: &backend
+  image: ab-ignite-backend:production
   build:
     context: .
-    dockerfile: Dockerfile
-    args:
-      NEXT_PUBLIC_AUTH_REFRESH_INTERVAL_SECONDS: ${NEXT_PUBLIC_AUTH_REFRESH_INTERVAL_SECONDS:-600}
-  pull_policy: build
+    dockerfile: Dockerfile.backend
   env_file:
     - path: ./.env
       required: true
@@ -23,21 +20,79 @@ x-app: &app
 
 services:
   setup:
-    <<: *app
+    <<: *backend
     command: ["setup"]
     volumes:
       - sqlite_data:/app/data
       - ./data:/dev-data:ro
     restart: "no"
 
-  web:
-    <<: *app
-    command: ["web"]
+  api:
+    <<: *backend
+    command: ["api"]
+    environment:
+      DATABASE_URL: /app/data/ab-ignite.db
+      NODE_ENV: production
+      API_HOST: 0.0.0.0
+      API_PORT: 4100
+      API_TRUST_PROXY: 172.30.0.2
+      API_ALLOWED_ORIGINS: ${API_ALLOWED_ORIGINS:-https://abignite.kitty-dev.com,http://127.0.0.1:3100,http://localhost:3100}
     depends_on:
       setup:
         condition: service_completed_successfully
+    expose:
+      - "4100"
+    networks:
+      api_private:
+        ipv4_address: 172.30.0.3
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "docker/healthcheck.mjs", "api"]
+      interval: 15s
+      timeout: 6s
+      start_period: 20s
+      retries: 4
+
+  web:
+    image: ab-ignite-web:production
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_AUTH_REFRESH_INTERVAL_SECONDS: ${NEXT_PUBLIC_AUTH_REFRESH_INTERVAL_SECONDS:-600}
+        API_INTERNAL_URL: ${API_INTERNAL_URL:-http://api:4100}
+    command: ["web"]
+    environment:
+      AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET is required}
+      # Auth.js needs the public origin behind the Cloudflare Tunnel.
+      AUTH_URL: ${AUTH_URL:-https://abignite.kitty-dev.com}
+      AUTH_ACCESS_TOKEN_TTL_SECONDS: ${AUTH_ACCESS_TOKEN_TTL_SECONDS:-900}
+      AUTH_REFRESH_TOKEN_TTL_SECONDS: ${AUTH_REFRESH_TOKEN_TTL_SECONDS:-2592000}
+      AUTH_SESSION_IDLE_SECONDS: ${AUTH_SESSION_IDLE_SECONDS:-1800}
+      AUTH_SESSION_ABSOLUTE_SECONDS: ${AUTH_SESSION_ABSOLUTE_SECONDS:-43200}
+      AUTH_REFRESH_COOKIE_NAME: ${AUTH_REFRESH_COOKIE_NAME:-ab_ignite_refresh}
+      DEMO_ACCESS_ENABLED: ${DEMO_ACCESS_ENABLED:-false}
+      DEMO_SESSION_TTL_SECONDS: ${DEMO_SESSION_TTL_SECONDS:-2592000}
+      DATABASE_URL: /app/data/ab-ignite.db
+      NODE_ENV: production
+      API_INTERNAL_URL: ${API_INTERNAL_URL:-http://api:4100}
+    volumes:
+      - sqlite_data:/app/data
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 30s
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+      api:
+        condition: service_healthy
+    networks:
+      api_private:
+        ipv4_address: 172.30.0.2
     ports:
       - "127.0.0.1:3100:3000"
+      - "172.17.0.1:3100:3000"
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "node", "docker/healthcheck.mjs"]
@@ -47,18 +102,8 @@ services:
       retries: 4
 
   ai-worker:
-    <<: *app
-    profiles: ["ai"]
+    <<: *backend
     command: ["ai-worker"]
-    depends_on:
-      setup:
-        condition: service_completed_successfully
-    restart: unless-stopped
-
-  notification-worker:
-    <<: *app
-    profiles: ["email"]
-    command: ["notification-worker"]
     depends_on:
       setup:
         condition: service_completed_successfully
@@ -66,3 +111,10 @@ services:
 
 volumes:
   sqlite_data:
+
+networks:
+  api_private:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
