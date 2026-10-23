@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parsePage, csvForAudit } from "./query";
+import { parsePage, csvForAudit, csvForRecords } from "./query";
 
 test("page parsing rejects unbounded and malformed requests", () => {
   assert.deepEqual(parsePage(new URL("https://example.test/?limit=25&after=7"), 100), { limit: 25, after: 7 });
@@ -11,9 +11,15 @@ test("page parsing rejects unbounded and malformed requests", () => {
 });
 
 test("audit CSV escapes formulas, quotes, and line breaks", () => {
-  const csv = csvForAudit([{ id: 1, createdAt: new Date("2026-10-23T12:00:00Z"), actorUserId: 2, sessionId: 3, action: "=SUM(1)", targetType: "user", targetId: "4", reason: "a\"b\nnext", metadata: { status: "ok" } }]);
-  assert.match(csv, /^id,createdAt,actorUserId,sessionId,action,targetType,targetId,reason,metadata\r\n/);
+  const csv = csvForAudit([{ id: 1, createdAt: new Date("2026-10-23T12:00:00Z"), actorUserId: 2, sessionId: 3, action: "=SUM(1)", targetType: "user", targetId: "4", reason: "a\"b\nnext", metadata: { status: "ok" }, ipHash: "deadbeef" }]);
+  assert.match(csv, /^id,createdAt,actorUserId,sessionId,action,targetType,targetId,reason,metadata,ipHash\r\n/);
   assert.match(csv, /'\=SUM\(1\)/);
   assert.match(csv, /"a""b\nnext"/);
-  assert.doesNotMatch(csv, /ipHash|userAgentHash|tokenHash/);
+  assert.match(csv, /deadbeef/);
+  assert.doesNotMatch(csv, /userAgentHash|tokenHash/);
+});
+
+test("admin dataset CSV includes its declared columns and escapes formula-like cells", () => {
+  const csv = csvForRecords(["reference", "benefits", "ipHash"], [["=1+1", "a,\"b\"", null]]);
+  assert.equal(csv, 'reference,benefits,ipHash\r\n\'=1+1,"a,""b""",\r\n');
 });

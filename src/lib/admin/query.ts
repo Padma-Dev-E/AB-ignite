@@ -66,6 +66,10 @@ function csvCell(value: unknown) {
 }
 
 export function csvForAudit(rows: AuditCsvRow[]) {
-  const header = "id,createdAt,actorUserId,sessionId,action,targetType,targetId,reason,metadata\r\n";
-  return header + rows.map((row) => [row.id, row.createdAt.toISOString(), row.actorUserId, row.sessionId, row.action, row.targetType, row.targetId, row.reason, JSON.stringify(row.metadata)].map(csvCell).join(",") + "\r\n").join("");
+  const header = "id,createdAt,actorUserId,sessionId,action,targetType,targetId,reason,metadata,ipHash\r\n";
+  return header + rows.map((row) => [row.id, row.createdAt.toISOString(), row.actorUserId, row.sessionId, row.action, row.targetType, row.targetId, row.reason, JSON.stringify(row.metadata), row.ipHash].map(csvCell).join(",") + "\r\n").join("");
+}
+
+export function csvForRecords(headers: string[], rows: unknown[][]) {
+  return `${headers.map(csvCell).join(",")}\r\n${rows.map((row) => row.map(csvCell).join(",") + "\r\n").join("")}`;
 }

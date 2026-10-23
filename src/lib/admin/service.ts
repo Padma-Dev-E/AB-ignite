@@ -1,6 +1,6 @@
 import { and, desc, eq, lt, sql, type SQL } from "drizzle-orm";
 import { db } from "../../db/connection";
-import { auditEvents, refreshTokens, users, type UserProfile } from "../../db/schema";
+import { articles, articleCompletions, auditEvents, feedbackResponses, ideas, pointsLedger, quizAttempts, refreshTokens, users, type UserProfile } from "../../db/schema";
 import { hashPassword } from "../../auth/password-core";
 import { randomBytes } from "node:crypto";
 import { isSessionActive } from "../../auth/security-core";
@@ -166,7 +166,7 @@ export async function listAuditEvents(filters: AuditFilters) {
   if (filters.ipHash) conditions.push(eq(auditEvents.ipHash, filters.ipHash));
   const rows = db.select({ id: auditEvents.id, createdAt: auditEvents.createdAt,
     actorUserId: auditEvents.actorUserId, sessionId: auditEvents.sessionId, action: auditEvents.action,
-    targetType: auditEvents.targetType, targetId: auditEvents.targetId, reason: auditEvents.reason,
+    targetType: auditEvents.targetType, targetId: auditEvents.targetId, reason: auditEvents.reason, ipHash: auditEvents.ipHash,
     metadataJson: auditEvents.metadataJson,
   }).from(auditEvents).where(conditions.length ? and(...conditions) : undefined)
     .orderBy(desc(auditEvents.id)).limit(filters.limit + 1).all();
@@ -174,8 +174,27 @@ export async function listAuditEvents(filters: AuditFilters) {
 }
 
 export async function getAdminAnalytics() {
-  const bounded = (query: any) => query.all();
-  const usersByState = bounded(db.select({ state: sql<string>`CASE WHEN ${users.isActive} = 1 THEN 'active' ELSE 'inactive' END`, count: sql<number>`count(*)` }).from(users).groupBy(users.isActive));
-  const auditByAction = db.select({ action: auditEvents.action, count: sql<number>`count(*)` }).from(auditEvents).where(sql`${auditEvents.createdAt} >= ${new Date(Date.now() - 30 * 86400000)}`).groupBy(auditEvents.action).orderBy(desc(sql`count(*)`)).limit(20).all();
-  return { periodDays: 30, generatedAt: new Date().toISOString(), usersByState, auditByAction };
+  const usersByState = db.select({ state: sql<string>`CASE WHEN ${users.isActive} = 1 THEN 'active' ELSE 'inactive' END`, count: sql<number>`count(*)` }).from(users).groupBy(users.isActive).all();
+  const ideasByStatus = db.select({ status: ideas.status, count: sql<number>`count(*)` }).from(ideas).groupBy(ideas.status).orderBy(desc(sql`count(*)`)).limit(30).all();
+  const ideasByPriority = db.select({ band: ideas.priorityBand, count: sql<number>`count(*)` }).from(ideas).groupBy(ideas.priorityBand).limit(5).all();
+  const usersByDepartment = db.select({ department: users.department, count: sql<number>`count(*)` }).from(users).groupBy(users.department).orderBy(desc(sql`count(*)`)).limit(100).all();
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).getTime();
+  const auditByAction = db.select({ action: auditEvents.action, count: sql<number>`count(*)` }).from(auditEvents).where(sql`${auditEvents.createdAt} >= ${thirtyDaysAgo}`).groupBy(auditEvents.action).orderBy(desc(sql`count(*)`)).limit(20).all();
+  const points = db.select({ total: sql<number>`coalesce(sum(${pointsLedger.amount}), 0)`, events: sql<number>`count(*)` }).from(pointsLedger).get()!;
+  const learning = {
+    quizAttempts: db.select({ count: sql<number>`count(*)` }).from(quizAttempts).get()!.count,
+    publishedArticles: db.select({ count: sql<number>`count(*)` }).from(articles).where(eq(articles.published, true)).get()!.count,
+    articleCompletions: db.select({ count: sql<number>`count(*)` }).from(articleCompletions).get()!.count,
+  };
+  return { periodDays: 30, generatedAt: new Date().toISOString(), usersByState, ideasByStatus, ideasByPriority, usersByDepartment, points, learning, auditByAction };
+}
+
+export function listIdeaExportRows(page: Page) {
+  const rows = db.select({ id: ideas.id, reference: ideas.reference, status: ideas.status, priorityBand: ideas.priorityBand, priorityScore: ideas.priorityScore, authorId: ideas.authorId, authorName: users.name, department: users.department, title: ideas.title, summary: ideas.summary, benefits: ideas.benefits, createdAt: ideas.createdAt, updatedAt: ideas.updatedAt }).from(ideas).innerJoin(users, eq(users.id, ideas.authorId)).where(page.after ? lt(ideas.id, page.after) : undefined).orderBy(desc(ideas.id)).limit(page.limit + 1).all();
+  return pageResult(rows, page.limit);
+}
+
+export function listFeedbackExportRows(page: Page) {
+  const rows = db.select({ id: feedbackResponses.id, campaignId: feedbackResponses.campaignId, userId: feedbackResponses.userId, userName: users.name, department: users.department, category: feedbackResponses.category, message: feedbackResponses.message, response: feedbackResponses.response, createdAt: feedbackResponses.createdAt, respondedAt: feedbackResponses.respondedAt }).from(feedbackResponses).innerJoin(users, eq(users.id, feedbackResponses.userId)).where(page.after ? lt(feedbackResponses.id, page.after) : undefined).orderBy(desc(feedbackResponses.id)).limit(page.limit + 1).all();
+  return pageResult(rows, page.limit);
 }

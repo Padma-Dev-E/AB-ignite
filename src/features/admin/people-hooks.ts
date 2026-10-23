@@ -1,10 +1,10 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createPerson, listPeople, listPersonSessions, peopleQueryKeys, resetPersonPassword, resetPersonSignInSecurity, revokePersonSession, updatePersonActivation, updatePersonRole, type AdminProfile } from "./people-api";
 
 export function usePeopleUsers() {
-  return useQuery({ queryKey: peopleQueryKeys.users, queryFn: listPeople });
+  return useInfiniteQuery({ queryKey: peopleQueryKeys.users, queryFn: ({ pageParam }) => listPeople(pageParam), initialPageParam: null as number | null, getNextPageParam: (lastPage) => lastPage.nextAfter ?? undefined });
 }
 export function useCreatePerson() { return usePeopleMutation((input: { name: string; email: string; department: string; jobTitle?: string; profile: AdminProfile; reason: string }) => createPerson(input)); }
 

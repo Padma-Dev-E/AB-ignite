@@ -19,8 +19,10 @@ export const peopleQueryKeys = {
   sessions: (userId: number) => ["admin", "people", "users", userId, "sessions"] as const,
 };
 
-export function listPeople() {
-  return apiFetch<{ items: AdminUser[]; nextAfter: number | null }>("/api/admin/users?limit=100");
+export function listPeople(after: number | null = null) {
+  const params = new URLSearchParams({ limit: "100" });
+  if (after !== null) params.set("after", String(after));
+  return apiFetch<{ items: AdminUser[]; nextAfter: number | null }>(`/api/admin/users?${params}`);
 }
 
 export function listPersonSessions(userId: number) {

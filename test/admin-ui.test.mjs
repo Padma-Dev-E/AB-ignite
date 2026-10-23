@@ -38,3 +38,43 @@ test("admin workspace exposes safe states for unavailable operations", async () 
   assert.match(workspace, /isLoading/);
   assert.match(workspace, /isError/);
 });
+
+test("admin people, settings, audit, and analytics controls cover the acceptance surfaces", async () => {
+  const [people, settings, workspace, evidence, api] = await Promise.all([
+    source("src/features/admin/components/admin-people-management.tsx"),
+    source("src/features/admin/components/admin-settings-editor.tsx"),
+    source("src/features/admin/components/admin-workspace.tsx"),
+    source("src/features/admin/components/admin-operations-evidence.tsx"),
+    source("src/features/admin/api.ts"),
+  ]);
+  assert.match(people, /Reset password/);
+  assert.match(people, /Revoke/);
+  assert.match(people, /fetchNextPage/);
+  for (const field of ["priority_kpis", "priority_bands", "sla_days", "required_controls", "departments", "demo_access", "profiles"]) assert.ok(settings.includes(field), `missing setting control: ${field}`);
+  assert.match(settings, /Configured levels|Ignite levels/);
+  assert.match(workspace, /Export this filtered view/);
+  assert.match(workspace, /JSON\.stringify\(event\.metadata\)/);
+  for (const kind of ["ideas", "benefits", "feedback", "audit"]) assert.ok(api.includes(`"${kind}"`), `missing ${kind} export kind`);
+  for (const metric of ["ideasByStatus", "ideasByPriority", "usersByDepartment", "points", "articleCompletions"]) assert.ok(evidence.includes(metric), `missing analytics measure ${metric}`);
+});
+
+test("admin exports expose the requested datasets with bounded no-store CSV handling", async () => {
+  const [ideas, benefits, feedback, audit] = await Promise.all([
+    source("app/api/admin/ideas/export/route.ts"),
+    source("app/api/admin/benefits/export/route.ts"),
+    source("app/api/admin/feedback/export/route.ts"),
+    source("app/api/admin/audit/export/route.ts"),
+  ]);
+  for (const handler of [ideas, benefits, feedback, audit]) {
+    assert.match(handler, /CAPABILITIES\.AUDIT_EXPORT/);
+    assert.match(handler, /(?:parsePage\(new URL\(request\.url\), 1000\)|auditFilters\(url, 1000\))/);
+    assert.match(handler, /text\/csv/);
+    assert.match(handler, /cache-control.*no-store/);
+  }
+  for (const field of ["reference", "status", "priorityBand", "priorityScore", "benefits", "summary"]) assert.ok(ideas.includes(`"${field}"`));
+  for (const field of ["reference", "benefits", "priorityScore", "department"]) assert.ok(benefits.includes(`"${field}"`));
+  for (const field of ["campaignId", "category", "message", "response", "respondedAt"]) assert.ok(feedback.includes(`"${field}"`));
+  assert.match(audit, /auditFilters/);
+  assert.match(audit, /auditFilters/);
+  assert.match((await source("src/lib/admin/query.ts")), /metadata,ipHash/);
+});

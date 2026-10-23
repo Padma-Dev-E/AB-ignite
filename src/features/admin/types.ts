@@ -83,7 +83,7 @@ export type AdminAuditEvent = {
   ipHash?: string | null;
 };
 export type AdminIdea = { id: number; reference: string; title: string; summary: string; category: string; status: string; priorityBand: string | null; priorityScore: number | null; authorId: number; authorName: string; department: string; createdAt: string; updatedAt: string };
-export type AdminSettings = { priority: Record<string, string>; pointRules: Array<{ id: number; code: string; name: string; points: number; active: boolean }>; recommendationRules: Array<{ id: number; topic: string; thresholdPercent: number; reasonTemplate: string; active: boolean }> };
+export type AdminSettings = { priority: Record<string, string>; pointRules: Array<{ id: number; code: string; name: string; points: number; active: boolean }>; recommendationRules: Array<{ id: number; topic: string; thresholdPercent: number; reasonTemplate: string; active: boolean }>; levels: Array<{ id: number; name: string; description: string | null; minimumPoints: number; sortOrder: number }>; departments: string[] };
 
 export type AdminEvaluationDetail = {
   idea: AdminIdea & { problem: string | null; solution: string | null; benefits: string | null; risks: string | null; kind: string };

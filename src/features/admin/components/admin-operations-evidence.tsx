@@ -9,7 +9,9 @@ import { AdminFeedbackResponses } from "./admin-feedback-responses";
 type EvidenceRow = { area: string; metric: string; value: number; scope: string };
 
 function csvCell(value: string | number) {
-  return `"${String(value).replaceAll('"', '""')}"`;
+  const raw = String(value);
+  const safe = /^[\s\u0000-\u001f]*[=+@-]/.test(raw) ? `'${raw}` : raw;
+  return `"${safe.replaceAll('"', '""')}"`;
 }
 
 function downloadCsv(rows: EvidenceRow[]) {
@@ -50,10 +52,19 @@ export function AdminOperationsEvidence() {
     { area: "learning", metric: "open_challenges", value: challenges.data?.items.length ?? 0, scope: "currently active challenges visible to the signed-in admin" },
     { area: "rewards", metric: "redemptions_returned", value: redemptions.data?.items.length ?? 0, scope: "current secured admin redemption page" },
     { area: "engagement", metric: "feedback_responses", value: feedback.data?.items.length ?? 0, scope: "up to 100 secured admin feedback responses" },
-  ], [users.data, audit.data, screening.data, transformation.data, challenges.data, redemptions.data, feedback.data]);
+    ...(analytics.data ? [
+      ...analytics.data.ideasByStatus.map((item) => ({ area: "ideas", metric: `status_${item.status}`, value: item.count, scope: "all ideas" })),
+      ...analytics.data.ideasByPriority.map((item) => ({ area: "ideas", metric: `priority_${item.band ?? "unassigned"}`, value: item.count, scope: "all ideas" })),
+      ...analytics.data.usersByDepartment.map((item) => ({ area: "people", metric: `department_${item.department}`, value: item.count, scope: "all users" })),
+      { area: "points", metric: "ledger_total", value: analytics.data.points.total, scope: "all ledger entries" },
+      { area: "learning", metric: "quiz_attempts", value: analytics.data.learning.quizAttempts, scope: "all attempts" },
+      { area: "learning", metric: "published_articles", value: analytics.data.learning.publishedArticles, scope: "current published articles" },
+      { area: "learning", metric: "article_completions", value: analytics.data.learning.articleCompletions, scope: "all recorded completions" },
+    ] : []),
+  ], [users.data, audit.data, screening.data, transformation.data, challenges.data, redemptions.data, feedback.data, analytics.data]);
 
-  const ready = [users, audit, screening, transformation, challenges, redemptions, feedback].every((query) => query.isSuccess);
-  const refresh = () => void Promise.all([users.refetch(), audit.refetch(), screening.refetch(), transformation.refetch(), challenges.refetch(), redemptions.refetch(), feedback.refetch()]);
+  const ready = [users, audit, analytics, screening, transformation, challenges, redemptions, feedback].every((query) => query.isSuccess);
+  const refresh = () => void Promise.all([users.refetch(), audit.refetch(), analytics.refetch(), screening.refetch(), transformation.refetch(), challenges.refetch(), redemptions.refetch(), feedback.refetch()]);
 
   return <div className="stack">
     <SectionHeading title="Operations evidence" detail="Bounded, read-only operational summaries and controlled exports" />
@@ -63,7 +74,7 @@ export function AdminOperationsEvidence() {
       <StatTile value={challenges.data?.items.length ?? "—"} label="Open challenges" />
       <StatTile value={audit.data?.items.length ?? "—"} label="Audit events in view" />
     </div>
-    {analytics.data && <Card><h2 className="text-xl font-medium">30 day analytics</h2><p className="mt-1 text-xs text-muted">Generated {new Date(analytics.data.generatedAt).toLocaleString()}</p><div className="mt-3 flex flex-wrap gap-2">{analytics.data.usersByState.map((item) => <span className="pill" key={item.state}>{item.state}: {item.count}</span>)}{analytics.data.auditByAction.map((item) => <span className="pill" key={item.action}>{item.action}: {item.count}</span>)}</div></Card>}
+    {analytics.isPending ? <Card><p role="status" aria-busy="true">Loading analytics…</p></Card> : analytics.isError ? <Card><p role="alert">Analytics unavailable.</p><button className="btn mt-2" onClick={() => void analytics.refetch()}>Retry analytics</button></Card> : analytics.data && <Card><h2 className="text-xl font-medium">30 day analytics</h2><p className="mt-1 text-xs text-muted">Generated {new Date(analytics.data.generatedAt).toLocaleString()}</p><div className="mt-3 flex flex-wrap gap-2">{analytics.data.usersByState.map((item) => <span className="pill" key={item.state}>Users {item.state}: {item.count}</span>)}{analytics.data.ideasByStatus.map((item) => <span className="pill" key={item.status}>{item.status}: {item.count}</span>)}{analytics.data.ideasByPriority.map((item) => <span className="pill" key={item.band ?? "unassigned"}>{item.band ?? "Unassigned"}: {item.count}</span>)}{analytics.data.usersByDepartment.map((item) => <span className="pill" key={item.department}>{item.department}: {item.count}</span>)}<span className="pill">Points: {analytics.data.points.total} across {analytics.data.points.events} events</span><span className="pill">Quiz attempts: {analytics.data.learning.quizAttempts}</span><span className="pill">Published articles: {analytics.data.learning.publishedArticles}</span><span className="pill">Article completions: {analytics.data.learning.articleCompletions}</span>{analytics.data.auditByAction.map((item) => <span className="pill" key={item.action}>{item.action}: {item.count}</span>)}</div></Card>}
     <Card>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div><h2 className="text-xl font-medium">Evidence exports</h2><p className="mt-1 max-w-2xl text-sm text-muted">The summary CSV contains aggregate counts and scope labels only. The audit CSV uses the existing audited, bounded server export.</p></div>
@@ -71,6 +82,9 @@ export function AdminOperationsEvidence() {
           <button type="button" className="btn" onClick={refresh}>Refresh evidence</button>
           <button type="button" className="btn-primary" disabled={!ready} onClick={() => downloadCsv(rows)}>Download summary CSV</button>
           <a className="btn" href={adminExportUrl("audit")}>Download audit CSV</a>
+          <a className="btn" href={adminExportUrl("ideas")}>Download ideas CSV</a>
+          <a className="btn" href={adminExportUrl("benefits")}>Download benefits CSV</a>
+          <a className="btn" href={adminExportUrl("feedback")}>Download feedback CSV</a>
           <a className="btn" href={adminExportUrl("users")}>Download users CSV</a>
         </div>
       </div>

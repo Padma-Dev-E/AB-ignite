@@ -2,9 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { and, eq } from "drizzle-orm";
 import { db } from "../../db/connection";
-import { auditEvents, refreshTokens, users } from "../../db/schema";
+import { articles, auditEvents, ideas, pointsLedger, quizAttempts, refreshTokens, users } from "../../db/schema";
 import { adminAccess, CAPABILITIES } from "./http";
-import { changeUserRole, setUserActive, resetUserSecurity, resetUserPassword, revokeUserSession, createUser, listUsers, getUserDetail, listUserSessions, listAuditEvents } from "./service";
+import { changeUserRole, setUserActive, resetUserSecurity, resetUserPassword, revokeUserSession, createUser, listUsers, getUserDetail, listUserSessions, listAuditEvents, getAdminAnalytics } from "./service";
 import { verifyPassword } from "../../auth/password-core";
 
 test("admin operations persist, revoke sessions, audit reasons, and return no secrets", async () => {
@@ -42,6 +42,23 @@ test("admin operations persist, revoke sessions, audit reasons, and return no se
   } finally {
     db.update(users).set({ isActive: false, updatedAt: new Date() }).where(eq(users.id, actor.id)).run();
   }
+});
+
+test("management analytics returns status, priority, department, points, and learning counts", async () => {
+  const stamp = `${Date.now()}-${Math.random()}`;
+  const user = db.insert(users).values({ name: "Analytics", email: `analytics-${stamp}@example.test`, passwordHash: "test", department: "Treasury" }).returning({ id: users.id }).get();
+  const idea = db.insert(ideas).values({ authorId: user.id, title: "Analytics idea", summary: "A test", category: "Ops", reference: `AI-${stamp}`, status: "screening", priorityBand: "Priority", priorityScore: 2.7 }).returning({ id: ideas.id }).get();
+  db.insert(pointsLedger).values({ userId: user.id, amount: 11, eventType: "test", sourceType: "test", sourceId: "analytics", idempotencyKey: `analytics-${stamp}` }).run();
+  db.insert(quizAttempts).values({ userId: user.id, quizId: 1, score: 80, passed: true, status: "completed", idempotencyKey: `quiz-${stamp}` }).run();
+  db.insert(articles).values({ title: `Article ${stamp}`, summary: "S", body: "B", category: "Banking", categoryCode: "banking", publisher: "Test", difficulty: "Beginner", readingMinutes: 1, published: true, contentType: "internal" }).run();
+  const result = await getAdminAnalytics();
+  assert.ok(result.ideasByStatus.some((row) => row.status === "screening" && row.count >= 1));
+  assert.ok(result.ideasByPriority.some((row) => row.band === "Priority" && row.count >= 1));
+  assert.ok(result.usersByDepartment.some((row) => row.department === "Treasury" && row.count >= 1));
+  assert.ok(result.points.total >= 11);
+  assert.ok(result.learning.quizAttempts >= 1);
+  assert.ok(result.learning.publishedArticles >= 1);
+  assert.ok(idea.id > 0);
 });
 
 test("profile assignment, user creation, password reset and individual revocation are audited", async () => {

@@ -8,7 +8,9 @@ export async function GET(request: Request) {
   const id = requestId(request);
   try {
     await adminAccess(await auth(), CAPABILITIES.AUDIT_EXPORT);
-    const page = await listAuditEvents(auditFilters(new URL(request.url), 1000));
+    const url = new URL(request.url);
+    const filters = auditFilters(url, 1000);
+    const page = await listAuditEvents(filters);
     return new Response(csvForAudit(page.items), { status: 200, headers: {
       "content-type": "text/csv; charset=utf-8", "content-disposition": 'attachment; filename="admin-audit.csv"',
       "cache-control": "no-store", "x-request-id": id,
