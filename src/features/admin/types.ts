@@ -58,6 +58,7 @@ export type AdminUser = {
   name: string;
   email: string;
   role: "admin" | "user";
+  profile: "employee" | "reviewer" | "business_owner" | "control" | "management" | "admin";
   department: string;
   jobTitle: string | null;
   isActive: boolean;

@@ -31,8 +31,9 @@ function json(body: unknown): RequestInit {
   return { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(body) };
 }
 
-export function updatePersonRole(userId: number, role: "admin" | "user", reason: string) {
-  return apiFetch<AdminUser>(`/api/admin/users/${userId}/role`, json({ role, reason }));
+export type AdminProfile = AdminUser["profile"];
+export function updatePersonRole(userId: number, profile: AdminProfile, reason: string) {
+  return apiFetch<AdminUser>(`/api/admin/users/${userId}/role`, json({ role: profile, reason }));
 }
 
 export function updatePersonActivation(userId: number, active: boolean, reason: string) {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { listPeople, listPersonSessions, peopleQueryKeys, resetPersonSignInSecurity, updatePersonActivation, updatePersonRole } from "./people-api";
+import { listPeople, listPersonSessions, peopleQueryKeys, resetPersonSignInSecurity, updatePersonActivation, updatePersonRole, type AdminProfile } from "./people-api";
 
 export function usePeopleUsers() {
   return useQuery({ queryKey: peopleQueryKeys.users, queryFn: listPeople });
@@ -23,7 +23,7 @@ function usePeopleMutation<TVariables>(mutationFn: (variables: TVariables) => Pr
 }
 
 export function useUpdatePersonRole() {
-  return usePeopleMutation(({ userId, role, reason }: { userId: number; role: "admin" | "user"; reason: string }) => updatePersonRole(userId, role, reason));
+  return usePeopleMutation(({ userId, profile, reason }: { userId: number; profile: AdminProfile; reason: string }) => updatePersonRole(userId, profile, reason));
 }
 
 export function useUpdatePersonActivation() {
