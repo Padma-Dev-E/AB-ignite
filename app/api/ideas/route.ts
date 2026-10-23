@@ -16,7 +16,7 @@ export async function GET(request: Request) {
   try {
     const session = await auth();
     const userId = sessionUserId(session);
-    if (!session?.user || !userId) return apiError("unauthorized", "Authentication required.", 401, id);
+    if (!session?.user || session.isValid === false || !userId) return apiError("unauthorized", "Authentication required.", 401, id);
     const query = IdeaListQuerySchema.parse(Object.fromEntries(new URL(request.url).searchParams.entries()));
     return ok(await listIdeas({ kind: session.user.role, id: String(userId) }, query), 200, id);
   } catch (error) {
@@ -29,7 +29,7 @@ export async function POST(request: Request) {
   try {
     const session = await auth();
     const userId = sessionUserId(session);
-    if (!session?.user || !userId) return apiError("unauthorized", "Authentication required.", 401, id);
+    if (!session?.user || session.isValid === false || !userId) return apiError("unauthorized", "Authentication required.", 401, id);
     const input = IdeaInputSchema.parse(await request.json());
     const reference = `IDEA-${Date.now()}-${randomBytes(3).toString("hex").toUpperCase()}`;
     const contentHash = createHash("sha256").update(JSON.stringify(input)).digest("hex");

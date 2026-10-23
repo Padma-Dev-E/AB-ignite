@@ -9,7 +9,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const id = requestId(request);
   try {
     const session = await auth();
-    if (!session?.user?.id) return apiError("unauthorized", "Authentication required.", 401, id);
+    if (!session?.user?.id || session.isValid === false) return apiError("unauthorized", "Authentication required.", 401, id);
     const ideaId = Number((await params).id);
     const snapshot = await getAuthorizedIdeaSnapshot({ kind: session.user.role, id: session.user.id }, ideaId);
     if (!snapshot) return apiError("not_found", "Idea not found.", 404, id);

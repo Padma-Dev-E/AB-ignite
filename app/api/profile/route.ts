@@ -15,7 +15,7 @@ export async function GET(request: Request) {
   const id = requestId(request);
   try {
     const session = await auth(); const userId = userIdOf(session);
-    if (!userId) return apiError("unauthorized", "Authentication required.", 401, id);
+    if (!userId || session?.isValid === false) return apiError("unauthorized", "Authentication required.", 401, id);
     const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1).all();
     if (!user) return apiError("unauthorized", "Authentication required.", 401, id);
     return ok(safeUser(user), 200, id);
@@ -26,7 +26,7 @@ export async function PATCH(request: Request) {
   const id = requestId(request);
   try {
     const session = await auth(); const userId = userIdOf(session);
-    if (!userId) return apiError("unauthorized", "Authentication required.", 401, id);
+    if (!userId || session?.isValid === false) return apiError("unauthorized", "Authentication required.", 401, id);
     const input = updateSchema.parse(await request.json());
     if (!Object.keys(input).length) return apiError("validation_error", "At least one profile field is required.", 400, id);
     const [user] = await db.update(users).set({ ...input, updatedAt: new Date() }).where(eq(users.id, userId)).returning().all();

@@ -6,7 +6,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const id = requestId(request);
   try {
     const session = await auth();
-    if (!session?.user?.id) return apiError("unauthorized", "Authentication required.", 401, id);
+    if (!session?.user?.id || session.isValid === false) return apiError("unauthorized", "Authentication required.", 401, id);
     const ideaId = Number((await params).id);
     if (!Number.isInteger(ideaId) || ideaId < 1) return apiError("validation_error", "Invalid idea ID.", 400, id);
     const snapshot = await getAuthorizedIdeaSnapshot({ kind: session.user.role, id: session.user.id }, ideaId);

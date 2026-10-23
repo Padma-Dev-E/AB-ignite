@@ -12,7 +12,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const id = requestId(request);
   try {
     const session = await auth();
-    if (!session?.user?.id) return apiError("unauthorized", "Authentication required.", 401, id);
+    if (!session?.user?.id || session.isValid === false) return apiError("unauthorized", "Authentication required.", 401, id);
     const ideaId = parseId((await params).id);
     if (!ideaId) return apiError("validation_error", "Invalid idea ID.", 400, id);
     const idea = await getIdeaById(ideaId);
@@ -30,7 +30,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   try {
     const session = await auth();
     const userId = Number(session?.user?.id);
-    if (!session?.user?.id || !Number.isInteger(userId) || userId < 1) return apiError("unauthorized", "Authentication required.", 401, id);
+    if (!session?.user?.id || session.isValid === false || !Number.isInteger(userId) || userId < 1) return apiError("unauthorized", "Authentication required.", 401, id);
     const ideaId = parseId((await params).id);
     if (!ideaId) return apiError("validation_error", "Invalid idea ID.", 400, id);
     const current = await getIdeaById(ideaId);

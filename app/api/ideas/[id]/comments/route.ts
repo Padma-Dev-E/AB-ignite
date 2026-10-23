@@ -9,7 +9,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const id = requestId(request);
   try {
     const session = await auth();
-    if (!session?.user?.id) return apiError("unauthorized", "Authentication required.", 401, id);
+    if (!session?.user?.id || session.isValid === false) return apiError("unauthorized", "Authentication required.", 401, id);
     const ideaId = parseId((await params).id);
     if (!ideaId) return apiError("validation_error", "Invalid idea ID.", 400, id);
     if (!await getIdeaById(ideaId)) return apiError("not_found", "Idea not found.", 404, id);
@@ -23,7 +23,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   try {
     const session = await auth();
     const userId = Number(session?.user?.id);
-    if (!session?.user?.id || !Number.isInteger(userId) || userId < 1) return apiError("unauthorized", "Authentication required.", 401, id);
+    if (!session?.user?.id || session.isValid === false || !Number.isInteger(userId) || userId < 1) return apiError("unauthorized", "Authentication required.", 401, id);
     const ideaId = parseId((await params).id);
     if (!ideaId) return apiError("validation_error", "Invalid idea ID.", 400, id);
     if (!await getIdeaById(ideaId)) return apiError("not_found", "Idea not found.", 404, id);

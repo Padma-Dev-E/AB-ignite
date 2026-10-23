@@ -7,7 +7,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   try {
     const session = await auth();
     const userId = Number(session?.user?.id);
-    if (!session?.user?.id || !Number.isInteger(userId) || userId < 1) return apiError("unauthorized", "Authentication required.", 401, id);
+    if (!session?.user?.id || session.isValid === false || !Number.isInteger(userId) || userId < 1) return apiError("unauthorized", "Authentication required.", 401, id);
     const ideaId = Number((await params).id);
     if (!Number.isInteger(ideaId) || ideaId < 1) return apiError("validation_error", "Invalid idea ID.", 400, id);
     if (!await getIdeaById(ideaId)) return apiError("not_found", "Idea not found.", 404, id);

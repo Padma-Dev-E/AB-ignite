@@ -24,7 +24,7 @@ export async function GET(request: Request) {
   const id = requestId(request);
   try {
     const session = await auth(); const userId = userIdOf(session);
-    if (!userId) return apiError("unauthorized", "Authentication required.", 401, id);
+    if (!userId || session?.isValid === false) return apiError("unauthorized", "Authentication required.", 401, id);
     const query = querySchema.parse(Object.fromEntries(new URL(request.url).searchParams.entries()));
     const where = query.unreadOnly ? and(eq(notifications.userId, userId), eq(notifications.isRead, false)) : eq(notifications.userId, userId);
     const offset = (query.page - 1) * query.pageSize;
@@ -42,7 +42,7 @@ export async function PATCH(request: Request) {
   const id = requestId(request);
   try {
     const session = await auth(); const userId = userIdOf(session);
-    if (!userId) return apiError("unauthorized", "Authentication required.", 401, id);
+    if (!userId || session?.isValid === false) return apiError("unauthorized", "Authentication required.", 401, id);
     const input = updateSchema.parse(await request.json());
     if (!input.id && !input.all) return apiError("validation_error", "A notification ID or all=true is required.", 400, id);
     if (input.all) await db.update(notifications).set({ isRead: input.read, updatedAt: new Date() }).where(eq(notifications.userId, userId)).run();
