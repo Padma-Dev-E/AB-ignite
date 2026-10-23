@@ -2,9 +2,9 @@
 
 import { useMemo, useState, type FormEvent } from "react";
 import type { AdminUser } from "../types";
-import { usePeopleUsers, usePersonSessions, useResetPersonSignInSecurity, useUpdatePersonActivation, useUpdatePersonRole } from "../people-hooks";
+import { useCreatePerson, usePeopleUsers, usePersonSessions, useResetPersonPassword, useResetPersonSignInSecurity, useRevokePersonSession, useUpdatePersonActivation, useUpdatePersonRole } from "../people-hooks";
 
-type Operation = { user: AdminUser; kind: "role" | "activation" | "security"; value?: AdminUser["profile"] | boolean };
+type Operation = { user: AdminUser; kind: "role" | "activation" | "security" | "password"; value?: AdminUser["profile"] | boolean };
 
 function formatDate(value: string | null | undefined) {
   if (!value) return "Never";
@@ -18,11 +18,12 @@ function errorText(error: unknown) {
 
 function PersonSessions({ userId }: { userId: number }) {
   const sessions = usePersonSessions(userId);
+  const revoke = useRevokePersonSession();
   if (sessions.isPending) return <p className="p-4 text-sm text-muted" role="status">Loading sessions…</p>;
   if (sessions.isError) return <div className="p-4" role="alert"><p className="text-sm text-[#d6336c]">Sessions could not be loaded: {errorText(sessions.error)}</p><button className="btn btn-small mt-2" onClick={() => void sessions.refetch()}>Retry</button></div>;
   const items = sessions.data?.items ?? [];
   if (!items.length) return <p className="p-4 text-sm text-muted">No sessions recorded.</p>;
-  return <div className="divide-y" style={{ borderColor: "var(--line)" }}>{items.map((session) => <article key={session.id} className="flex flex-wrap items-center gap-x-5 gap-y-2 px-4 py-3 text-sm"><span className={`pill ${session.isActive ? "text-teal" : "text-muted"}`}>{session.isActive ? "Active" : session.revokedAt ? "Revoked" : "Expired"}</span><span>Started {formatDate(session.createdAt)}</span><span className="text-muted">Last seen {formatDate(session.lastSeenAt)}</span><span className="text-muted">Expires {formatDate(session.expiresAt)}</span>{session.revocationReason && <span className="text-xs text-muted">{session.revocationReason}</span>}</article>)}</div>;
+  return <div className="divide-y" style={{ borderColor: "var(--line)" }}>{items.map((session) => <article key={session.id} className="flex flex-wrap items-center gap-x-5 gap-y-2 px-4 py-3 text-sm"><span className={`pill ${session.isActive ? "text-teal" : "text-muted"}`}>{session.isActive ? "Active" : session.revokedAt ? "Revoked" : "Expired"}</span><span>Started {formatDate(session.createdAt)}</span><span className="text-muted">Last seen {formatDate(session.lastSeenAt)}</span><span className="text-muted">Expires {formatDate(session.expiresAt)}</span>{session.revocationReason && <span className="text-xs text-muted">{session.revocationReason}</span>}{session.isActive && <button type="button" className="btn btn-small" disabled={revoke.isPending} onClick={() => { const reason = window.prompt("Reason for revoking this session:"); if (reason?.trim()) void revoke.mutateAsync({ userId, sessionId: session.id, reason: reason.trim() }).then(() => void sessions.refetch()).catch(() => undefined); }}>Revoke</button>}</article>)}</div>;
 }
 
 export type AdminPeopleManagementProps = { className?: string; currentUserId?: number };
@@ -33,12 +34,15 @@ export function AdminPeopleManagement({ className = "", currentUserId }: AdminPe
   const roleMutation = useUpdatePersonRole();
   const activationMutation = useUpdatePersonActivation();
   const securityMutation = useResetPersonSignInSecurity();
+  const passwordMutation = useResetPersonPassword();
+  const createMutation = useCreatePerson();
   const [search, setSearch] = useState("");
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [pending, setPending] = useState<Operation | null>(null);
   const [reason, setReason] = useState("");
   const [success, setSuccess] = useState("");
-  const mutation = pending?.kind === "role" ? roleMutation : pending?.kind === "activation" ? activationMutation : securityMutation;
+  const [newUser, setNewUser] = useState({ name: "", email: "", department: "", jobTitle: "", profile: "employee" as AdminUser["profile"], reason: "" });
+  const mutation = pending?.kind === "role" ? roleMutation : pending?.kind === "activation" ? activationMutation : pending?.kind === "password" ? passwordMutation : securityMutation;
   const filtered = useMemo(() => (people.data?.items ?? []).filter((user) => `${user.name} ${user.email} ${user.department} ${user.jobTitle ?? ""}`.toLowerCase().includes(search.trim().toLowerCase())), [people.data, search]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -48,16 +52,18 @@ export function AdminPeopleManagement({ className = "", currentUserId }: AdminPe
     try {
       if (pending.kind === "role") await roleMutation.mutateAsync({ userId: pending.user.id, profile: pending.value as AdminUser["profile"], reason: reason.trim() });
       else if (pending.kind === "activation") await activationMutation.mutateAsync({ userId: pending.user.id, active: pending.value as boolean, reason: reason.trim() });
+      else if (pending.kind === "password") { const result = await passwordMutation.mutateAsync({ userId: pending.user.id, reason: reason.trim() }); setSuccess(`${pending.user.name}: temporary password generated (${result.temporaryPassword}). Deliver it through an approved bank channel.`); }
       else await securityMutation.mutateAsync({ userId: pending.user.id, reason: reason.trim() });
-      setSuccess(`${pending.user.name}: ${pending.kind === "security" ? "sign-in security reset" : pending.kind === "role" ? `role changed to ${pending.value}` : pending.value ? "account activated" : "account deactivated"}.`);
+      if (pending.kind !== "password") setSuccess(`${pending.user.name}: ${pending.kind === "security" ? "sign-in security reset" : pending.kind === "role" ? `profile changed to ${pending.value}` : pending.value ? "account activated" : "account deactivated"}.`);
       setPending(null);
       setReason("");
     } catch { /* Mutation error is rendered in the confirmation form. */ }
   }
 
-  const title = pending?.kind === "role" ? `Change ${pending.user.name}'s role` : pending?.kind === "activation" ? `${pending.value ? "Activate" : "Deactivate"} ${pending.user.name}` : `Reset sign-in security for ${pending?.user.name ?? "user"}`;
+  const title = pending?.kind === "role" ? `Change ${pending.user.name}'s profile` : pending?.kind === "activation" ? `${pending.value ? "Activate" : "Deactivate"} ${pending.user.name}` : pending?.kind === "password" ? `Reset password for ${pending.user.name}` : `Reset sign-in security for ${pending?.user.name ?? "user"}`;
 
   return <section className={`app-card ${className}`}>
+    <details className="mb-5 rounded-xl border p-4" style={{ borderColor: "var(--line)" }}><summary className="cursor-pointer font-medium">Create user</summary><form className="mt-4 grid gap-3 sm:grid-cols-2" onSubmit={(event) => { event.preventDefault(); void createMutation.mutateAsync(newUser).then((result) => { setSuccess(`Created ${result.user.email}. Temporary password: ${result.temporaryPassword}`); setNewUser({ name: "", email: "", department: "", jobTitle: "", profile: "employee", reason: "" }); }).catch(() => undefined); }}><input className="input" required placeholder="Name" value={newUser.name} onChange={(event) => setNewUser({ ...newUser, name: event.target.value })} /><input className="input" required type="email" placeholder="Email" value={newUser.email} onChange={(event) => setNewUser({ ...newUser, email: event.target.value })} /><input className="input" required placeholder="Department" value={newUser.department} onChange={(event) => setNewUser({ ...newUser, department: event.target.value })} /><select className="input" value={newUser.profile} onChange={(event) => setNewUser({ ...newUser, profile: event.target.value as AdminUser["profile"] })}><option value="employee">Employee</option><option value="reviewer">Reviewer</option><option value="business_owner">Business owner</option><option value="control">Control</option><option value="management">Management</option><option value="admin">Admin</option></select><textarea className="input sm:col-span-2" required maxLength={500} placeholder="Audited reason" value={newUser.reason} onChange={(event) => setNewUser({ ...newUser, reason: event.target.value })} /><button className="btn-primary sm:col-span-2" disabled={createMutation.isPending}>{createMutation.isPending ? "Creating…" : "Create user"}</button>{createMutation.isError && <p className="text-sm text-[#d6336c]" role="alert">{errorText(createMutation.error)}</p>}</form></details>
     <div className="mb-5 flex flex-wrap items-end justify-between gap-3"><div><h2 className="text-xl font-medium">People & access</h2><p className="mt-1 text-sm text-muted">Manage account roles, access state, sign-in recovery and review session activity.</p></div><label className="w-full sm:max-w-xs"><span className="field-label">Search people</span><input className="input mt-1" type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Name, email or department" /></label></div>
     {success && <p className="mb-4 rounded-xl border border-teal/40 bg-teal/5 p-3 text-sm" role="status">{success}</p>}
     {people.isPending ? <div className="py-10 text-center text-sm text-muted" role="status" aria-busy="true">Loading people…</div> : people.isError ? <div className="rounded-xl border border-pink/40 p-4" role="alert"><p className="text-sm">People could not be loaded: {errorText(people.error)}</p><button type="button" className="btn btn-small mt-3" onClick={() => void people.refetch()}>Retry</button></div> : filtered.length === 0 ? <p className="rounded-xl border p-4 text-sm text-muted" style={{ borderColor: "var(--line)" }}>{search ? "No people match this search." : "No users found."}</p> : <div className="space-y-3">{filtered.map((user) => {

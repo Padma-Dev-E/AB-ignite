@@ -32,6 +32,9 @@ function json(body: unknown): RequestInit {
 }
 
 export type AdminProfile = AdminUser["profile"];
+export function createPerson(input: { name: string; email: string; department: string; jobTitle?: string; profile: AdminProfile; reason: string }) {
+  return apiFetch<{ user: AdminUser; temporaryPassword: string }>("/api/admin/users", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(input) });
+}
 export function updatePersonRole(userId: number, profile: AdminProfile, reason: string) {
   return apiFetch<AdminUser>(`/api/admin/users/${userId}/role`, json({ role: profile, reason }));
 }
@@ -42,4 +45,10 @@ export function updatePersonActivation(userId: number, active: boolean, reason: 
 
 export function resetPersonSignInSecurity(userId: number, reason: string) {
   return apiFetch<AdminUser>(`/api/admin/users/${userId}/reset`, { ...json({ reason }), method: "POST" });
+}
+export function resetPersonPassword(userId: number, reason: string) {
+  return apiFetch<{ temporaryPassword: string }>(`/api/admin/users/${userId}/password`, { ...json({ reason }), method: "POST" });
+}
+export function revokePersonSession(userId: number, sessionId: number, reason: string) {
+  return apiFetch<{ id: number; revokedAt: string }>(`/api/admin/users/${userId}/sessions/${sessionId}`, { ...json({ reason }), method: "DELETE" });
 }

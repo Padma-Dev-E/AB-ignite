@@ -1,17 +1,18 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { listPeople, listPersonSessions, peopleQueryKeys, resetPersonSignInSecurity, updatePersonActivation, updatePersonRole, type AdminProfile } from "./people-api";
+import { createPerson, listPeople, listPersonSessions, peopleQueryKeys, resetPersonPassword, resetPersonSignInSecurity, revokePersonSession, updatePersonActivation, updatePersonRole, type AdminProfile } from "./people-api";
 
 export function usePeopleUsers() {
   return useQuery({ queryKey: peopleQueryKeys.users, queryFn: listPeople });
 }
+export function useCreatePerson() { return usePeopleMutation((input: { name: string; email: string; department: string; jobTitle?: string; profile: AdminProfile; reason: string }) => createPerson(input)); }
 
 export function usePersonSessions(userId: number | null) {
   return useQuery({ queryKey: userId === null ? [...peopleQueryKeys.users, "no-user"] : peopleQueryKeys.sessions(userId), queryFn: () => listPersonSessions(userId!), enabled: userId !== null });
 }
 
-function usePeopleMutation<TVariables>(mutationFn: (variables: TVariables) => Promise<unknown>) {
+function usePeopleMutation<TVariables, TResult>(mutationFn: (variables: TVariables) => Promise<TResult>) {
   const client = useQueryClient();
   return useMutation({ mutationFn, onSuccess: async () => {
     await Promise.all([
@@ -32,4 +33,10 @@ export function useUpdatePersonActivation() {
 
 export function useResetPersonSignInSecurity() {
   return usePeopleMutation(({ userId, reason }: { userId: number; reason: string }) => resetPersonSignInSecurity(userId, reason));
+}
+export function useResetPersonPassword() {
+  return usePeopleMutation(({ userId, reason }: { userId: number; reason: string }) => resetPersonPassword(userId, reason));
+}
+export function useRevokePersonSession() {
+  return usePeopleMutation(({ userId, sessionId, reason }: { userId: number; sessionId: number; reason: string }) => revokePersonSession(userId, sessionId, reason));
 }
