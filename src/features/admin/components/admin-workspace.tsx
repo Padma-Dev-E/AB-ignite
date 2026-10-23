@@ -5,6 +5,9 @@ import { Dialog, DialogPanel, DialogTitle, Tab, TabGroup, TabList, TabPanel, Tab
 import { useState, type FormEvent, type ReactNode } from "react";
 import { Card, IconBox, SectionHeading, StatTile } from "../../../components/ui";
 import { useAdminAudit, useAdminChallenges, useAdminGovernanceDecision, useAdminQuizCatalogue, useAdminRedemptionAction, useAdminRedemptions, useAdminRewards, useAdminScreening, useAdminTransformation, useAdminUsers } from "../hooks";
+import { AdminFeedbackResponses } from "./admin-feedback-responses";
+import { AdminPeopleManagement } from "./admin-people-management";
+import { AdminRewardCatalogueManager } from "./admin-reward-catalogue-manager";
 import { AdminSettingsEditor } from "./admin-settings-editor";
 import { AdminEvaluation } from "./admin-evaluation";
 import type { GovernanceAction, RedemptionAction } from "../api";
@@ -18,6 +21,7 @@ const workspaceTabs = [
   { id: "people", label: "People & access", description: "Users and sessions" },
   { id: "learning", label: "Learning", description: "Quizzes and challenges" },
   { id: "rewards", label: "Rewards", description: "Catalogue and redemptions" },
+  { id: "engagement", label: "Engagement", description: "Campaign feedback" },
   { id: "audit", label: "Audit & export", description: "Evidence and exports" },
   { id: "settings", label: "Settings", description: "Platform controls" },
 ] as const;
@@ -137,7 +141,7 @@ function PeoplePanel() {
     sessions: ["Sessions", "Inspect active and recent sessions with revocation evidence and last-seen context."],
   } as const;
   const [title, description] = copy[active as keyof typeof copy];
-  return <div className="stack"><SectionHeading title="People & access" detail="Protected by admin role" /><SectionTabs items={peopleItems} active={active} onChange={setActive} />{active === "users" ? <UserTable query={usersQuery} /> : <UnconfiguredSection title={title} description={description} owner={`${title} administration`} />}</div>;
+  return <div className="stack"><SectionHeading title="People & access" detail="Protected by admin role" /><SectionTabs items={peopleItems} active={active} onChange={setActive} />{active === "users" ? <AdminPeopleManagement /> : <UnconfiguredSection title={title} description={description} owner={`${title} administration`} />}</div>;
 }
 
 function UserTable({ query }: { query: ReturnType<typeof useAdminUsers> }) {
@@ -191,7 +195,11 @@ function RewardsPanel() {
   const [active, setActive] = useState("reward-catalogue");
   const rewardQuery = useAdminRewards(true);
   const redemptionQuery = useAdminRedemptions(true);
-  return <div className="stack"><SectionHeading title="Rewards operations" detail="Live catalogue and redemption controls" /><SectionTabs items={rewardItems} active={active} onChange={setActive} />{active === "reward-catalogue" ? <Card><div className="mb-5 flex flex-wrap items-end justify-between gap-3"><div><h2 className="text-xl font-medium">Reward catalogue</h2><p className="mt-1 text-sm text-muted">Active state and versioned reward records are visible without edit controls.</p></div><span className="pill text-teal border-teal/40"><span className="pill-dot" />Connected</span></div><RewardCatalogue items={rewardQuery.data} {...rewardQuery} /></Card> : <Card><div className="mb-5 flex flex-wrap items-end justify-between gap-3"><div><h2 className="text-xl font-medium">Redemption queue</h2><p className="mt-1 text-sm text-muted">Fulfil or cancel pending requests with an audited reason.</p></div><span className="pill text-teal border-teal/40"><span className="pill-dot" />Connected</span></div><RedemptionList items={redemptionQuery.data?.items} {...redemptionQuery} /></Card>}</div>;
+  return <div className="stack"><SectionHeading title="Rewards operations" detail="Live catalogue and redemption controls" /><SectionTabs items={rewardItems} active={active} onChange={setActive} />{active === "reward-catalogue" ? <AdminRewardCatalogueManager /> : <Card><div className="mb-5 flex flex-wrap items-end justify-between gap-3"><div><h2 className="text-xl font-medium">Redemption queue</h2><p className="mt-1 text-sm text-muted">Fulfil or cancel pending requests with an audited reason.</p></div><span className="pill text-teal border-teal/40"><span className="pill-dot" />Connected</span></div><RedemptionList items={redemptionQuery.data?.items} {...redemptionQuery} /></Card>}</div>;
+}
+
+function EngagementPanel() {
+  return <div className="stack"><SectionHeading title="Employee engagement" detail="Campaign feedback with accountable responses" /><AdminFeedbackResponses /></div>;
 }
 
 function AuditPanel() {
@@ -215,5 +223,5 @@ function SettingsPanel() {
 
 export function AdminWorkspace({ email }: AdminWorkspaceProps) {
   const [activeTab, setActiveTab] = useState(0);
-  return <main className="app-background min-h-screen px-4 py-6 sm:px-8 sm:py-10"><div className="mx-auto max-w-[1180px] space-y-6"><OverviewHeader email={email} /><SummaryStrip /><TabGroup selectedIndex={activeTab} onChange={setActiveTab}><TabList className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-1" aria-label="Admin workspace areas">{workspaceTabs.map((tab) => <Tab key={tab.id} className={({ selected }) => `min-w-fit rounded-[12px] border px-3.5 py-2.5 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-sand ${selected ? "border-blue bg-blue text-white" : "border-[var(--line)] bg-[var(--card)] text-muted hover:bg-[var(--hover)]"}`}><span className="block text-sm font-medium">{tab.label}</span><span className={`mt-0.5 block text-xs ${activeTab === workspaceTabs.findIndex((item) => item.id === tab.id) ? "text-white/75" : "text-muted"}`}>{tab.description}</span></Tab>)}</TabList><TabPanels className="pt-1"><TabPanel><GovernancePanel /></TabPanel><TabPanel><PeoplePanel /></TabPanel><TabPanel><LearningPanel /></TabPanel><TabPanel><RewardsPanel /></TabPanel><TabPanel><AuditPanel /></TabPanel><TabPanel><SettingsPanel /></TabPanel></TabPanels></TabGroup><footer className="flex flex-col gap-1 border-t pt-4 text-xs text-muted sm:flex-row sm:items-center sm:justify-between" style={{ borderColor: "var(--line)" }}><span>Protected workspace · no unconfigured writes are exposed</span><span>Admin role required</span></footer></div></main>;
+  return <main className="app-background min-h-screen px-4 py-6 sm:px-8 sm:py-10"><div className="mx-auto max-w-[1180px] space-y-6"><OverviewHeader email={email} /><SummaryStrip /><TabGroup selectedIndex={activeTab} onChange={setActiveTab}><TabList className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-1" aria-label="Admin workspace areas">{workspaceTabs.map((tab) => <Tab key={tab.id} className={({ selected }) => `min-w-fit rounded-[12px] border px-3.5 py-2.5 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-sand ${selected ? "border-blue bg-blue text-white" : "border-[var(--line)] bg-[var(--card)] text-muted hover:bg-[var(--hover)]"}`}><span className="block text-sm font-medium">{tab.label}</span><span className={`mt-0.5 block text-xs ${activeTab === workspaceTabs.findIndex((item) => item.id === tab.id) ? "text-white/75" : "text-muted"}`}>{tab.description}</span></Tab>)}</TabList><TabPanels className="pt-1"><TabPanel><GovernancePanel /></TabPanel><TabPanel><PeoplePanel /></TabPanel><TabPanel><LearningPanel /></TabPanel><TabPanel><RewardsPanel /></TabPanel><TabPanel><EngagementPanel /></TabPanel><TabPanel><AuditPanel /></TabPanel><TabPanel><SettingsPanel /></TabPanel></TabPanels></TabGroup><footer className="flex flex-col gap-1 border-t pt-4 text-xs text-muted sm:flex-row sm:items-center sm:justify-between" style={{ borderColor: "var(--line)" }}><span>Protected workspace · no unconfigured writes are exposed</span><span>Admin role required</span></footer></div></main>;
 }
