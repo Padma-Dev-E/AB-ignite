@@ -43,6 +43,7 @@ export type IdeaCreateInput = {
 };
 export type IdeaCreateResponse = { idea: Idea; versionId: number };
 export type IdeaSubmitResponse = { ideaId: number; versionId: number; runId?: number | null; status: string; submitted?: boolean; reference?: string; minimumScore?: number; confirmation?: string };
+export type IdeaAiStatusResponse = { idea: Pick<Idea, "id" | "status" | "reference">; runs: Array<{ id: number; jobKey: string; status: string; attemptCount: number; createdAt: string; updatedAt: string; completedAt: string | null }>; events: Array<{ id: number; eventType: string; createdAt: string }>; reviews: unknown[] };
 export type IdeaSubmissionAnswers = { beneficiaries: string; currentProcess: string; needed: string; risks: string; successMeasure: string };
 export type IdeaSubmissionMetrics = { turnaround: number; volume: number; value: number; turnaroundExplanation?: string; volumeExplanation?: string; valueExplanation?: string };
 export type IdeaSubmissionInput = { answers: IdeaSubmissionAnswers; metrics: IdeaSubmissionMetrics; buildsOnId?: number; differentiation?: string };
