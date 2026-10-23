@@ -2,14 +2,14 @@
 
 Status audit for [`ab_ignite_user_stories.md`](./ab_ignite_user_stories.md).
 
-Audited against the local branch through employee profile/settings, engagement, quiz, idea, reward, and admin-control commits `bce7802`, `34de060`, `71e5f33`, `1e3b28e`, `70ff50a`, `790b536`, `03cfec8`, and `2020d41` on 2026-10-23. A story is marked **Complete** only when its acceptance criteria are implemented end-to-end. **Partial** means code or UI exists, but one or more acceptance criteria are still missing. **Not started** means there is no functional implementation for the acceptance criteria; a static mock does not count as complete.
+Audited against the local branch through admin evaluation, feedback, people, reward, learning, profile/settings, engagement, quiz, idea, and reward-control commits `5de7bad`, `ffb9cb9`, `54b3e98`, `96202c5`, `3d6fc8c`, `f783bf1`, `e3e7fd3`, `bce7802`, `34de060`, `71e5f33`, `1e3b28e`, `70ff50a`, `790b536`, `03cfec8`, and `2020d41` on 2026-10-23. A story is marked **Complete** only when its acceptance criteria are implemented end-to-end. **Partial** means code or UI exists, but one or more acceptance criteria are still missing. **Not started** means there is no functional implementation for the acceptance criteria; a static mock does not count as complete.
 
 ## Summary
 
 | Status | Count |
 | :--- | ---: |
-| Complete | 0 |
-| Partial | 46 |
+| Complete | 8 |
+| Partial | 38 |
 | Not started | 0 |
 | Total | 46 |
 
@@ -37,10 +37,10 @@ Audited against the local branch through employee profile/settings, engagement, 
 | QZ-02 | No | Partial | Timed attempts now show one question at a time, use server expiry, refresh the attempt, and submit answers to the server. | Resume/reconnect edge cases and broader end-to-end browser coverage remain. |
 | QZ-03 | No | Partial | Live result screen shows score, pass/fail, pass mark, expiry, and previous-attempt-compatible server result. | Comparison details and a complete visual result breakdown remain. |
 | QZ-04 | No | Partial | First-attempt idempotent ledger awards are displayed in the live quiz result; retakes show no award. | Points are not yet reflected in every employee balance surface immediately. |
-| QZ-05 | No | Partial | Journey service returns topic scores, category aggregates, attempt trends, open recommendations, and next step. | Frontend journey visualization remains. |
-| QZ-06 | No | Partial | Configurable threshold rules create/update open recommendations with reasons and in-app notifications for low topic scores. | Article linking/reading completion and frontend recommendation UI remain. |
-| QZ-07 | No | Partial | Ranking API supports active whole-bank and department views ordered by Ignite Points. | Frontend ranking view remains. |
-| QZ-08 | No | Partial | Challenge API lists open challenge questions, deadlines, participant counts, join state, and gives one idempotent `challenge_join` award. | Admin challenge management and frontend challenge UI remain. |
+| QZ-05 | Yes | Complete | Journey service and live `JourneyCard` expose topic scores, category performance, attempt trends, open recommendations, and the next recommended step with loading/error/empty states; focused component/API tests pass. | — |
+| QZ-06 | Yes | Complete | Configurable threshold rules create open recommendations and notifications; the live Library Recommended view renders the rule reason and the article completion mutation closes the recommendation idempotently. | — |
+| QZ-07 | Yes | Complete | Ranking API and live Learning Ranking view support whole-bank and department scopes, ordered by Ignite Points with loading/error/empty states. | — |
+| QZ-08 | Yes | Complete | Challenge API and live Challenges view show question/deadline/participants, allow joining, and invalidate state after the idempotent 20-point award. | — |
 
 ## 3. Articles journey
 
@@ -50,7 +50,7 @@ Audited against the local branch through employee profile/settings, engagement, 
 | AR-02 | No | Partial | Live Recommended view reads open recommendations with reasons and a clear empty state. | Recommendation insight action and full lifecycle presentation remain. |
 | AR-03 | No | Partial | Live article detail renders internal body content and keeps external HTTPS links in a new tab. | Article source/read UX needs final browser smoke coverage. |
 | AR-04 | No | Partial | Article completion is server-idempotent and the live detail action shows pending/success/error, including points awarded. | Second-completion UI and badge unlock presentation remain. |
-| AR-05 | No | Partial | Secured article insight endpoint validates recommendation ownership, uses the generic Gemini adapter when configured, audits the source, and falls back to the persisted rule message. | Frontend insight action and live provider smoke coverage remain. |
+| AR-05 | Yes | Complete | Secured article insight endpoint validates recommendation ownership, uses the generic Gemini adapter when configured, audits the source, and falls back to the persisted rule message; `ArticleCard` exposes the insight action with loading/error/Gemini-or-rule states and focused tests. | — |
 
 ## 4. Rewards journey
 
@@ -61,7 +61,7 @@ Audited against the local branch through employee profile/settings, engagement, 
 | RW-03 | No | Partial | Server rejects insufficient balances and enforces a non-negative projection inside the transaction. | End-to-end frontend error presentation and concurrency smoke coverage remain. |
 | RW-04 | No | Partial | Employee redemption history API returns bounded requested/fulfilled/cancelled records with ownership enforcement. | Frontend redemption history remains. |
 | RW-05 | No | Partial | Admin fulfil/cancel APIs enforce requested-only transitions, refund cancellation once, require privileged reasons, and write audit events. | Admin workflow UI and runtime authorization smoke coverage remain. |
-| RW-06 | No | Partial | Admin catalogue APIs create versioned rewards and edit active state, kind, name, description, and cost with audited reasons. | Admin catalogue UI and full settings integration remain. |
+| RW-06 | Yes | Complete | Admin catalogue APIs and the protected Admin Reward Catalogue manager create/edit versioned rewards, active state, kind, name, description, and cost with required audited reasons and success/error/empty states. | — |
 
 ## 5. Admin portal journey
 
@@ -70,12 +70,12 @@ Audited against the local branch through employee profile/settings, engagement, 
 | AD-01 | No | Partial | Secured, bounded screening queue and reasoned decision APIs are implemented with audit/notifications; the admin workspace reads the queue and exposes reason dialogs. | Send-to-owner assignment, due dates, durable assignment, and a distinct transformation-team role remain. |
 | AD-02 | No | Partial | Secured transformation queue and confirm-to-POC API are implemented with employee notification/audit; the admin workspace now exposes confirmation controls. | Durable assignment/due-date fields and a distinct transformation role remain. |
 | AD-03 | No | Partial | Routed evaluation reads are owner-scoped through event metadata and include stored answers, KPI metrics, AI assessment, and reasoned decision actions. | Distinct business-owner RBAC, durable assignments, and evaluation UI remain. |
-| AD-04 | No | Partial | Idea scoring fields and AI schemas exist in the backend. | Reviewer UI does not show each KPI answer, score, weight, and author explanation. |
+| AD-04 | Yes | Complete | Routed evaluation detail renders all five answers, each KPI metric, score, weight, weighted contribution, author explanation, minimum, validation state, and AI assessment; decisions require a reason. | — |
 | AD-05 | No | Partial | Admin control room consumes live users, rewards, learning, governance, and audit data with bounded audit CSV export. | Pipeline/department/learning dashboards and ideas/benefits/feedback CSV exports remain. |
-| AD-06 | No | Partial | Admin-only user directory, role changes, activation/deactivation, security reset, session revocation, and audit records are implemented; the UI lists users and lifecycle state. | The role model is still admin/user rather than the full profile set, and mutation forms/password reset UI remain. |
+| AD-06 | No | Partial | Admin-only user directory, role changes, activation/deactivation, sign-in security reset, per-user session inspection, and audit records are implemented; the live People & access manager exposes reason-required controls and safe session metadata. | The role model is still admin/user rather than the full profile set; password reset and individual session revocation endpoints/UI remain. |
 | AD-07 | No | Partial | Admin settings editor now loads and edits the minimum score, point rules, and recommendation rules with a privileged reason and audited PATCH mutation. | Full KPI hints/weights/bands, levels, SLA, controls, departments, demo access, and profiles settings UI remain. |
 | AD-08 | No | Partial | Admin learning APIs cover bounded quiz/article catalogues, unpublished quiz question edits, recommendation rules, and strict HTTPS external-link validation. | Learning-content management UI and complete quiz authoring workflow remain. |
-| AD-09 | No | Partial | Employee feedback campaign form and live notifications are connected to secured APIs; administrator response APIs persist, notify, and audit. | Campaign/announcement/challenge management and admin feedback response UI remain. |
+| AD-09 | No | Partial | Employee feedback campaign form, live notifications, secured administrator response APIs, and the protected admin Campaign feedback response UI persist, notify, and audit. | Campaign/announcement/challenge authoring and lifecycle management remain. |
 | AD-10 | No | Partial | Idea events and AI run records provide limited traceability. | Complete login/transition/settings/redemption audit coverage, IP detail, filtering, and CSV export are missing. |
 
 ## 6. Cross-cutting stories
@@ -83,11 +83,11 @@ Audited against the local branch through employee profile/settings, engagement, 
 | ID | Completed? | Status | Current evidence | Remaining gap |
 | :--- | :---: | :--- | :--- | :--- |
 | CC-01 | No | Partial | Demo entry UI exists, and registered profile data now loads/edits through `/api/profile`; authenticated account page uses the live profile card. | Name-only demo identity persistence and 30-day same-name demo-session behavior remain separate from registered login. |
-| CC-02 | No | Partial | Auth.js, Argon2 password hashing, refresh-token hashing, role claims, and configurable token TTLs exist. | Five-attempt lockout, 15-minute lock duration, idle timeout enforcement, and complete session policy verification are missing. |
+| CC-02 | No | Partial | Auth.js, Argon2 password hashing, refresh-token hashing, role claims, configurable token TTLs, five-attempt/15-minute lockout, idle/absolute session checks, revocation, and security tests are implemented. | A full browser smoke path for login/refresh/logout and deployment-secret validation remains. |
 | CC-03 | No | Partial | Employee notification panel and top-bar unread badge now use the live notification/read APIs with polling and retry/empty states. | SMTP relay delivery and full browser smoke coverage remain. |
 | CC-04 | No | Partial | Append-only points ledger, balance projection, configured point rules, level thresholds, idempotent awards, and audited balance changes are implemented. | All idea/quiz/article event integrations and live frontend display remain. |
-| CC-05 | No | Partial | Persisted badge rules, automatic milestone evaluation, user-badge awards, and badge audit events are implemented. | Full badge UI and admin rule management remain. |
-| CC-06 | No | Partial | Pinned campaign selection, categorized/idempotent feedback submission, admin response, employee notification, and audit behavior are implemented in the secured API layer. | Employee/admin UI integration and full campaign management remain. |
+| CC-05 | No | Partial | Persisted badge rules, automatic milestone evaluation, user-badge awards, and badge audit events are implemented. | Live employee badge presentation and admin rule management remain. |
+| CC-06 | Yes | Complete | Pinned campaign selection, categorized/idempotent employee feedback submission, live employee feedback form, admin response UI, employee notification, and audit behavior are implemented and tested. | — |
 
 ## Completion rule
 
