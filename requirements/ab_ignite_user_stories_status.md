@@ -33,14 +33,14 @@ Audited against the local branch at commit `a5de524` on 2026-10-23. A story is m
 
 | ID | Completed? | Status | Current evidence | Remaining gap |
 | :--- | :---: | :--- | :--- | :--- |
-| QZ-01 | No | Partial | The prototype contains quiz/learning navigation and static quiz presentation. | No functional 12-quiz catalogue with category, level, objective, pass mark, and time-limit APIs. |
-| QZ-02 | No | Partial | A visual quiz flow exists in the prototype. | No persisted timed attempts or server-side grading implementation. |
-| QZ-03 | No | Partial | Result-style UI exists in the prototype. | No server result contract with pass mark and previous-attempt comparison. |
-| QZ-04 | No | Not started | No quiz points service exists. | First-attempt-only scoring, retake behavior, and idempotent points award are missing. |
-| QZ-05 | No | Not started | No learning-journey data service exists. | Topic/category scores, attempt trends, and next-step recommendations are missing. |
-| QZ-06 | No | Not started | No recommendation-rule service exists. | Low-score threshold rules, open recommendations, reasons, and notifications are missing. |
-| QZ-07 | No | Not started | No ranking API or persisted ranking model exists. | Whole-bank and department ranking by Ignite Points are missing. |
-| QZ-08 | No | Not started | No challenge participation service exists. | Challenge catalogue, deadline/participant display, join action, and one-time 20-point award are missing. |
+| QZ-01 | No | Partial | Wave 3 backend seeds a versioned 3×4 catalogue and exposes category, level, objective, pass mark, time-limit, and redacted-detail APIs. | Frontend catalogue integration and admin content management remain. |
+| QZ-02 | No | Partial | Wave 3 backend persists timed attempts, serves one-at-a-time-compatible question payloads, validates answers, and grades from server time. | Frontend timer/question navigation remains. |
+| QZ-03 | No | Partial | Wave 3 result contracts return score, pass/fail, pass mark, previous score, and replay-safe immutable results. | Frontend result screen remains. |
+| QZ-04 | No | Partial | First-attempt correct answers use the seeded `quiz_correct` rule with per-question idempotent ledger awards; retakes pay nothing. | Frontend points display and full reward UI integration remain. |
+| QZ-05 | No | Partial | Journey service returns topic scores, category aggregates, attempt trends, open recommendations, and next step. | Frontend journey visualization remains. |
+| QZ-06 | No | Partial | Configurable threshold rules create/update open recommendations with reasons and in-app notifications for low topic scores. | Article linking/reading completion and frontend recommendation UI remain. |
+| QZ-07 | No | Partial | Ranking API supports active whole-bank and department views ordered by Ignite Points. | Frontend ranking view remains. |
+| QZ-08 | No | Partial | Challenge API lists open challenge questions, deadlines, participant counts, join state, and gives one idempotent `challenge_join` award. | Admin challenge management and frontend challenge UI remain. |
 
 ## 3. Articles journey
 
