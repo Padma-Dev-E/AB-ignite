@@ -1,5 +1,5 @@
 import { apiFetch } from "../../lib/api/client";
-import type { ArticleCompletion, ArticleListResponse, AttemptResponse, AttemptStartResponse, LearningArticle, LearningJourney, QuizAnswer, QuizQuestion, QuizSubmissionResponse, QuizSummary } from "./types";
+import type { ArticleCompletion, ArticleListResponse, AttemptResponse, AttemptStartResponse, ChallengeSummary, LearningArticle, LearningJourney, QuizAnswer, QuizQuestion, QuizSubmissionResponse, QuizSummary, RankingItem } from "./types";
 
 function queryString(params: Record<string, string | number | undefined>) {
   const query = new URLSearchParams();
@@ -17,6 +17,8 @@ export function getQuiz(id: number) { return apiFetch<{ id: number; title: strin
 export function listJourney() { return apiFetch<LearningJourney>("/api/quizzes/journey"); }
 export function listArticles(params: { category?: string } = {}) { return apiFetch<ArticleListResponse>(`/api/articles${queryString(params)}`); }
 export function redeemableRecommendations() { return apiFetch<ArticleListResponse>("/api/articles?view=recommended"); }
+export function listRankings(scope: "bank" | "department") { return apiFetch<{ scope: "bank" | "department"; items: RankingItem[] }>(`/api/quizzes/rankings?scope=${scope}`); }
+export function listChallenges() { return apiFetch<{ items: ChallengeSummary[] }>("/api/challenges"); }
 export function getArticle(id: number) { return apiFetch<LearningArticle>(`/api/articles/${id}`); }
 export function startQuizAttempt(quizId: number, idempotencyKey: string) {
   return apiFetch<AttemptStartResponse>(`/api/quizzes/${quizId}/attempts`, { method: "POST", headers: mutationHeaders(idempotencyKey), body: JSON.stringify({ idempotencyKey }) });
@@ -27,4 +29,7 @@ export function submitQuizAttempt(attemptId: number, answers: QuizAnswer[]) {
 }
 export function completeArticle(articleId: number, idempotencyKey: string) {
   return apiFetch<ArticleCompletion>(`/api/articles/${articleId}/read`, { method: "POST", headers: mutationHeaders(idempotencyKey), body: JSON.stringify({ idempotencyKey }) });
+}
+export function joinChallenge(challengeId: number, idempotencyKey: string) {
+  return apiFetch<{ participant: unknown; pointsAwarded: number }>(`/api/challenges/${challengeId}/join`, { method: "POST", headers: mutationHeaders(idempotencyKey), body: JSON.stringify({ idempotencyKey }) });
 }

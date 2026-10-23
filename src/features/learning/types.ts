@@ -17,3 +17,5 @@ export type ArticleCompletion = { completionId: number; alreadyCompleted?: boole
 export type AttemptStartResponse = { attempt: QuizAttempt };
 export type AttemptResponse = { attempt: QuizAttempt; result: QuizResult | null };
 export type QuizSubmissionResponse = { result: QuizResult; topics: unknown[] };
+export type RankingItem = { name: string; department: string; points: number; rank: number };
+export type ChallengeSummary = { id: number; title: string; question: string; deadlineAt: string; points: number; participants: number; joined: boolean };

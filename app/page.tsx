@@ -9,6 +9,7 @@ import { LoginScreen as AuthLoginScreen } from "../src/components/auth/login-scr
 import { EmployeeCommunityPage, EmployeeIdeaDetailPage, EmployeeIdeaSubmissionPage } from "../src/features/ideas/components/employee-idea-flow";
 import { ArticleList, JourneyCard, LearningState } from "../src/features/learning/components/learning-cards";
 import { QuizJourney } from "../src/features/learning/components/quiz-journey";
+import { LearningChallenges, LearningRanking } from "../src/features/learning/components/learning-social";
 import { useArticles, useCompleteArticle, useLearningArticle, useLearningJourney, useLearningRecommendations } from "../src/features/learning/hooks";
 import { ArticleCard } from "../src/features/learning/components/learning-cards";
 import { useRedemptions, useRequestRedemption, useRewards } from "../src/features/rewards/hooks";
@@ -214,9 +215,11 @@ function LiveLearnPage() {
   const [tab, setTab] = useState("My journey");
   const journey = useLearningJourney();
   const journeyState = journey.isPending ? "loading" : journey.isError ? "error" : "success" as const;
-  return <div className="stack"><Hero art="arena" title="Ignite Your Knowledge" subtitle="Build confidence in banking, transformation and technology — one useful question at a time." /><Tabs items={["My journey", "Quizzes"]} active={tab} onChange={setTab} />
+  return <div className="stack"><Hero art="arena" title="Ignite Your Knowledge" subtitle="Build confidence in banking, transformation and technology — one useful question at a time." /><Tabs items={["My journey", "Quizzes", "Ranking", "Challenges"]} active={tab} onChange={setTab} />
     {tab === "My journey" && <>{journey.data ? <JourneyCard journey={journey.data} /> : <LearningState state={journeyState} label={journey.isError ? "Your learning journey could not be loaded." : "Loading your learning journey…"} onRetry={() => void journey.refetch()} />}<button className="btn-primary self-start" type="button" onClick={() => setTab("Quizzes")}>Take a quiz</button></>}
     {tab === "Quizzes" && <QuizJourney />}
+    {tab === "Ranking" && <LearningRanking />}
+    {tab === "Challenges" && <LearningChallenges />}
   </div>;
 }
 
