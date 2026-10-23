@@ -186,6 +186,19 @@ export const ideaAiResults = sqliteTable("idea_ai_results", {
   index("idea_ai_results_idea_idx").on(table.ideaId, table.createdAt),
 ]);
 
+export const aiRunEvents = sqliteTable("ai_run_events", {
+  id: integer().primaryKey({ autoIncrement: true }),
+  runId: integer().notNull().references(() => aiRuns.id, { onDelete: "cascade" }),
+  ideaId: integer().notNull().references(() => ideas.id, { onDelete: "cascade" }),
+  ideaVersionId: integer().references(() => ideaVersions.id, { onDelete: "set null" }),
+  eventType: text({ enum: ["queued", "running", "succeeded", "failed", "retry"] }).notNull(),
+  payloadJson: text().notNull(),
+  createdAt: integer({ mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
+}, (table) => [
+  index("ai_run_events_run_created_idx").on(table.runId, table.createdAt, table.id),
+  index("ai_run_events_idea_created_idx").on(table.ideaId, table.createdAt, table.id),
+]);
+
 export const ideaEvents = sqliteTable("idea_events", {
   id: integer().primaryKey({ autoIncrement: true }),
   ideaId: integer().notNull().references(() => ideas.id, { onDelete: "cascade" }),
@@ -675,6 +688,7 @@ export const ideasRelations = relations(ideas, ({ one, many }) => ({
   supports: many(ideaSupports),
   versions: many(ideaVersions),
   aiRuns: many(aiRuns),
+  aiRunEvents: many(aiRunEvents),
   aiResults: many(ideaAiResults),
   events: many(ideaEvents),
   reviews: many(ideaReviews),
@@ -684,15 +698,23 @@ export const ideaVersionsRelations = relations(ideaVersions, ({ one, many }) => 
   idea: one(ideas, { fields: [ideaVersions.ideaId], references: [ideas.id] }),
   author: one(users, { fields: [ideaVersions.authorId], references: [users.id] }),
   aiRuns: many(aiRuns),
+  aiRunEvents: many(aiRunEvents),
   aiResults: many(ideaAiResults),
   events: many(ideaEvents),
 }));
 
-export const aiRunsRelations = relations(aiRuns, ({ one }) => ({
+export const aiRunsRelations = relations(aiRuns, ({ one, many }) => ({
   idea: one(ideas, { fields: [aiRuns.ideaId], references: [ideas.id] }),
   ideaVersion: one(ideaVersions, { fields: [aiRuns.ideaVersionId], references: [ideaVersions.id] }),
   requester: one(users, { fields: [aiRuns.requestedBy], references: [users.id] }),
   result: one(ideaAiResults, { fields: [aiRuns.id], references: [ideaAiResults.runId] }),
+  events: many(aiRunEvents),
+}));
+
+export const aiRunEventsRelations = relations(aiRunEvents, ({ one }) => ({
+  run: one(aiRuns, { fields: [aiRunEvents.runId], references: [aiRuns.id] }),
+  idea: one(ideas, { fields: [aiRunEvents.ideaId], references: [ideas.id] }),
+  ideaVersion: one(ideaVersions, { fields: [aiRunEvents.ideaVersionId], references: [ideaVersions.id] }),
 }));
 
 export const ideaAiResultsRelations = relations(ideaAiResults, ({ one }) => ({
@@ -837,6 +859,7 @@ export const schema = {
   ideaReferenceSequences,
   ideaVersions,
   aiRuns,
+  aiRunEvents,
   ideaAiResults,
   ideaEvents,
   ideaReviews,
@@ -885,6 +908,7 @@ export type IdeaVersion = typeof ideaVersions.$inferSelect;
 export type NewIdeaVersion = typeof ideaVersions.$inferInsert;
 export type AiRun = typeof aiRuns.$inferSelect;
 export type NewAiRun = typeof aiRuns.$inferInsert;
+export type AiRunEvent = typeof aiRunEvents.$inferSelect;
 export type IdeaAiResult = typeof ideaAiResults.$inferSelect;
 export type IdeaEvent = typeof ideaEvents.$inferSelect;
 export type IdeaReview = typeof ideaReviews.$inferSelect;

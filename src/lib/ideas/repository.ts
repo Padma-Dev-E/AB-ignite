@@ -1,8 +1,10 @@
 import { and, asc, desc, eq, like, lte, or, sql } from "drizzle-orm";
 import { createHash } from "node:crypto";
+import { z } from "zod";
 import { db } from "../../db/connection";
 import {
   aiRuns,
+  aiRunEvents,
   ideaAiResults,
   ideaEvents,
   ideaReviews,
@@ -17,6 +19,7 @@ import {
   ideas,
   users,
   type AiRun,
+  type AiRunEvent,
   type Idea,
   type IdeaEvent,
   type IdeaReview,
@@ -32,6 +35,38 @@ import { appendAuditEvent } from "../audit/service";
 export type CreateIdeaVersionInput = NewIdeaVersion;
 
 export type CreateAiRunInput = NewAiRun;
+
+export const AiRunEventTypeSchema = z.enum(["queued", "running", "succeeded", "failed", "retry"]);
+export type AiRunEventType = z.infer<typeof AiRunEventTypeSchema>;
+
+const safeAiRunEventPayloadSchema = z.strictObject({
+  attempt: z.number().int().min(0).max(100),
+  errorCode: z.enum([
+    "provider_error",
+    "provider_retry",
+    "provider_output_error",
+    "timeout",
+    "unknown",
+    "input_too_large",
+    "restricted_data",
+    "sensitive_data",
+    "prompt_injection",
+    "invalid_input",
+    "worker_provider_missing",
+    "unknown_job",
+    "idea_version_missing",
+  ]).optional(),
+  retryAt: z.string().datetime().optional(),
+});
+
+export type SafeAiRunEventPayload = z.infer<typeof safeAiRunEventPayloadSchema>;
+
+export type PublicAiRunEvent = Pick<AiRunEvent, "id" | "runId" | "ideaId" | "ideaVersionId" | "eventType" | "createdAt"> & {
+  eventType: AiRunEventType;
+  payload: SafeAiRunEventPayload;
+};
+
+type InsertExecutor = Pick<typeof db, "insert">;
 
 export type AiRunResultInput = {
   resultJson: string;
@@ -70,9 +105,73 @@ export type AuthorizedIdeaSnapshot = {
   idea: Idea;
   versions: IdeaVersion[];
   runs: AiRun[];
+  aiRunEvents: PublicAiRunEvent[];
   events: IdeaEvent[];
   reviews: IdeaReview[];
 };
+
+function parseSafeAiRunEvent(row: AiRunEvent): PublicAiRunEvent | null {
+  const eventType = AiRunEventTypeSchema.safeParse(row.eventType);
+  if (!eventType.success) return null;
+  try {
+    const payload = safeAiRunEventPayloadSchema.safeParse(JSON.parse(row.payloadJson));
+    if (!payload.success) return null;
+    return {
+      id: row.id,
+      runId: row.runId,
+      ideaId: row.ideaId,
+      ideaVersionId: row.ideaVersionId,
+      eventType: eventType.data,
+      payload: payload.data,
+      createdAt: row.createdAt,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function validateAiRunEvent(eventType: AiRunEventType, payload: unknown): SafeAiRunEventPayload {
+  const parsedEventType = AiRunEventTypeSchema.safeParse(eventType);
+  if (!parsedEventType.success) throw new Error("Invalid AI run event type");
+  const parsed = safeAiRunEventPayloadSchema.safeParse(payload);
+  if (!parsed.success) throw new Error("Invalid or unsafe AI run event payload");
+  const { attempt, errorCode, retryAt } = parsed.data;
+  if (parsedEventType.data === "queued" && attempt !== 0) throw new Error("Queued AI run events must start at attempt zero");
+  if (parsedEventType.data === "running" && attempt < 1) throw new Error("Running AI run events require an attempt number");
+  if (parsedEventType.data === "succeeded" && errorCode) throw new Error("Succeeded AI run events cannot contain an error code");
+  if ((parsedEventType.data === "failed" || parsedEventType.data === "retry") && !errorCode) throw new Error("Failed AI run events require a safe error code");
+  if (parsedEventType.data === "retry" && !retryAt) throw new Error("Retry AI run events require a retry time");
+  const serialized = JSON.stringify(parsed.data);
+  if (Buffer.byteLength(serialized, "utf8") > 512) throw new Error("AI run event payload is too large");
+  return parsed.data;
+}
+
+function appendAiRunEventRecord(executor: InsertExecutor, run: Pick<AiRun, "id" | "ideaId" | "ideaVersionId">, eventType: AiRunEventType, payload: unknown, createdAt = new Date()) {
+  const safePayload = validateAiRunEvent(eventType, payload);
+  executor.insert(aiRunEvents).values({
+    runId: run.id,
+    ideaId: run.ideaId,
+    ideaVersionId: run.ideaVersionId,
+    eventType,
+    payloadJson: JSON.stringify(safePayload),
+    createdAt,
+  }).run();
+}
+
+export async function appendAiRunEvent(run: Pick<AiRun, "id" | "ideaId" | "ideaVersionId">, eventType: AiRunEventType, payload: unknown): Promise<void> {
+  appendAiRunEventRecord(db, run, eventType, payload);
+}
+
+export async function getAiRunEvents(ideaId: number, runId?: number): Promise<PublicAiRunEvent[]> {
+  const where = runId === undefined
+    ? eq(aiRunEvents.ideaId, ideaId)
+    : and(eq(aiRunEvents.ideaId, ideaId), eq(aiRunEvents.runId, runId));
+  const rows = await db.select().from(aiRunEvents).where(where).orderBy(asc(aiRunEvents.createdAt), asc(aiRunEvents.id)).all();
+  return rows.flatMap((row) => {
+    const event = parseSafeAiRunEvent(row);
+    return event ? [event] : [];
+  });
+}
 
 export async function createIdeaVersion(input: CreateIdeaVersionInput): Promise<IdeaVersion> {
   const [version] = await db.insert(ideaVersions).values(input).returning().all();
@@ -85,9 +184,12 @@ export async function createAiRun(input: CreateAiRunInput): Promise<AiRun> {
   if (existing) return existing;
 
   try {
-    const [created] = await db.insert(aiRuns).values(input).returning().all();
-    if (!created) throw new Error("AI run was not created");
-    return created;
+    return await db.transaction((tx) => {
+      const [created] = tx.insert(aiRuns).values(input).returning().all();
+      if (!created) throw new Error("AI run was not created");
+      appendAiRunEventRecord(tx, created, "queued", { attempt: 0 }, created.createdAt);
+      return created;
+    });
   } catch (error) {
     const [raced] = await db.select().from(aiRuns).where(eq(aiRuns.idempotencyKey, input.idempotencyKey)).limit(1).all();
     if (raced) return raced;
@@ -110,22 +212,28 @@ export async function claimNextAiRun(workerId: string, now = new Date()): Promis
       startedAt: now,
       updatedAt: now,
     }).where(and(eq(aiRuns.id, candidate.id), eq(aiRuns.status, "queued"))).returning().all();
-    return updated[0] ?? null;
+    const claimed = updated[0] ?? null;
+    if (claimed) appendAiRunEventRecord(tx, claimed, "running", { attempt: claimed.attemptCount }, now);
+    return claimed;
   });
   return result;
 }
 
 export async function claimAiRun(runId: number, workerId: string, now = new Date()): Promise<AiRun | null> {
-  const [current] = await db.select().from(aiRuns).where(and(eq(aiRuns.id, runId), eq(aiRuns.status, "queued"))).limit(1).all();
-  if (!current) return null;
-  const updated = await db.update(aiRuns).set({
-    status: "running",
-    workerId,
-    attemptCount: current.attemptCount + 1,
-    startedAt: now,
-    updatedAt: now,
-  }).where(and(eq(aiRuns.id, runId), eq(aiRuns.status, "queued"))).returning().all();
-  return updated[0] ?? null;
+  return db.transaction((tx) => {
+    const [current] = tx.select().from(aiRuns).where(and(eq(aiRuns.id, runId), eq(aiRuns.status, "queued"))).limit(1).all();
+    if (!current) return null;
+    const [claimed] = tx.update(aiRuns).set({
+      status: "running",
+      workerId,
+      attemptCount: current.attemptCount + 1,
+      startedAt: now,
+      updatedAt: now,
+    }).where(and(eq(aiRuns.id, runId), eq(aiRuns.status, "queued"))).returning().all();
+    if (!claimed) return null;
+    appendAiRunEventRecord(tx, claimed, "running", { attempt: claimed.attemptCount }, now);
+    return claimed;
+  });
 }
 
 export async function completeAiRun(runId: number, result: AiRunResultInput): Promise<void> {
@@ -149,29 +257,40 @@ export async function completeAiRun(runId: number, result: AiRunResultInput): Pr
       jobVersion: run.jobVersion,
       resultJson: result.resultJson,
     }).run();
+    appendAiRunEventRecord(tx, run, "succeeded", { attempt: run.attemptCount }, now);
   });
 }
 
 export async function failAiRun(runId: number, failure: AiRunFailureInput): Promise<void> {
   const now = new Date();
-  await db.update(aiRuns).set({
-    status: failure.status ?? "failed",
-    errorCode: failure.errorCode,
-    errorMessage: failure.errorMessage,
-    completedAt: now,
-    updatedAt: now,
-  }).where(eq(aiRuns.id, runId)).run();
+  await db.transaction((tx) => {
+    const [run] = tx.select().from(aiRuns).where(eq(aiRuns.id, runId)).limit(1).all();
+    if (!run) return;
+    tx.update(aiRuns).set({
+      status: failure.status ?? "failed",
+      errorCode: failure.errorCode,
+      errorMessage: failure.errorMessage,
+      completedAt: now,
+      updatedAt: now,
+    }).where(eq(aiRuns.id, runId)).run();
+    appendAiRunEventRecord(tx, run, "failed", { attempt: run.attemptCount, errorCode: failure.errorCode }, now);
+  });
 }
 
 export async function requeueAiRun(runId: number, failure: AiRunFailureInput, availableAt = new Date()): Promise<void> {
   const now = new Date();
-  await db.update(aiRuns).set({
-    status: "queued",
-    errorCode: failure.errorCode,
-    errorMessage: failure.errorMessage,
-    availableAt,
-    updatedAt: now,
-  }).where(eq(aiRuns.id, runId)).run();
+  await db.transaction((tx) => {
+    const [run] = tx.select().from(aiRuns).where(eq(aiRuns.id, runId)).limit(1).all();
+    if (!run) return;
+    tx.update(aiRuns).set({
+      status: "queued",
+      errorCode: failure.errorCode,
+      errorMessage: failure.errorMessage,
+      availableAt,
+      updatedAt: now,
+    }).where(eq(aiRuns.id, runId)).run();
+    appendAiRunEventRecord(tx, run, "retry", { attempt: run.attemptCount, errorCode: failure.errorCode, retryAt: availableAt.toISOString() }, now);
+  });
 }
 
 export async function appendIdeaEvent(input: CreateIdeaEventInput): Promise<IdeaEvent> {
@@ -192,13 +311,14 @@ export async function getAuthorizedIdeaSnapshot(actor: AiActor, ideaId: number):
   if (actor.kind === "user" && Number(actor.id) !== idea.authorId) return null;
   if (actor.kind !== "user" && actor.kind !== "admin") return null;
 
-  const [versions, runs, events, reviews] = await Promise.all([
+  const [versions, runs, aiRunEvents, events, reviews] = await Promise.all([
     db.select().from(ideaVersions).where(eq(ideaVersions.ideaId, ideaId)).all(),
-    db.select().from(aiRuns).where(eq(aiRuns.ideaId, ideaId)).all(),
+    db.select().from(aiRuns).where(eq(aiRuns.ideaId, ideaId)).orderBy(asc(aiRuns.createdAt), asc(aiRuns.id)).all(),
+    getAiRunEvents(ideaId),
     db.select().from(ideaEvents).where(eq(ideaEvents.ideaId, ideaId)).all(),
     db.select().from(ideaReviews).where(eq(ideaReviews.ideaId, ideaId)).all(),
   ]);
-  return { idea, versions, runs, events, reviews };
+  return { idea, versions, runs, aiRunEvents, events, reviews };
 }
 
 function actorUserId(actor: IdeaActor): number {
